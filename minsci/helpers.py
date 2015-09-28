@@ -49,8 +49,8 @@ def init_odbc(fp, kind='access'):
         }
     db = pyodbc.connect(dbs[kind] + fp)
     return db
-    
-        
+
+
 
 
 
@@ -120,7 +120,7 @@ def sort_by_reference(lst, order):
     return sorted(sorted(lst), key=lambda x: _sorter(x, order))
 
 
-    
+
 
 def _sorter(key, order):
     """Returns index in order that starts with key.
@@ -215,19 +215,18 @@ def parse_names(name_string, last_name_first=False):
     return results
 
 
-def prompt(prompt, validator, confirm=True,
+def prompt(prompt, validator, confirm=False,
            helptext='No help text provided', errortext='Invalid response!'):
     """Prompts user and validates response based on validator
 
-    Keyword arguments:
-    Validator can be a str, list, or dict
+    @param string
+    @param regex, list, or dict
+    @param boolean
+    @param string
+    @param string
     """
     # Prepare string
-    prompt = '{} '.format(prompt.rstrip())
-    try:
-        prompt = unicode(prompt)
-    except:
-        pass
+    prompt = u'{} '.format(prompt.rstrip())
     # Prepare validator
     if isinstance(validator, (str, unicode)):
         validator = re.compile(validator, re.U)
@@ -244,8 +243,8 @@ def prompt(prompt, validator, confirm=True,
     loop = True
     while loop:
         # Print options
-        if isinstance(validator, list):                         
-            print '{}\n{}'.format('\n'.join(options), boundary)
+        if isinstance(validator, list):
+            print '{}\n{}'.format('\n'.join(options), '-' * 60)
         # Prompt for value
         a = raw_input(prompt).decode(sys.stdin.encoding)
         if a.lower() == 'q':
@@ -284,12 +283,10 @@ def prompt(prompt, validator, confirm=True,
                 result = unicode(result)
             except:
                 result = str(result)
-            loop = prompt('Is this value correct: '
-                               '"{}"?'.format(result),
-                               {'y' : False, 'n' : True},
-                               confirm=False)
+            loop = prompt('Is this value correct: "{}"?'.format(result),
+                          {'y' : False, 'n' : True}, confirm=False)
         elif loop:
-            print fill(errortext)                
+            print fill(errortext)
     # Return value as unicode
     return result
 
@@ -391,7 +388,7 @@ def utflatten(s):
 
 
 def utfmap(s):
-    out = []    
+    out = []
     for c in s.lower(): out.append(repr(c) + " : '',  # " + s.lower())
     if s.lower() != s.upper():
         for c in s.upper(): out.append(repr(c) + " : '',  # " + s.upper())
@@ -410,7 +407,7 @@ def parse_catnum(catnum, attrs={}, default_suffix=False):
     attrs:           dict. Additional parameters keyed to EMu field.
     default_suffix:  bool. If true, assume suffix of 00 for minerals
     """
-    
+
     try:
         cps = regex.findall(catnum)
     except:
@@ -561,8 +558,8 @@ def format_catnums(catnums):
     """Combine each entry in a list of parsed catalog numbers"""
     catnums = handle_catnums(catnums)
     return [format_catnum(d) for d in catnums]
-        
-    
+
+
 
 
 def sort_catnums(catnums):
@@ -604,5 +601,3 @@ def handle_catnums(val):
         return [val]
     else:
         print 'Error: Could not handle ' + val
-
-

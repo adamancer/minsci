@@ -11,6 +11,7 @@ setup(name='minsci',
       install_requires = [
           'lxml',
           'nameparser',
+          'pillow',
           'pymongo',
           'pyodbc'
       ],

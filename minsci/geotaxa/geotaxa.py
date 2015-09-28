@@ -168,6 +168,7 @@ class GeoTaxa(object):
                 'tree' : [],
                 'synonyms' : []
             }
+            print key
             return self.taxa[key]
         else:
             return {}
@@ -385,7 +386,6 @@ class GeoTaxa(object):
             return name
         if not isinstance(taxa, list):
             taxa = [taxa]
-        print taxa
         highest_common_taxon, taxa = self.group_taxa(taxa)
         if bool(setting):
             formatted = self.oxford_comma(taxa) + ' ' + setting
