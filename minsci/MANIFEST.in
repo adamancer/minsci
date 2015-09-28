@@ -1,0 +1,5 @@
+include README.rst
+include */files/*.csv
+include */files/*.p
+include */files/*.txt
+include */files/*.xml
