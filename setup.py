@@ -9,11 +9,14 @@ setup(name='minsci',
       license='MIT',
       packages=['minsci'],
       install_requires = [
+          'inflect',
           'lxml',
           'nameparser',
+          'natsort',
           'pillow',
           'pymongo',
-          'pyodbc'
+          'pyodbc',
+          'pyglet'
       ],
       include_package_data=True,
       zip_safe=False)

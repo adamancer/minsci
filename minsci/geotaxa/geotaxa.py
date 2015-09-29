@@ -3,10 +3,13 @@ import os
 import re
 from copy import copy
 
+import inflect
+
+import minsci
 from minsci import XMu
 
 
-class XMu(XMu):
+class XMu(minsci.XMu):
 
 
     def itertax(self, element):
@@ -57,7 +60,7 @@ class GeoTaxa(object):
     def __init__(self, fi=None, force_format=False):
         """Read data from EMu export file
 
-        Will check for pickled data if exists"""
+        Will check for pickled data first"""
         self.dir = os.path.join(os.path.dirname(__file__), 'files')
         if fi is None:
             fi = os.path.join(self.dir, 'xmldata.xml')
@@ -109,6 +112,7 @@ class GeoTaxa(object):
             self.taxa = tds['taxa']
             self.map_narratives = tds['map_narratives']
             self.map_emu_taxa = tds['map_emu_taxa']
+        self.inflector = inflect.engine()
 
 
 
@@ -120,8 +124,16 @@ class GeoTaxa(object):
 
 
 
+    def format_key(self, key):
+        """Standardize formatting of keys in taxa dictionary"""
+        return key.lower().replace(' ', '-')
+
+
+
+
     def find(self, taxon):
         """Returns taxonomic data for a taxon name or narrative irn"""
+        taxon = self.clean_taxon(taxon)
         try:
             int(taxon)
         except:
@@ -129,13 +141,13 @@ class GeoTaxa(object):
             try:
                 return self.taxa[self.map_narratives[self.format_key(taxon)]]
             except:
-                return self.generate_taxon(taxon)
+                return self.classify_taxon(taxon)
         else:
             # Taxon given as irn
             try:
                 return self.taxa[taxon]
             except:
-                return self.generate_taxon(taxon)
+                return self.classify_taxon(taxon)
 
 
 
@@ -152,26 +164,35 @@ class GeoTaxa(object):
 
 
 
-    def generate_taxon(self, taxon):
-        """Creates minimal taxon record if could not match taxon"""
-        if bool(taxon):
-            print u'Warning! Could not match {}'.format(taxon)
-            key = self.format_key(taxon)
-            self.taxa[key] = {
-                'irn' : None,
-                'name' : self.cap_taxa(taxon),
-                'parent' : '',
-                'synonyms' : [],
-                'tags' : [],
-                'schemes' : {},
-                'taxa' : [],
-                'tree' : [],
-                'synonyms' : []
-            }
-            print key
-            return self.taxa[key]
+    def classify_taxon(self, taxon):
+        """Classify unknown taxon"""
+        taxon = self.clean_taxon(taxon)
+        key = self.format_key(taxon).split('-')
+        keys = []
+        if len(key) > 2:
+            keys.append('-'.join(key[0], key[len(key)-1]))
+        keys.append(key[len(key)-1])
+        for key in keys:
+            try:
+                parent = self(key)
+            except:
+                pass
+            else:
+                break
         else:
-            return {}
+            parent = self('uncertain')
+        key = self.format_key(taxon)
+        return {
+            'irn' : None,
+            'name' : self.cap_taxa(taxon),
+            'parent' : parent['name'],
+            'synonyms' : [],
+            'tags' : parent['tags'],
+            'schemes' : {},
+            'taxa' : [],
+            'tree' : parent['tree'] + [parent['name']],
+            'synonyms' : []
+        }
 
 
 
@@ -190,6 +211,13 @@ class GeoTaxa(object):
 
 
 
+    def simple_tree(self, tree):
+        """Simplify the full tree for retrieval"""
+        return tree
+
+
+
+
     def format_taxon(self, taxon):
         """Looks for alternative spellings"""
         pass
@@ -197,8 +225,204 @@ class GeoTaxa(object):
 
 
 
-    def format_key(self, key):
-        return key.lower().replace(' ', '-')
+    def clean_taxon(self, taxon):
+        """Reformats taxon of the form 'Gneiss, Garnet' to 'Garnet gneiss'"""
+        if taxon.count(',') == 1:
+            taxon = ' '.join([s.strip() for s in taxon.split(',')][::-1])
+        return taxon
+
+
+
+
+
+    def cap_taxa(self, taxon, ucfirst=True):
+        """Capitalize string
+
+        @param string
+        @param boolean
+        @return string
+        """
+        if ucfirst:
+            return taxon[0].upper() + taxon[1:]
+        else:
+            return taxon[0].lower() + taxon[1:]
+
+
+
+
+
+    def clean_taxa(self, taxa, dedupe=False):
+        """Removes duplicate taxa while retaining order"""
+        taxa = [self.preferred_synonym(self.clean_taxon(taxon))
+                for taxon in taxa]
+        if dedupe:
+            temp = []
+            while len(taxa):
+                taxon = taxa.pop()
+                if not taxon in taxa:
+                    temp.insert(0, taxon)
+            taxa = temp
+        return taxa
+
+
+
+
+
+    def item_name(self, taxa, name=None, setting=None):
+        """Format display name for a specimen based on taxa and other info
+
+        @param list
+        @param string
+        @param string
+        @return string
+
+        This function is intended for single specimens. To format a
+        name for multiple items, use group_name().
+        """
+        if bool(name):
+            return name
+        if not isinstance(taxa, list):
+            taxa = [taxa]
+        taxa = self.clean_taxa(taxa, True)
+        highest_common_taxon, taxa = self.group_taxa(taxa)
+        if bool(setting):
+            formatted = minsci.oxford_comma(taxa) + ' ' + setting
+            return formatted[0].upper() + formatted[1:]
+        formatted = []
+        for taxon in taxa:
+            preferred = self.preferred_synonym(taxon)
+            taxon = self(preferred)
+            # Handle minerals and varieties. Valid mineral species will
+            # have an IMA status populated; a variety is anything defined
+            # below an approved mineral in the taxonomic hierarchy. We
+            # only keep the lowest variety for display.
+            try:
+                taxon['schemes']['IMA Status']
+            except:
+                for parent in taxon['tree']:
+                    parent = self(parent)
+                    try:
+                        parent['schemes']['IMA Status']
+                    except:
+                        pass
+                    else:
+                        variety = taxon['name'][0].lower() + taxon['name'][1:]
+                        formatted.append(u'{} (var. {})'.format(parent['name'],
+                                                                variety))
+                        break
+                else:
+                    formatted.append(taxon['name'])
+            else:
+                formatted.append(taxon['name'])
+        # Some commonly used named for minerals are actually groups
+        # (e.g., pyroxene). The hierarchy stores them as such, but
+        # that looks a little odd, so we strip them for display.
+        formatted = [name.rsplit(' ', 1)[0] if name.lower().endswith('group')
+                     else name for name in formatted]
+        # Some rock names include the primary mineral. Sometimes
+        # that mineral will be listed separately as well. We typically
+        # don't want to include that information twice, so we'll
+        # try to remove them here.
+        primary = formatted[0].lower()
+        for taxon in copy(formatted[1:]):
+            if taxon.lower() in primary:
+                formatted.remove(taxon)
+        # Long lists of associated taxa look terrible, so we'll
+        # ditch everything after the third taxon.
+        if len(formatted) > 4:
+            formatted = formatted[:3]
+            formatted.append('others')
+        # Group varieties if everything is the same mineral
+        siblings = [taxon for taxon in formatted
+                    if taxon.startswith(highest_common_taxon)]
+        if len(siblings) == len(taxa) and len(taxa) > 1:
+            varieties = [taxon.split('var.')[1].strip(' )')
+                         for taxon in formatted]
+            formatted = [(highest_common_taxon +
+                          ' (vars. {})').format(minsci.oxford_comma(varieties))]
+        # We're done! Format the list as a string.
+        if len(formatted) > 1:
+            primary = formatted.pop(0)
+            return primary + ' with ' + minsci.oxford_comma(formatted)
+        else:
+            return ''.join(formatted)
+
+
+
+
+    def group_name(self, *taxas):
+        """Format display name for a group of specimens, as in a photo
+
+        @param list (of lists)
+        @return string
+        """
+        highest_common_taxa = []
+        all_taxa =[]
+        for taxa in taxas:
+            if not isinstance(taxa, list):
+                taxa = [taxa]
+            highest_common_taxon, taxa = self.group_taxa(taxa)
+            highest_common_taxa.append(highest_common_taxon)
+            all_taxa.extend(taxa)
+        highest_common_taxa = set(highest_common_taxa)
+        if len(highest_common_taxa) == 1 and len(all_taxa) > 1:
+            highest_common_taxon = highest_common_taxa.pop()
+            return self.cap_taxa(self.inflector.plural(highest_common_taxon,
+                                                       False))
+        else:
+            return self.cap_taxa(minsci.oxford_comma([self.item_name(taxa)
+                                                    for taxa in all_taxa]))
+
+
+
+
+    def preferred_synonym(self, taxon):
+        """Recursively find the preferred synonym for this taxon
+
+        @param string
+        @return string
+        """
+        taxon = self(taxon)
+        while len(taxon['synonyms']):
+            taxon = self(taxon['synonyms'].pop())
+        return taxon['name']
+
+
+
+
+    def group_taxa(self, taxa):
+        """Group synonyms and varieties while maintaining order
+
+        @param list
+        @return list of the form [string, list]
+        """
+        taxa = [self.clean_taxon(taxon) for taxon in taxa]
+        if len(taxa) == 1:
+            taxon = self(self.preferred_synonym(taxa[0]))
+            return [taxon['name'], [taxon['name']]]
+        else:
+            taxa = [self.preferred_synonym(taxon) for taxon in taxa]
+            trees = [self(taxon)['tree'] + [self(taxon)['name']]
+                     for taxon in taxa]
+            sets = [set(tree) for tree in trees]
+            _sets = copy(sets)
+            _set = sets.pop(0)
+            common = _set.intersection(*_sets)
+            highest_common_taxon = trees[0][len(common)-1]
+            # Some taxa aren't great for display, so we filter them out
+            # using exclude.
+            exclude = ['Informal group', 'Structural group', 'Ungrouped']
+            while highest_common_taxon in exclude:
+                highest_common_taxon = trees[0][len(common)-2]
+            grouped = [tree[len(common):].pop() for tree in trees
+                       if len(tree[len(common):])]
+            unique = list(set(grouped))
+            taxa = []
+            for taxon in grouped:
+                if taxon in unique:
+                    taxa.append(taxon)
+                    unique.remove(taxon)
+            return [highest_common_taxon, taxa]
 
 
 
@@ -309,212 +533,3 @@ class GeoTaxa(object):
         if self.debug and orig.lower() != s.lower():
             print 'Capitalization error: ' + orig, s
         return s
-
-
-
-
-    def cap_taxa(self, taxon, ucfirst=True):
-        """Capitalize string
-
-        @param string
-        @param boolean
-        @return string
-        """
-        if ucfirst:
-            return taxon[0].upper() + taxon[1:]
-        else:
-            return taxon[0].lower() + taxon[1:]
-
-
-
-
-    def clean_taxon(self, taxon):
-        """Reformats taxon of the form 'Gneiss, Garnet' to 'Garnet gneiss'"""
-        if taxon.count(',') == 1:
-            taxon = ' '.join([s.strip() for s in taxon.split(',')][::-1])
-        return taxon
-
-
-
-
-    def dedupe_taxa(self, taxa):
-        """Removes duplicate taxa while retaining order"""
-        taxa = [geotaxa.preferred_synonym(taxon) for taxon in taxa]
-        temp = []
-        while len(taxa):
-            taxon = taxa.pop()
-            if not taxon in taxa:
-                temp.insert(0, taxon)
-        taxa = temp
-
-
-
-
-    def oxford_comma(self, lst, lowercase=True):
-        """Formats string as comma-delimited string
-
-        @param list
-        @param boolean
-        @return string
-        """
-        if lowercase:
-            lst = [s[0].lower() + s[1:] for s in lst]
-        if len(lst) <= 1:
-            return ''.join(lst)
-        elif len(lst) == 2:
-            return ' and '.join(lst)
-        else:
-            last = lst.pop()
-            return ', '.join(lst) + ', and ' + last
-
-
-
-
-
-    def item_name(self, taxa, name=None, setting=None):
-        """Format display name for a specimen based on taxa and other info
-
-        @param list
-        @param string
-        @param string
-        @return string
-
-        This function is intended for single specimens. To format a
-        name for multiple items, use _____.
-        """
-        if bool(name):
-            return name
-        if not isinstance(taxa, list):
-            taxa = [taxa]
-        highest_common_taxon, taxa = self.group_taxa(taxa)
-        if bool(setting):
-            formatted = self.oxford_comma(taxa) + ' ' + setting
-            return formatted[0].upper() + formatted[1:]
-        formatted = []
-        for taxon in taxa:
-            preferred = self.preferred_synonym(taxon)
-            taxon = self(preferred)
-            # Handle minerals and varieties. Approved mineral species will
-            # have an IMA status populated; a variety is anything defined
-            # below an approved mineral in the taxonomic hierarchy.
-            try:
-                taxon['schemes']['IMA Status']
-            except:
-                for parent in taxon['tree']:
-                    parent = self(parent)
-                    try:
-                        parent['schemes']['IMA Status']
-                    except:
-                        pass
-                    else:
-                        variety = taxon['name'][0].lower() + taxon['name'][1:]
-                        formatted.append(u'{} (var. {})'.format(parent['name'],
-                                                                variety))
-                        break
-                else:
-                    #name = taxon['name']
-                    #if name.lower().endswith(' group'):
-                    #    name = name.rsplit(' ', 1)[0]
-                    formatted.append(taxon['name'])
-            else:
-                formatted.append(taxon['name'])
-        # Some rock names include the primary mineral. Sometimes
-        # that mineral will be listed separately as well. We typically
-        # don't want to include that information twice, so we'll
-        # try to remove them here.
-        primary = formatted[0].lower()
-        for taxon in copy(formatted[1:]):
-            if taxon.lower() in primary:
-                formatted.remove(taxon)
-        # Long lists of associated taxa look terrible, so we'll
-        # ditch everything after the third taxon.
-        if len(formatted) > 4:
-            formatted = formatted[:3]
-            formatted.append('others')
-        # Group varieties if everyone is the same mineral
-        siblings = [taxon for taxon in formatted
-                    if taxon.startswith(highest_common_taxon)]
-        if len(siblings) == len(taxa) and len(taxa) > 1:
-            varieties = [taxon.split('var.')[1].strip(' )')
-                         for taxon in formatted]
-            formatted = [(highest_common_taxon +
-                          ' (vars. {})').format(self.oxford_comma(varieties))]
-        # Finally format the list as a string
-        if len(formatted) > 1:
-            primary = formatted.pop(0)
-            return primary + ' with ' + self.oxford_comma(formatted)
-        else:
-            return ''.join(formatted)
-
-
-
-
-    def group_name(self, *taxas):
-        """Format display name for a group of specimens, as in a photo
-
-        @param list (of lists)
-        @return string
-        """
-        highest_common_taxa = []
-        all_taxa =[]
-        for taxa in taxas:
-            highest_common_taxon, taxa = self.group_taxa(taxa)
-            highest_common_taxa.append(highest_common_taxon)
-            all_taxa.extend(taxa)
-        highest_common_taxa = set(highest_common_taxa)
-        if len(highest_common_taxa) == 1 and len(all_taxa) > 1:
-            highest_common_taxon = highest_common_taxa.pop()
-            return 'Muliple ' + self.cap_taxa(highest_common_taxon, False)
-        else:
-            return self.cap_taxa(self.oxford_comma([self.item_name(taxa)
-                                                    for taxa in all_taxa]))
-
-
-
-
-    def preferred_synonym(self, taxon):
-        """Recursively find the preferred synonym for this taxon
-
-        @param string
-        @return string
-        """
-        taxon = self(taxon)
-        while len(taxon['synonyms']):
-            taxon = self(taxon['synonyms'].pop())
-        return taxon['name']
-
-
-
-
-    def group_taxa(self, taxa):
-        """Group synonyms and varieties while maintaining order
-
-        @param list
-        @return list of the form [string, list]
-        """
-        if len(taxa) == 1:
-            taxon = self(self.preferred_synonym(taxa[0]))
-            return [taxon['name'], [taxon['name']]]
-        else:
-            taxa = [self.preferred_synonym(taxon) for taxon in taxa]
-            trees = [self(taxon)['tree'] + [self(taxon)['name']]
-                     for taxon in taxa]
-            sets = [set(tree) for tree in trees]
-            _sets = copy(sets)
-            _set = sets.pop(0)
-            common = _set.intersection(*_sets)
-            highest_common_taxon = trees[0][len(common)-1]
-            # Some taxa aren't great for display, so we filter them out
-            # using exclude.
-            exclude = ['Informal group', 'Structural group', 'Ungrouped']
-            while highest_common_taxon in exclude:
-                highest_common_taxon = trees[0][len(common)-2]
-            grouped = [tree[len(common):].pop() for tree in trees
-                       if len(tree[len(common):])]
-            unique = list(set(grouped))
-            taxa = []
-            for taxon in grouped:
-                if taxon in unique:
-                    taxa.append(taxon)
-                    unique.remove(taxon)
-            return [highest_common_taxon, taxa]

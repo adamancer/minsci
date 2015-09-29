@@ -1,6 +1,5 @@
 from exceptions import DMSException
-import helpers
-from helpers import prompt
+from helpers import *
 from xmu.xmu import XMu
 from geotaxa.geotaxa import GeoTaxa
 from mosaic.mosaic import Mosaic

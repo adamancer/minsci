@@ -138,18 +138,22 @@ def _sorter(key, order):
 
 
 
-def oxford_comma(arr, lowercase=True):
-    """Formats lists into string with commas"""
-    arr = copy(arr)
+def oxford_comma(lst, lowercase=True):
+    """Formats string as comma-delimited string
+
+    @param list
+    @param boolean
+    @return string
+    """
     if lowercase:
-        arr = [s.lower() for s in arr]
-    if len(arr) > 1:
-        last = arr.pop()
-        arr.append('and ' + last)
-    if len(arr) > 2:
-        return ', '.join(arr)
+        lst = [s[0].lower() + s[1:] for s in lst]
+    if len(lst) <= 1:
+        return ''.join(lst)
+    elif len(lst) == 2:
+        return ' and '.join(lst)
     else:
-        return ' '.join(arr)
+        last = lst.pop()
+        return ', '.join(lst) + ', and ' + last
 
 
 def parse_names(name_string, last_name_first=False):
