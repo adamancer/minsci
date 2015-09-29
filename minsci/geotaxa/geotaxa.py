@@ -3,11 +3,11 @@ import os
 import re
 from copy import copy
 
-import minsci
-from minsci import XMu
+from ..helpers import oxford_comma, plural
+from ..xmu.xmu import XMu
 
 
-class XMu(minsci.XMu):
+class XMu(XMu):
 
 
     def itertax(self, element):
@@ -284,7 +284,7 @@ class GeoTaxa(object):
         taxa = self.clean_taxa(taxa, True)
         highest_common_taxon, taxa = self.group_taxa(taxa)
         if bool(setting):
-            formatted = minsci.oxford_comma(taxa) + ' ' + setting
+            formatted = oxford_comma(taxa) + ' ' + setting
             return formatted[0].upper() + formatted[1:]
         formatted = []
         for taxon in taxa:
@@ -337,11 +337,11 @@ class GeoTaxa(object):
             varieties = [taxon.split('var.')[1].strip(' )')
                          for taxon in formatted]
             formatted = [(highest_common_taxon +
-                          ' (vars. {})').format(minsci.oxford_comma(varieties))]
+                          ' (vars. {})').format(oxford_comma(varieties))]
         # We're done! Format the list as a string.
         if len(formatted) > 1:
             primary = formatted.pop(0)
-            return primary + ' with ' + minsci.oxford_comma(formatted)
+            return primary + ' with ' + oxford_comma(formatted)
         else:
             return ''.join(formatted)
 
@@ -365,9 +365,9 @@ class GeoTaxa(object):
         highest_common_taxa = set(highest_common_taxa)
         if len(highest_common_taxa) == 1 and len(all_taxa) > 1:
             highest_common_taxon = highest_common_taxa.pop()
-            return self.cap_taxa(minsci.plural(highest_common_taxon, False))
+            return self.cap_taxa(plural(highest_common_taxon, False))
         else:
-            return self.cap_taxa(minsci.oxford_comma([self.item_name(taxa)
+            return self.cap_taxa(oxford_comma([self.item_name(taxa)
                                                     for taxa in all_taxa]))
 
 
