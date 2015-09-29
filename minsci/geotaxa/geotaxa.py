@@ -41,7 +41,7 @@ class XMu(XMu):
             'synonyms' : synonyms,
             'tags' : tags,
             'schemes' : schemes,
-            'taxa' : taxa
+            'taxa_ids' : taxa
         }
         key = self.format_key(title)
         self.map_narratives[key] = irn
@@ -172,6 +172,11 @@ class GeoTaxa(object):
     def classify_taxon(self, taxon):
         """Classify unknown taxon"""
         taxon = self.clean_taxon(taxon)
+        # Confirm tha taxon does not exist
+        try:
+            return self(taxon)
+        except:
+            pass
         key = self.format_key(taxon).split('-')
         keys = []
         if len(key) > 2:
@@ -194,7 +199,7 @@ class GeoTaxa(object):
             'synonyms' : [],
             'tags' : parent['tags'],
             'schemes' : {},
-            'taxa' : [],
+            'taxa_ids' : [],
             'tree' : parent['tree'] + [parent['name']],
             'synonyms' : []
         }
@@ -273,7 +278,7 @@ class GeoTaxa(object):
 
 
 
-    def item_name(self, taxa, name=None, setting=None):
+    def item_name(self, taxa=[], setting=None, name=None):
         """Format display name for a specimen based on taxa and other info
 
         @param list
@@ -286,11 +291,14 @@ class GeoTaxa(object):
         """
         if bool(name):
             return name
+        # Taxa is required if name is not specified
+        if not bool(taxa):
+            raise TypeError
         if not isinstance(taxa, list):
             taxa = [taxa]
         taxa = self.clean_taxa(taxa, True)
         highest_common_taxon, taxa = self.group_taxa(taxa)
-        if bool(setting):
+        if bool(setting) and bool(taxa):
             formatted = oxford_comma(taxa) + ' ' + setting
             return self.cap_taxa(formatted)
         formatted = []
