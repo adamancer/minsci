@@ -154,13 +154,13 @@ def oxford_comma(lst, lowercase=True):
 
 
 def singular(s):
-    return inflect.engine.singular(s)
+    return inflect.engine().singular(s)
 
 
 
 
 def plural(s):
-    return inflect.engine.plural(s)
+    return inflect.engine().plural(s)
 
 
 
@@ -412,7 +412,6 @@ def utfmap(s):
 
 def parse_catnum(catnum, attrs={}, default_suffix=False):
     """Parse catalog numbers into a dictionary
-
 
     Keyword arguments:
     s:               str. Catalog number as string.

@@ -3,6 +3,7 @@ import os
 import re
 from copy import copy
 
+from ..exceptions import TaxonNotFound
 from ..helpers import oxford_comma, plural
 from ..xmu.xmu import XMu
 
@@ -30,7 +31,7 @@ class XMu(XMu):
         for name, _id in zip(names, ids):
             try:
                 schemes[name].append(_id)
-            except:
+            except KeyError:
                 schemes[name] = [_id]
 
         self.taxa[irn] = {
@@ -70,11 +71,11 @@ class GeoTaxa(object):
         if force_format:
             try:
                 os.remove(pickled)
-            except:
+            except OSError:
                 pass
         try:
             f = open(pickled, 'rb')
-        except:
+        except IOError:
             print 'Reading taxonomic data from {}...'.format(fi)
             self.taxa = {}
             self.map_narratives = {}  # maps taxon name to narrative irn
@@ -115,9 +116,9 @@ class GeoTaxa(object):
 
 
 
-    def __call__(self, taxon):
+    def __call__(self, taxon, classify_unknown=True):
         """Returns taxonomic data when instance is called"""
-        return self.find(taxon)
+        return self.find(taxon, classify_unknown)
 
 
 
@@ -129,23 +130,29 @@ class GeoTaxa(object):
 
 
 
-    def find(self, taxon):
+    def find(self, taxon, classify_unknown=True):
         """Returns taxonomic data for a taxon name or narrative irn"""
         taxon = self.clean_taxon(taxon)
         try:
             int(taxon)
-        except:
+        except ValueError:
             # Taxon is given as name
             try:
                 return self.taxa[self.map_narratives[self.format_key(taxon)]]
-            except:
-                return self.classify_taxon(taxon)
+            except KeyError:
+                if classify_unknown:
+                    return self.classify_taxon(taxon)
+                else:
+                    raise TaxonNotFound
         else:
             # Taxon given as irn
             try:
                 return self.taxa[taxon]
-            except:
-                return self.classify_taxon(taxon)
+            except KeyError:
+                if classify_unknown:
+                    return self.classify_taxon(taxon)
+                else:
+                    raise TaxonNotFound
 
 
 
@@ -156,7 +163,7 @@ class GeoTaxa(object):
         For a more general function, use find()"""
         try:
             return self.taxa[self.map_emu_taxa(irn)]
-        except:
+        except KeyError:
             return self.generate_taxon(taxon)
 
 
@@ -172,8 +179,8 @@ class GeoTaxa(object):
         keys.append(key[len(key)-1])
         for key in keys:
             try:
-                parent = self(key)
-            except:
+                parent = self(key, False)
+            except TaxonNotFound:
                 pass
             else:
                 break
@@ -285,11 +292,12 @@ class GeoTaxa(object):
         highest_common_taxon, taxa = self.group_taxa(taxa)
         if bool(setting):
             formatted = oxford_comma(taxa) + ' ' + setting
-            return formatted[0].upper() + formatted[1:]
+            return self.cap_taxa(formatted)
         formatted = []
         for taxon in taxa:
             preferred = self.preferred_synonym(taxon)
             taxon = self(preferred)
+            name = taxon['name']
             # Handle minerals and varieties. Valid mineral species will
             # have an IMA status populated; a variety is anything defined
             # below an approved mineral in the taxonomic hierarchy. We
@@ -301,17 +309,21 @@ class GeoTaxa(object):
                     parent = self(parent)
                     try:
                         parent['schemes']['IMA Status']
-                    except:
+                    except KeyError:
                         pass
                     else:
                         variety = taxon['name'][0].lower() + taxon['name'][1:]
-                        formatted.append(u'{} (var. {})'.format(parent['name'],
-                                                                variety))
+                        name = (u'{} (var. {})'.format(parent['name'], variety))
                         break
-                else:
-                    formatted.append(taxon['name'])
-            else:
-                formatted.append(taxon['name'])
+            # Handle unnamed meteorites. Meteorites use a short,
+            # not especially descriptive nomenclature, so we'll
+            # add a bit of context to supplement.
+            if 'Iron achondrite' in taxon['tree']:
+                name = '{} (Iron achondrite)'.format(name)
+            elif 'Meteorites' in taxon['tree']:
+                name = '{} ({})'.format(name, taxon['tree'][2].lower())
+
+            formatted.append(name)
         # Some commonly used named for minerals are actually groups
         # (e.g., pyroxene). The hierarchy stores them as such, but
         # that looks a little odd, so we strip them for display.
