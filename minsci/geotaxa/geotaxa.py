@@ -3,8 +3,6 @@ import os
 import re
 from copy import copy
 
-import inflect
-
 import minsci
 from minsci import XMu
 
@@ -112,7 +110,7 @@ class GeoTaxa(object):
             self.taxa = tds['taxa']
             self.map_narratives = tds['map_narratives']
             self.map_emu_taxa = tds['map_emu_taxa']
-        self.inflector = inflect.engine()
+
 
 
 
@@ -367,8 +365,7 @@ class GeoTaxa(object):
         highest_common_taxa = set(highest_common_taxa)
         if len(highest_common_taxa) == 1 and len(all_taxa) > 1:
             highest_common_taxon = highest_common_taxa.pop()
-            return self.cap_taxa(self.inflector.plural(highest_common_taxon,
-                                                       False))
+            return self.cap_taxa(minsci.plural(highest_common_taxon, False))
         else:
             return self.cap_taxa(minsci.oxford_comma([self.item_name(taxa)
                                                     for taxa in all_taxa]))

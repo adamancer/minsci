@@ -11,14 +11,10 @@ from itertools import groupby
 from textwrap import fill
 
 # Third-party imports
-from nameparser import HumanName
+import inflect
 import pyodbc
+from nameparser import HumanName
 
-
-"""
-Includes convenience functions used by various local scripts. Do
-not import any other local scripts into this program!
-"""
 
 def __init__(self):
     digs = string.digits + string.lowercase
@@ -40,6 +36,7 @@ def base2int(x, base):
 
 
 
+
 def init_odbc(fp, kind='access'):
     """Opens ODBC connection based on database type"""
     dbs = {
@@ -53,10 +50,8 @@ def init_odbc(fp, kind='access'):
 
 
 
-
-
 def dict_from_odbc(cursor, tbl, col='*', where='',
-               rec_id='ID', encoding='cp1252'):
+                   rec_id='ID', encoding='cp1252'):
     # Get list of columns
     if col == '*':
         col = [row.column_name for row in cursor.columns(tbl.strip('[]'))]
@@ -139,7 +134,7 @@ def _sorter(key, order):
 
 
 def oxford_comma(lst, lowercase=True):
-    """Formats string as comma-delimited string
+    """Formats list as comma-delimited string
 
     @param list
     @param boolean
@@ -154,6 +149,20 @@ def oxford_comma(lst, lowercase=True):
     else:
         last = lst.pop()
         return ', '.join(lst) + ', and ' + last
+
+
+
+
+def singular(s):
+    return inflect.engine.singular(s)
+
+
+
+
+def plural(s):
+    return inflect.engine.plural(s)
+
+
 
 
 def parse_names(name_string, last_name_first=False):
