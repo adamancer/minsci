@@ -1,0 +1,4 @@
+include README.rst
+include minsci/*/files/*.p
+include minsci/*/files/*.txt
+include minsci/*/files/*.xml

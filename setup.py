@@ -6,12 +6,12 @@ setup(name='minsci',
       classifiers = [
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 2.7'
-      ]
+      ],
       url='https://github.com/adamancer/minsci.git',
       author='adamancer',
       author_email='mansura@si.edu',
       license='MIT',
-      packages=['minsci'],
+      packages=['minsci', 'minsci.geotaxa', 'minsci.mosaic', 'minsci.xmu'],
       install_requires = [
           'inflect',
           'lxml',
