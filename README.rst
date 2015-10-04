@@ -25,7 +25,7 @@ If no path is provided, you will have the option to select the source
 directory from within the script. You can also provide the path as part
 of the command:
 
->>> minsci-toolkit mosaic -p C:\path\to\my\mosaics
+>>> minsci-toolkit mosaic -p C:\path\to\mosaics
 
 By default, the script creates a mosaic with the same extension as the
 source tiles. You can have the script create a JPEG derivative using the
