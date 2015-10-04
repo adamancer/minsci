@@ -25,38 +25,39 @@ If no path is provided, you will have the option to select the source
 directory from within the script. You can also provide the path as part
 of the command:
 
->>> minsci-toolkit mosaic -p C:\path\to\mosaics
+   >>> minsci-toolkit mosaic -p C:\path\to\mosaics
 
 By default, the script creates a mosaic with the same extension as the
 source tiles. You can have the script create a JPEG derivative using the
 --create_jpeg flag:
 
->>> minsci-toolkit mosaic --create_jpeg
+   >>> minsci-toolkit mosaic --create_jpeg
 
 **Selector.** Use the selector tool to select tiles to exclude from future SEM
 element mapping. This tool does the following:
 
-*  Creates a points file for use with Noran System Seven containing the
-   center point of each tile that was kept from the original grid.
-*  Moves excluded tiles to a directory in the source folder. These tiles
+*  *Creates a points file for use with Noran System Seven.* File contains
+   the center point of each tile that was kept from the original grid.
+*  *Moves excluded tiles to a directory in the source folder.* These tiles
    are automatically reintegrated if the selection script is run again.
-*  Produces a list of tiles to skip. The mosaic script uses this list to
+*  *Produces a list of tiles to skip.* The mosaic script uses this list to
    fill in gaps in the mosaic where the excluded tiles were removed.
-*  Produces a screenshot showing the final selection grid.
+*  *Produces a screenshot showing the final selection grid.*
 
 To use the select script:
 
->>> minsci-toolkit select
+   >>> minsci-toolkit select
 
 Click the tiles you'd like to remove, or click a darkened tile to reinstate it.
 As with the mosaic script, the select command accepts an optional path argument
 using the -p flag.
 
-**Organizer.** *This command is currently disabled.* This command organizes element
-maps produces by Noran System Seven into element-specific folders suitable for
-mosaicking. It accepts optional arguments for the source and destination directories:
+**Organizer.** *This command is currently disabled.* This command organizes
+element maps produces by Noran System Seven into element-specific folders
+suitable for mosaicking. It accepts optional arguments for the source and
+destination directories:
 
->>> minsci-toolkit organize ~/path/to/source ~/path/to/destination
+   >>> minsci-toolkit organize C:\path\to\source C:\path\to\destination
 
 
 GeoTaxa
