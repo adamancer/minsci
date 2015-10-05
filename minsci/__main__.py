@@ -28,8 +28,7 @@ def main(args=None):
 
     def organize_callback(args):
         args = vars(args)
-        print 'This function is currently disabled pending testing'
-        #organizer(args['source'], args['destination'])
+        organizer(args['source'], args['destination'])
 
 
 
@@ -78,12 +77,14 @@ def main(args=None):
         'organize',
         help='Organize element maps into folders')
     organize_parser.add_argument(
-        dest = 'source',
+        dest='source',
         type=str,
+        nargs='?',
         help='the path to the directory containing the element maps')
     organize_parser.add_argument(
         dest = 'destination',
         type=str,
+        nargs='?',
         help='the path to the directory in which to store the organized maps')
     organize_parser.set_defaults(func=organize_callback)
 
