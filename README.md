@@ -7,17 +7,20 @@ Caveat emptor.
 Mosaic
 ------
 
+*Some features in this script require [ImageMagick](http://www.imagemagick.org/)*
+
 This is a simple image-stitching program designed to create mosaics from
 tile sets with regular offsets. We use it to stitch images from SEM
 and petrographic microscopes and to select subsets of tiles for more
 detailed analysis. It is currently being updated to be slightly less
 maddening than its earlier incarnation.
 
-To use, first collect the tile sets you'd like to stitch in a single folder.
-There are currently three primary tools, each accessible from the command line:
+To use, first collect the tile sets you'd like to stitch as subdirectories
+in a single folder. There are currently three primary tools, each accessible from the command line:
 
 **Mosaic.** Use the mosaic tool to stitch a set of tiles into a mosaic. The
-mosaic is saved in the directory you specify. From the command line:
+mosaic is saved in the parent of the directory containing the source tiles.
+From the command line:
 
 ```
 minsci-toolkit mosaic
@@ -39,7 +42,7 @@ source tiles. You can have the script create a JPEG derivative using the
 minsci-toolkit mosaic --create_jpeg
 ```
 
-One warning: PIL will sometimes fail to open TIFFs. When
+About ImageMagick: PIL will sometimes fail to open TIFFs. When
 the mosaic script encounters unreadable TIFFs, it uses
 [ImageMagick](http://www.imagemagick.org/) to create a usable
 copy of the entire tile set. If ImageMagick is not installed, this
@@ -50,6 +53,7 @@ element mapping. This tool does the following:
 
 *  Creates a points file for use with Noran System Seven. File contains
    the center point of each tile that was kept from the original grid.
+   **The points file has not been tested.**
 *  Moves excluded tiles to a directory in the source folder. These tiles
    are automatically reintegrated if the selection script is run again.
 *  Produces a list of tiles to skip. The mosaic script uses this list to
