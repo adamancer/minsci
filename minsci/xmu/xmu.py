@@ -604,8 +604,8 @@ class XMu(object):
                     print self.full + ' does not exist'
                     self.xml_format(self.fi, self.full)
                 else:
-                    t1 = time.ctime(os.path.getmtime(self.fi))
-                    t2 = time.ctime(os.path.getmtime(self.full))
+                    t1 = os.path.getmtime(self.fi)
+                    t2 = os.path.getmtime(self.full)
                     if t1 >= t2:
                         print self.full + ' is older than ' + self.fi
                         self.xml_format(self.fi, self.full)
@@ -678,7 +678,7 @@ class XMu(object):
         results = []
         for child in self.record.xpath(path):
             if child.text:
-                results.append(child.text)
+                results.append(self.handle_entities(child.text, False))
             else:
                 results.append('')
         try:
@@ -817,245 +817,68 @@ class XMu(object):
 
 
 
-    def xml_format3(self, fi, fo, nbsp=''):
-        """Convert EMu export to functioning XML"""
-        print 'Formatting ' + fi + ' as XML...'
-        start_time = datetime.datetime.now()
-        with open(fo, 'wb') as fw:
-            fw.write('<?xml version="1.0" encoding="utf-8"?>\n<Records>\n')
-        with open(fi, 'rb') as f:
-            delim = '\n  </tuple>\n'
-            for s in self._chunk_in(f, ends_at=delim):
-                output = []
-                records = s.split(delim)[:-1]
-                for rec in records:
-                    # Reset variable for each record
-                    containers = [] # list of named tables and tuples
-                    fields = {}
-                    ind = ''        # indent
-                    # Process record
-                    lines = [s.strip() for s in rec.split('>\n')]
-                    rec = []
-                    for line in lines:
-                        # Handle atoms
-                        """Suppressing blank lines causes problems w/ grids"""
-                        #if line.startswith('<a') and not '></' in line:
-                        if line.startswith('<a'):
-                            arr = line.split('>',1)
-                            fld = arr[0].split('"')[1]
-                            val = arr[1].rsplit('<',1)[0].decode('cp1252').encode('utf8')
-                            rec.append('%s<%s>%s</%s>' % (ind,fld,val,fld))
-                            # Get keys
-                            keys = [containers[i]
-                                    for i in xrange(0, len(containers))
-                                    if not containers[i] in containers[:i]]
-                            try:
-                                fields['/'.join(keys)].append(fld)
-                            except:
-                                fields['/'.join(keys)] = [fld]
-                        # Handle closing containers
-                        elif line.startswith('</'):
-                            try:
-                                container = containers.pop()
-                            except:
-                                pass
-                            else:
-                                rec.append('%s</%s>' % (ind,container))
-                        # Handle opening containers
-                        elif line.startswith('<t') and not '"e' in line:
-                            try:
-                                # Process named container
-                                container = line.split('>',1)[0].split('"')[1]
-                            except IndexError:
-                                # Process tuples
-                                if len(containers):
-                                    container = containers[len(containers)-1]
-                                    containers.append(container)
-                                    rec.append('%s<%s>' % (ind,container))
-                            else:
-                                containers.append(container)
-                                rec.append('%s<%s>' % (ind,container))
-                        elif line.startswith('<!'):
-                            # Handle comment
-                            containers = []
-                            fields = {}
-                        # Handle repeated fields
-                        try:
-                            if rec[-1] == rec[-2]:
-                                rec.pop()
-                        except:
-                            pass
-                    # Add placeholder to empty tables
-                    i = 0
-                    insert = {}
-                    while i < len(rec):
-                        try:
-                            that = rec[i + 1]
-                        except:
-                            pass
-                        else:
-                            this = rec[i].strip('<>')
-                            # Check for empty tables
-                            if this == that.strip('<>/')\
-                               and that.startswith('</'):
-                                s ='<Placeholder></Placeholder>'
-                                if this.endswith('_nesttab'):
-                                    s = ('<{0}_inner>{1}'
-                                         '</{0}_inner>').format(this, s)
-                                insert[i] = s
-                            # Check for ref_tabs that have multiple values
-                            if this.endswith(('_inner', 'Ref_tab')):
-                                n = 0
-                            elif this.startswith('<atom'):
-                                if n:
-                                    print 'ERROR'
-                                else:
-                                    n += 1
-                        i += 1
-                    for i in sorted(insert.keys())[::-1]:
-                        rec.insert(i + 1, insert[i])
-                    print '\n'.join(rec)
-                    # Make sure tables have all the proper fields
-                    root = etree.fromstring('<Record>' +
-                                            ''.join(rec).strip() +
-                                            '</Record>')
-                    for key in [fld for fld in fields if bool(fld)]:
-                        for fld in fields[key]:
-                            element = copy(root)
-                            tags = key.split('/') + [fld]
-                            i = 0
-                            while i < len(tags):
-                                tag = tags[i]
-                                for child in element:
-                                    if child.tag == tag:
-                                        element = child
-                                        break
-                                else:
-                                    path = '/'.join(tags[:i] + ['Placeholder'])
-                                    tree = root.find(path)
-                                    try:
-                                        parent = tree.getparent()
-                                    except:
-                                        print 'SERIOUS PROBLEM'
-                                        print '\n'.join(rec)
-                                        print '-' * 60
-                                        print '/'.join(tags)
-                                        print 'KEY', key
-                                        print 'FLD', fld
-                                        print 'PTH', path
-                                        raise
-                                    else:
-                                        #print 'Added {} to {}'.format(
-                                        #    tag,
-                                        #    parent.tag)
-                                        etree.SubElement(parent, tag)
-                                i += 1
-                    # Remove placeholders
-                    for element in root.xpath('//Placeholder'):
-                        element.getparent().remove(element)
-                    rec = ['<' + s + '>' for s
-                           in etree.tostring(root).split('><')]
-                    rec[0] = '<Record>'
-                    rec.pop()
-                    rec.append('</Record>')
-                    output += rec
-                with open(fo, 'ab') as fw:
-                    fw.write('\n'.join(output))
-        with open(fo, 'ab') as fw:
-            fw.write('\n</Records>\n')
-        print fo + ' written!'
-        return self
+    def read_schema(self, fp):
+        """Reads EMu schema file to dictionary
 
+        The EMu schema file includes (but is not limted to) these fields:
+         ColumnName: Name of field, table, or reference in current module
+         DataKind: One of the following:
+           dkAtom
+           dkNested
+           dkTable
+           dkTuple
+         DataType: One of the following:
+           Currency
+           Date
+           Float
+           Integer
+           Latitude
+           Longitude
+           String
+           Text
+           Time
+           UserId
+           UserName
+         ItemName: Field name in current module
+         RefLink: Name with Ref
+         RefKey: Field used to link with other module
+         LookupName: Name of lookup list. Appears only in highest field
+          in a given lookup hierarchy.
+         LookupParent: The name of next highest field in a lookup hierarchy.
+        """
 
-
-
-    def xml_format2(self, fi, fo, nbsp=''):
-        """Convert EMu export to functioning XML"""
-        print 'Formatting ' + fi + ' as XML...'
-        start_time = datetime.datetime.now()
-        with open(fo, 'wb') as fw:
-            fw.write('<?xml version="1.0" encoding="utf-8"?>\n<Records>\n')
-        with open(fi, 'rb') as f:
-            delim = '\n  </tuple>\n'
-            for s in self._chunk_in(f, ends_at=delim):
-                output = []
-                records = s.split(delim)[:-1]
-                for rec in records:
-                    # Reset variable for each record
-                    containers = [] # list of named tables and tuples
-                    ind = ''        # indent
-                    # Process record
-                    output.append('%s<Record>' % '')
-                    lines = [s.strip() for s in rec.split('>\n')]
-                    for line in lines:
-                        # Handle atoms
-                        """Suppressing blank lines causes problems w/ grids"""
-                        #if line.startswith('<a') and not '></' in line:
-                        if line.startswith('<a'):
-                            arr = line.split('>',1)
-                            fld = arr[0].split('"')[1]
-                            val = arr[1].rsplit('<',1)[0].decode('cp1252').encode('utf8')
-                            output.append('%s<%s>%s</%s>' % (ind,fld,val,fld))
-                        # Handle closing containers
-                        elif line.startswith('</'):
-                            try:
-                                container = containers.pop()
-                            except:
-                                pass
-                            else:
-                                output.append('%s</%s>' % (ind,container))
-                        # Handle opening containers
-                        elif line.startswith('<t') and not '"e' in line:
-                            try:
-                                # Process named container
-                                container = line.split('>',1)[0].split('"')[1]
-                            except IndexError:
-                                # Process tuples
-                                if len(containers):
-                                    container = containers[len(containers)-1]
-                                    containers.append(container)
-                                    output.append('%s<%s>' % (ind,container))
-                            else:
-                                containers.append(container)
-                                output.append('%s<%s>' % (ind,container))
-                        elif line.startswith('<!'):
-                            # Handle comment
-                            containers = []
-                        # Handle repeated fields
-                        try:
-                            if output[-1] == output[-2]:
-                                output.pop()
-                        except:
-                            pass
-                    output.append('%s</Record>' % '')
-                # Clean empty containers
-                temp = []
-                x = 0
-                while x < len(output):
-                    print output[x]
-                    raw_input()
+        print 'Reading EMu schema from {}...'.format(fp)
+        # These regexes are used to split the .pl file into
+        # modules and fileds
+        re_module = re.compile('\te[a-z]+ =>.*?\{.*?\n\t\}', re.DOTALL)
+        re_field = re.compile('"[A-z].*?\},', re.DOTALL)
+        re_lines = re.compile('[A-z].*,', re.DOTALL)
+        try:
+            with open(fp, 'rb') as f:
+                modules = re_module.findall(f.read())
+        except OSError:
+            print '.pl file not found'
+            raise
+        schema = {}
+        for module in modules:
+            module_name = module.split('\n')[0].strip().split(' ')[0]
+            schema[module_name] = {}
+            fields = re_field.findall(module)
+            for field in fields:
+                d = {}
+                lines = [s.strip() for s in field.split('\n')
+                         if bool(s.strip())]
+                field_name = lines[0].split(' ')[0].strip('"')
+                lines = lines[2:len(lines)-1]
+                for line in lines:
                     try:
-                        s1 = output[x]
-                        s2 = output[x+1]
+                        key, val = [s.strip('",') for s in line.split(' => ')]
                     except:
-                        temp.append(s1)
+                        pass
                     else:
-                        if s1 == s2:
-                            temp.append(s1)
-                            x += 1
-                        elif s1.strip('</>') != s2.strip('</>'):
-                            temp.append(s1)
-                        elif s1.startswith('</') and not s2.startswith('</'):
-                            temp.append(s1)
-                        else:
-                            x += 1
-                    x += 1
-                with open(fo, 'ab') as fw:
-                    fw.write('\n'.join(temp))
-        with open(fo, 'ab') as fw:
-            fw.write('\n</Records>\n')
-        print fo + ' written!'
-        return self
+                        d[key] = val
+                schema[module_name][field_name] = d
+        return schema
 
 
 
@@ -1089,12 +912,12 @@ class XMu(object):
 
         EMu does not export a blank cell for any empty cell in a
         column below the last populated cell, even if other cells
-        are populated in lower rows. This function appends blank
-        values at the list for any grid that has too few entries,
-        including blanks.
+        in the same table are populated in lower rows. This
+        function appends blank values at the list for any grid
+        that has too few entries.
 
         Empty cells above the last populated cell are included as
-        blanks in the export.
+        in the export.
 
         @list grids (list of lists)
         """
