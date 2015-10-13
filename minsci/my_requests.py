@@ -8,18 +8,20 @@ class MyRequests(object):
     """Extends the requests module with defaults for error handling"""
 
 
-    def __init__(self, cache='my_cache'):
+    def __init__(self, max_requests=100, cache=None):
         self.wait = 3    # default wait between requests
         self.count = 0   # backoffs
         self.base = 5    # backoff length in seconds
         self.max = 320   # max backoff before calling it
-        try:
-            shutil.remove(cache + '.sqlite')
-        except:
-            pass
-        else:
-            print 'Removed old cache file'
-        requests_cache.install_cache(cache)
+        self.max_requests = max_requests
+        if cache:
+            try:
+                shutil.remove(cache + '.sqlite')
+            except:
+                pass
+            else:
+                print 'Removed old cache file'
+            requests_cache.install_cache(cache)
 
 
 
@@ -68,10 +70,10 @@ class MyRequests(object):
         else:
             sleep = self.base * 2 ** self.count
             self.count += 1
-            if sleep <= self.max:
+            if sleep <= self.max and self.count < self.max_requests:
                 print '{} error. Retrying in {}s...'.format(status_code, sleep)
                 time.sleep(sleep - self.sleep)
                 return True
             else:
-                print 'Fatal error. Max backoff exceeded.'
+                print 'Maximum number of retries made. Request failed.'
                 return False
