@@ -42,11 +42,8 @@ source tiles. You can have the script create a JPEG derivative using the
 minsci-toolkit mosaic --create_jpeg
 ```
 
-About ImageMagick: PIL will sometimes fail to open TIFFs. When
-the mosaic script encounters unreadable TIFFs, it uses
-[ImageMagick](http://www.imagemagick.org/) to create a usable
-copy of the entire tile set. If ImageMagick is not installed, this
-workaround will fail and the mosaic will not be created.
+About [ImageMagick](http://www.imagemagick.org/): PIL will sometimes fail to open TIFFs. When the mosaic script encounters unreadable TIFFs, it uses ImageMagick to create a usable copy of the entire tile set. If ImageMagick
+is not installed, this workaround will fail and the mosaic will not be created.
 
 **Selector.** Use the selector tool to select tiles to exclude from future SEM
 element mapping. This tool does the following:
