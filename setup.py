@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(name='minsci',
-      version='0.1.4',
+      version='0.1.5',
       description='Tools for data management in Mineral Sciences at NMNH',
       classifiers = [
         'License :: OSI Approved :: MIT License',
