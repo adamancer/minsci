@@ -298,7 +298,15 @@ class GeoTaxa(object):
             taxa = [taxa]
         taxa = self.clean_taxa(taxa, True)
         highest_common_taxon, taxa = self.group_taxa(taxa)
+        # Handle special gemstones as settings
+        kinds = ['Catseye', 'Jade', 'Moonstone', 'Sunstone']
+        for kind in kinds:
+            if kind in taxa:
+                setting = kind
+                taxa.remove(kind)
+                break
         if bool(setting) and bool(taxa):
+            taxa = [taxon.replace(' Group', '') for taxon in taxa]
             formatted = oxford_comma(taxa) + ' ' + setting
             return self.cap_taxa(formatted)
         formatted = []
