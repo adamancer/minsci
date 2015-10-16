@@ -423,65 +423,6 @@ class XMu(object):
 
 
     ############################################################################
-    # SHARED FUNCTIONS
-    ############################################################################
-
-
-    def dep_match_samples(self, catnums, attrs={}, default_suffix=False):
-        # Look for unique match based on user-provided parameters
-        matches = []
-        irns = []
-        params = []
-        for catnum in catnums:
-            params += emh.parse_catnum(catnum)
-        # Match one by one
-        for param in params:
-            # Match natural suffix
-            irn = self.search([param]).find('irn')
-            if len(irn) == 1:
-                d = {'irn' : irn[0]}
-                matches.append(write_match(d))
-                irns.append(irn[0])
-                continue
-            # Match forcing suffix
-            if default_suffix and not 'CatSuffix' in param:
-                param['CatSuffix'] = default_suffix
-                irn = self.search([param]).find('irn')
-                if len(irn) == 1:
-                    d = {'irn' : irn[0]}
-                    matches.append(write_match(d))
-                    irns.append(irn[0])
-                    continue
-                print param
-                del param['CatSuffix']
-            # Match without division
-            if 'CatDivision' in param:
-                del param['CatDivision']
-                irn = self.search([param]).find('irn')
-                if len(irn) == 1:
-                    d = {'irn' : irn[0]}
-                    matches.append(write_match(d))
-                    irns.append(irn[0])
-                    continue
-            # Match in EMu
-            d = {}
-            for key in param:
-                if not param[key]:
-                    param[key] = ''
-                try:
-                    d[self.mongo2emu[key]] = str(param[key])
-                except:
-                    d[key] = str(param[key])
-            matches.append(write_match(d))
-            irns.append(None)
-        self.matches = matches
-        self.irns = irns
-        return self
-
-
-
-
-    ############################################################################
     # MONGO FUNCTIONS
     ############################################################################
 
