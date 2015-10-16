@@ -706,101 +706,110 @@ class XMu(object):
             for s in self._chunk_in(f, ends_at=delim):
                 master = etree.Element('Records')
                 records = s.split(delim)[:-1]
+                rec_num = 0
                 for rec in records:
-                    root = etree.Element('Record')
-                    active = root
-                    # Reset variable for each record
-                    containers = []  # list of named tables and tuples
-                    keymap = {}      # tracks fields found
-                    # Process record
-                    lines = [s.strip() for s in rec.split('>\n')]
-                    i = 0
-                    while i < len(lines):
-                        line = lines[i]
-                        # Handle atoms
-                        # Suppressing blank lines causes problems w/ grids
-                        if line.startswith('<a'):
-                            arr = line.split('>',1)
-                            tag = arr[0].split('"')[1]
-                            text = arr[1]\
-                                   .rsplit('<',1)[0]\
-                                   .decode('cp1252')
-                            if self.verbose:
-                                print 'Writing {}...'.format(tag)
-                            atom = etree.SubElement(active, tag)
-                            atom.text = text
-                            # Add key to keymap
-                            key = '/'.join(containers)
-                            try:
-                                keymap[key].append(tag)
-                            except:
-                                keymap[key] = [tag]
-                        # Handle closing containers
-                        elif line.startswith('</'):
-                            container = containers.pop()
-                            if self.verbose:
-                                print 'Closing {}...'.format(container)
-                            active = active.getparent()
-                            # Skip table if next
-                            try:
-                                next_line = lines[i+1]
-                            except:
-                                pass
-                            else:
-                                if line.startswith('</tu')\
-                                   and next_line.startswith('</ta'):
-                                    i += 1
-                                elif line.startswith('</tu')\
-                                   and next_line.startswith('<tu'):
-                                    containers.append(container)
-                        # Handle opening containers
-                        elif line.startswith('<t') and not '"e' in line:
-                            try:
-                                # Get name if table
-                                container = line.split('>',1)[0].split('"')[1]
-                            except IndexError:
-                                # Tuples are unnamed, so they inherit
-                                # the name of the container
-                                if len(containers):
+                    try:
+                        root = etree.Element('Record')
+                        active = root
+                        # Reset variable for each record
+                        containers = []  # list of named tables and tuples
+                        keymap = {}      # tracks fields found
+                        # Process record
+                        lines = [s.strip() for s in rec.split('>\n')]
+                        i = 0
+                        while i < len(lines):
+                            line = lines[i]
+                            # Handle atoms
+                            # Suppressing blank lines causes problems w/ grids
+                            if line.startswith('<a'):
+                                arr = line.split('>',1)
+                                tag = arr[0].split('"')[1]
+                                text = arr[1]\
+                                       .rsplit('<',1)[0]\
+                                       .decode('cp1252')
+                                if self.verbose:
+                                    print 'Writing {}...'.format(tag)
+                                atom = etree.SubElement(active, tag)
+                                atom.text = text
+                                # Add key to keymap
+                                key = '/'.join(containers)
+                                try:
+                                    keymap[key].append(tag)
+                                except:
+                                    keymap[key] = [tag]
+                            # Handle closing containers
+                            elif line.startswith('</'):
+                                container = containers.pop()
+                                if self.verbose:
+                                    print 'Closing {}...'.format(container)
+                                active = active.getparent()
+                                # Skip table if next
+                                try:
+                                    next_line = lines[i+1]
+                                except:
+                                    pass
+                                else:
+                                    if line.startswith('</tu')\
+                                       and next_line.startswith('</ta'):
+                                        i += 1
+                                    elif line.startswith('</tu')\
+                                       and next_line.startswith('<tu'):
+                                        containers.append(container)
+                            # Handle opening containers
+                            elif line.startswith('<t') and not '"e' in line:
+                                try:
+                                    # Get name if table
+                                    container = line.split('>',1)[0].split('"')[1]
+                                except IndexError:
+                                    # Tuples are unnamed, so they inherit
+                                    # the name of the container
+                                    if len(containers):
+                                        if self.verbose:
+                                            print 'Opening {}...'.format(container)
+                                        active = etree.SubElement(active, container)
+                                else:
                                     if self.verbose:
                                         print 'Opening {}...'.format(container)
                                     active = etree.SubElement(active, container)
-                            else:
-                                if self.verbose:
-                                    print 'Opening {}...'.format(container)
-                                active = etree.SubElement(active, container)
-                                containers.append(container)
-                                # Skip tuple if next
-                                next_line = lines[i+1]
-                                if next_line.startswith('<tu'):
-                                    i += 1
-                        elif line.startswith('<!'):
-                            containers = []
-                        i += 1
-                    # Check for missing fields in Ref_tabs
-                    del keymap['']
-                    for key in keymap:
-                        tags = key.split('/')
-                        elements = [root]
-                        while len(tags):
-                            tag = tags.pop(0)
-                            new = []
+                                    containers.append(container)
+                                    # Skip tuple if next
+                                    next_line = lines[i+1]
+                                    if next_line.startswith('<tu'):
+                                        i += 1
+                            elif line.startswith('<!'):
+                                containers = []
+                            i += 1
+                        # Check for missing fields in Ref_tabs
+                        del keymap['']
+                        for key in keymap:
+                            tags = key.split('/')
+                            elements = [root]
+                            while len(tags):
+                                tag = tags.pop(0)
+                                new = []
+                                for element in elements:
+                                    for child in element:
+                                        if child.tag == tag:
+                                            new.append(child)
+                                elements = new
                             for element in elements:
-                                for child in element:
-                                    if child.tag == tag:
-                                        new.append(child)
-                            elements = new
-                        for element in elements:
-                            for tag in keymap[key]:
-                                for child in element:
-                                    if child.tag == tag:
-                                        break
-                                else:
-                                    if self.verbose:
-                                        print 'Adding {} to {}...'\
-                                              .format(tag, element.tag)
-                                    etree.SubElement(element, tag)
-                    master.append(root)
+                                for tag in keymap[key]:
+                                    for child in element:
+                                        if child.tag == tag:
+                                            break
+                                    else:
+                                        if self.verbose:
+                                            print 'Adding {} to {}...'\
+                                                  .format(tag, element.tag)
+                                        etree.SubElement(element, tag)
+                        master.append(root)
+                    except:
+                        # Print the record that killed the formatter,
+                        # then throw an error
+                        print 'Fatal error: Could not process record'
+                        print rec
+                        raw_input('Press any key for traceback')
+                        raise
                 # Write out at end of chunk
                 output = ['  ' + etree.tostring(rec, pretty_print=True,
                                                 encoding='utf8')\
@@ -813,6 +822,33 @@ class XMu(object):
             fw.write('\n</Records>\n')
         print fo + ' written!'
         return self
+
+
+
+
+    def read_fields(self):
+        """Reads paths to fields from schema in EMu XML export"""
+        fields = []
+        schema = []
+        with open(self.fi, 'rb') as f:
+            for line in f:
+                schema.append(line.rstrip())
+                if line.strip() == '?>':
+                    break
+        schema = schema[schema.index('<?schema')+1:-1]
+        is_open = False
+        current = []
+        for field in schema:
+            if not is_open and field.endswith(('_tab', '_nesttab', '0', 'Ref')):
+                is_open = True
+            if is_open and field.strip() == 'end':
+                is_open = False
+            else:
+                current.append(field.split(' ').pop())
+            if not is_open:
+                fields.append('/'.join(current))
+                current = []
+        return fields[1:-1]
 
 
 
@@ -916,7 +952,7 @@ class XMu(object):
         function appends blank values at the list for any grid
         that has too few entries.
 
-        Empty cells above the last populated cell are included as
+        Empty cells above the last populated cell are included
         in the export.
 
         @list grids (list of lists)
@@ -1378,17 +1414,25 @@ class XMu(object):
     ############################################################################
 
 
-    def _chunk_in(self, f, size=2**25, ends_at=''):
+    def _chunk_in(self, f, size=2**24, ends_at=''):
         while True:
             data = f.read(size)
             if not data:
                 break
             if len(ends_at):
+                start_length = len(data)
                 i = 0
                 while not data.endswith(ends_at):
                      data += f.read(1)
                      i += 1
-                     if i > 10000:
+                     # End of file is when read stops returning data
+                     if not len(data) == (start_length + i):
+                         print 'Reached end of file!'
+                         break
+                     # Max number of characters to check should be
+                     # much greater than a reasonable record length
+                     if i > 10**6:
+                         print 'Warning: Could not locate complete record'
                          break
             yield data
 
