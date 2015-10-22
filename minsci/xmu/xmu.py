@@ -780,13 +780,17 @@ class XMu(object):
         is_open = False
         current = []
         for field in schema:
-            if not is_open and field.endswith(('_tab', '_nesttab', '0', 'Ref')):
+            field = field.split(' ').pop().strip()
+            if not is_open and field.endswith(('_tab', '_nesttab',
+                                               '0', 'Ref')):
                 is_open = True
-            if is_open and field.strip() == 'end':
+            if is_open and field == 'end':
                 is_open = False
+            elif field == 'end':
+                pass
             else:
-                current.append(field.split(' ').pop())
-            if not is_open:
+                current.append(field)
+            if not is_open and len(current):
                 fields.append('/'.join(current))
                 current = []
         return fields[1:-1]
