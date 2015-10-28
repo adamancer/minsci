@@ -613,3 +613,21 @@ def handle_catnums(val):
         return [val]
     else:
         print 'Error: Could not handle ' + val
+
+
+
+
+def fxrange(start, stop, step):
+    """xrange for floats. From http://stackoverflow.com/questions/477486/"""
+    r = start
+    while r < stop:
+        yield r
+        r += step
+
+
+
+
+def cprint(s, show=True):
+    """Conditional print"""
+    if bool(s) and show:
+        print fill(s, subsequent_indent='  ')
