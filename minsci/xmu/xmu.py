@@ -1085,10 +1085,8 @@ class XMu(object):
                 for val in d[fld]:
                     # Set group
                     group = ''
-                    if update and 'nesttab' in tab:
-                        group = ' group="ntab{:0>3d}"'.format(i)
-                    elif update:
-                        group = ' group="tab{:0>3d}"'.format(i)
+                    if update:
+                        group = ' group="grp{:0>3d}"'.format(i)
                     # Detect irns. Used a separate variable because
                     # grids go screwy when an irn is placed between
                     # text records.
