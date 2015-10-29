@@ -1,80 +1,14 @@
-MinSci Tools
-============
+MinSci Toolkit
+==============
 
-Everything in this package is in active, albeit sporadic development.
-Caveat emptor.
-
-Mosaic
-------
-
-*Some features in this script require [ImageMagick](http://www.imagemagick.org/)*
-
-This is a simple image-stitching program designed to create mosaics from
-tile sets with regular offsets. We use it to stitch images from SEM
-and petrographic microscopes and to select subsets of tiles for more
-detailed analysis. It is currently being updated to be slightly less
-maddening than its earlier incarnation.
-
-To use, first collect the tile sets you'd like to stitch as subdirectories
-in a single folder. There are currently three primary tools, each accessible from the command line:
-
-**Mosaic.** Use the mosaic tool to stitch a set of tiles into a mosaic. The
-mosaic is saved in the parent of the directory containing the source tiles.
-From the command line:
+A collection of tools written in Python 2.x for Mineral Sciences at NMNH.
+You can install the MinSci Toolkit from the command line using pip:
 
 ```
-minsci-toolkit mosaic
+pip install minsci
 ```
 
-If no path is provided, you will have the option to select the source
-directory from within the script. You can also provide the path as part
-of the command:
-
-```
-minsci-toolkit mosaic -p C:\path\to\mosaics
-```
-
-By default, the script creates a mosaic with the same extension as the
-source tiles. You can have the script create a JPEG derivative using the
---create_jpeg flag:
-
-```
-minsci-toolkit mosaic --create_jpeg
-```
-
-About [ImageMagick](http://www.imagemagick.org/): PIL will sometimes fail to open TIFFs. When the mosaic script encounters unreadable TIFFs, it uses ImageMagick to create a usable copy of the entire tile set. If ImageMagick
-is not installed, this workaround will fail and the mosaic will not be created.
-
-**Selector.** Use the selector tool to select tiles to exclude from future SEM
-element mapping. This tool does the following:
-
-*  Creates a points file for use with Noran System Seven. File contains
-   the center point of each tile that was kept from the original grid.
-   **The points file has not been tested.**
-*  Moves excluded tiles to a directory in the source folder. These tiles
-   are automatically reintegrated if the selection script is run again.
-*  Produces a list of tiles to skip. The mosaic script uses this list to
-   fill in gaps in the mosaic where the excluded tiles were removed.
-*  Produces a screenshot showing the final selection grid.
-
-To use the select script:
-
-```
-minsci-toolkit select
-```
-
-Click the tiles you'd like to remove, or click a darkened tile to reinstate it.
-As with the mosaic script, the select command accepts an optional path argument
-using the -p flag.
-
-**Organizer.** This command organizes
-element maps produces by Noran System Seven into element-specific folders
-suitable for mosaicking. It accepts optional arguments for the source and
-destination directories:
-
-```
-minsci-toolkit organize C:\path\to\source C:\path\to\destination
-```
+**Note:** The mosaic module has been moved to a separate repository, [Stitch2D](https://github.com/adamancer/stitch2d).
 
 GeoTaxa
 -------
