@@ -1,4 +1,4 @@
-include README.rst
+include README.md
 include minsci/*/files/*.p
 include minsci/*/files/*.ttf
 include minsci/*/files/*.txt
