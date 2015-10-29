@@ -777,22 +777,16 @@ class XMu(object):
                 if line.strip() == '?>':
                     break
         schema = schema[schema.index('<?schema')+1:-1]
-        is_open = False
-        current = []
+        containers = ['schema']
         for field in schema:
-            field = field.split(' ').pop().strip()
-            if not is_open and field.endswith(('_tab', '_nesttab',
-                                               '0', 'Ref')):
-                is_open = True
-            if is_open and field == 'end':
-                is_open = False
-            elif field == 'end':
-                pass
+            kind, field = [s.strip() for s in field.rsplit(' ', 1)]
+            if kind in ('table', 'tuple'):
+                containers.append(field)
+                continue
+            if field == 'end':
+                containers.pop()
             else:
-                current.append(field)
-            if not is_open and len(current):
-                fields.append('/'.join(current))
-                current = []
+                fields.append('/'.join(containers[2:] + [field]))
         return fields[1:-1]
 
 
