@@ -17,6 +17,8 @@ from textwrap import fill
 from lxml import etree
 from pymongo import MongoClient
 
+from ..helpers.py import cprint
+
 
 
 class XMu(object):
@@ -619,9 +621,10 @@ class XMu(object):
         results = []
         for child in self.record.xpath(path):
             if child.text:
-                results.append(self.handle_entities(child.text, False))
+                text = unicode(child.text)
+                results.append(self.handle_entities(text, False))
             else:
-                results.append('')
+                results.append(u'')
         try:
             self.paths_found[path].append(len(results))
         except:
@@ -630,7 +633,7 @@ class XMu(object):
             try:
                 results = results[0]
             except:
-                results = ''
+                results = u''
         return results
 
 
@@ -869,10 +872,10 @@ class XMu(object):
                 break
         del context
         # Notify user paths checked and found
-        print 'Path information:'
-        for key in sorted(self.paths_found):
-            val = self.paths_found[key]
-            print key + ': ', max(val)
+        #print 'Path information:'
+        #for key in sorted(self.paths_found):
+        #    val = self.paths_found[key]
+        #    print key + ': ', max(val)
 
 
 
@@ -894,7 +897,11 @@ class XMu(object):
         Empty cells above the last populated cell are included
         in the export.
 
-        @list grids (list of lists)
+        Args:
+            grids (list): list of values for all fields in one table
+
+        Returns:
+            List of values padded to the length of the longest list
         """
 
         n = max([len(grid) for grid in grids])
@@ -920,6 +927,22 @@ class XMu(object):
 
 
     def write_match(self, d, indent='', fields=[], tables=[]):
+        """Writes formatted string used to match record in another module
+
+        Basically just a wrapper for the write_import function set
+        to return a string instead of writing to a file.
+
+        Args:
+            fp (str): path to import file. If None, returns record as list.
+            d (dict): record keyed to EMu field names
+            indent (str): string to prepend to each line
+            fields (list): atomic fields to include in import
+            tables (list): lists of fields in the same tables
+
+        Returns:
+            Formatted record suitable for matching to another module
+            during import.
+        """
         if not len(fields):
             fields = d.keys()
         arr = self.write_import(None, {0:d}, fields,
@@ -936,6 +959,28 @@ class XMu(object):
     def write_import(self, fp, d, fields, tables=[],
                      encoding='utf-8', module='ecatalogue',
                      update=False):
+        """Write an XML import for EMu
+
+        By default, creates new records. Blank fields are excluded.
+        If irn specified, will overwrite existing record. The exact
+        behavior of the update depends on the update flag. If True, all
+        fields in d are included (even blanks) and data in grids will
+        be appended to the appropriate table. If False, blanks will be
+        excluded and tables will be overwritten by the new rows.
+
+        Args:
+            fp (str): path to import file. If None, returns record as list.
+            d (dict): record keyed to EMu field names
+            fields (list): atomic fields to include in import
+            tables (list): lists of fields in the same tables
+            encoding (str): encoidng of import file
+            module (str): EMu name for module
+            update (bool): controls behavior of update
+
+        Returns:
+            If fp is None, returns a list containing the lines of the
+            import record. Otherwise returns None.
+        """
         arr = []
         arr.append('<?xml version="1.0" encoding="{}" ?>\n' \
                     '<table name="{}">'.format(encoding, module))
@@ -958,7 +1003,6 @@ class XMu(object):
                     fld = t.split('_')[0].rstrip('0')
                     if fld in rec:
                         if n and n != len(rec[fld]):
-                            print rec
                             raw_input('Grid mismatch ({0}): {1}'\
                                       .format(key, '; '.join(tab)))
                         n = len(rec[fld])
@@ -968,6 +1012,18 @@ class XMu(object):
             arr.append('  </tuple>')
             i += 1
         arr.append('</table>')
+        # Warn user if tables are at risk of being overwritten. Typically,
+        # updates are flagged rows are appended to the table. However, the
+        # update flag doesn't actually control whether or not existing
+        # records are modified; that falls to whether the irn field is
+        # populated or not. If the irn is populated and update is not set
+        # to True, existing tables will be OVERWRITTEN. This may be the
+        # desired behavior, so this is only a warning.
+        if 'irn' in fields and len(tables) and update == False:
+            cprint('Warning: irn in fields and update is False.'
+                   ' The following tables may be overwritten:'
+            for table in tables:
+                print ', '.join(table)
         if fp:
             with open(fp, 'wb') as f:
                 chunked = self._chunk_out(arr, 1024)
@@ -983,9 +1039,21 @@ class XMu(object):
 
 
 
-
     def atom(self, d, fld, n=4, encoding='utf-8', update=False):
-        # Write atomic field
+        """Writes atomic field
+
+        Args:
+            d (dict): record keyed to EMu field names
+            fld (str): name of atomic field
+            n (int): number of spaces with which to prefix line
+            encoding (str): encoding of the import file
+            update (bool): controls behavior of update as described
+                in the comment on the write_import function
+
+        Returns:
+            String as <FieldName>Value</FieldName>. If d[fld] is
+            empty, returns empty string unless update is True.
+        """
         try:
             d[fld]
         except:
@@ -1057,7 +1125,22 @@ class XMu(object):
 
 
     def grid(self, d, tab, n=4, encoding='utf-8', update=False):
-        # Write grid
+        """Writes table based on list of fields
+
+        Individual fields in a given table are padded to match the
+        longest list for that table. Handles tables and nested tables.
+
+        Args:
+            d (dict): record keyed to EMu field names
+            tab (list): fields in a given table
+            n (int): number of spaces with which to prefix line
+            encoding (str): encoding of the import file
+            update (bool): controls behavior of update as described
+                in the comment on the write_import function
+
+        Returns:
+            String containing the properly formatted table
+        """
         # Get field from table name
         fld = tab.split('_')[0].rstrip('0')
         try:
