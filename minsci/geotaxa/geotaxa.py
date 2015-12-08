@@ -48,7 +48,7 @@ class XMu(XMu):
         for taxon in taxa:
             self.map_emu_taxa[taxon] = irn
         if not len(self.taxa) % 2500:
-            print '{:,} records read'.format(len(self.taxa))
+            print u'{:,} records read'.format(len(self.taxa))
 
 
 
@@ -76,7 +76,7 @@ class GeoTaxa(object):
         try:
             f = open(pickled, 'rb')
         except IOError:
-            print 'Reading taxonomic data from {}...'.format(fi)
+            print u'Reading taxonomic data from {}...'.format(fi)
             self.taxa = {}
             self.map_narratives = {}  # maps taxon name to narrative irn
             self.map_emu_taxa = {}    # maps taxon irn to narrative irn
@@ -87,7 +87,7 @@ class GeoTaxa(object):
             xmu.map_narratives = self.map_narratives
             xmu.map_emu_taxa = self.map_emu_taxa
             xmu.fast_iter(xmu.itertax)
-            print '{:,} records read'.format(len(self.taxa))
+            print u'{:,} records read'.format(len(self.taxa))
 
             # Map tree for each taxon
             for irn in self.taxa:
@@ -105,7 +105,7 @@ class GeoTaxa(object):
             os.remove('geotaxa.xml')
         else:
             # Use pickled data. This is much faster.
-            print 'Reading taxonomic data from {}...'.format(pickled)
+            print u'Reading taxonomic data from {}...'.format(pickled)
             with open(pickled, 'rb') as f:
                 tds = pickle.load(f)
             self.taxa = tds['taxa']
@@ -180,7 +180,7 @@ class GeoTaxa(object):
         key = self.format_key(taxon).split('-')
         keys = []
         if len(key) > 2:
-            keys.append('-'.join(key[0], key[len(key)-1]))
+            keys.append('-'.join([key[0], key[len(key)-1]]))
         keys.append(key[len(key)-1])
         for key in keys:
             try:
@@ -281,30 +281,35 @@ class GeoTaxa(object):
     def item_name(self, taxa=[], setting=None, name=None):
         """Format display name for a specimen based on taxa and other info
 
-        @param list
-        @param string
-        @param string
-        @return string
-
         This function is intended for single specimens. To format a
         name for multiple items, use group_name().
+
+        Arguments:
+        taxa (list)
+        setting (str)
+        name (str)
+
+        Returns:
+        Display name as string
         """
         if bool(name):
             return name
         # Taxa is required if name is not specified
-        if not bool(taxa):
-            raise TypeError
+        taxa = [s for s in taxa if bool(s)]
+        if not any(taxa):
+            return 'Unidentified object'
         if not isinstance(taxa, list):
             taxa = [taxa]
         taxa = self.clean_taxa(taxa, True)
         highest_common_taxon, taxa = self.group_taxa(taxa)
         # Handle special gemstones as settings
         kinds = ['Catseye', 'Jade', 'Moonstone', 'Sunstone']
-        for kind in kinds:
-            if kind in taxa:
-                setting = kind
-                taxa.remove(kind)
-                break
+        if len(taxa) > 1:
+            for kind in kinds:
+                if kind in taxa:
+                    setting = kind.lower()
+                    taxa.remove(kind)
+                    break
         if bool(setting) and bool(taxa):
             taxa = [taxon.replace(' Group', '') for taxon in taxa]
             formatted = oxford_comma(taxa) + ' ' + setting
@@ -335,9 +340,12 @@ class GeoTaxa(object):
             # not especially descriptive nomenclature, so we'll
             # add a bit of context to supplement.
             if 'Iron achondrite' in taxon['tree']:
-                name = '{} (Iron achondrite)'.format(name)
+                name = u'{} (Iron achondrite)'.format(name)
             elif 'Meteorites' in taxon['tree']:
-                name = '{} ({})'.format(name, taxon['tree'][2].lower())
+                try:
+                    name = u'{} ({})'.format(name, taxon['tree'][2].lower())
+                except IndexError:
+                    pass
 
             formatted.append(name)
         # Some commonly used named for minerals are actually groups
@@ -360,12 +368,12 @@ class GeoTaxa(object):
             formatted.append('others')
         # Group varieties if everything is the same mineral
         siblings = [taxon for taxon in formatted
-                    if taxon.startswith(highest_common_taxon)]
+                    if 'var.' in taxon and taxon.startswith(highest_common_taxon)]
         if len(siblings) == len(taxa) and len(taxa) > 1:
-            varieties = [taxon.split('var.')[1].strip(' )')
+            varieties = [taxon.split('var.', 1).pop().strip(' )')
                          for taxon in formatted]
             formatted = [(highest_common_taxon +
-                          ' (vars. {})').format(oxford_comma(varieties))]
+                          u' (vars. {})').format(oxford_comma(varieties))]
         # We're done! Format the list as a string.
         if len(formatted) > 1:
             primary = formatted.pop(0)
