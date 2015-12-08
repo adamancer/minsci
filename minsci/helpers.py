@@ -16,6 +16,8 @@ import pyodbc
 from nameparser import HumanName
 
 
+
+
 def __init__(self):
     digs = string.digits + string.lowercase
     boundary = '-' * 60
@@ -60,9 +62,9 @@ def dict_from_odbc(cursor, tbl, col='*', where='',
         col = [col]
     # Prepare where clause
     if bool(where):
-        where = ' WHERE {}'.format(where.replace('"', "'"))
+        where = u' WHERE {}'.format(where.replace('"', "'"))
     # Assemble query
-    q = 'SELECT {} FROM {}{}'.format(','.join(col), tbl, where)
+    q = u'SELECT {} FROM {}{}'.format(','.join(col), tbl, where)
     print q
     # Execute query
     cursor.execute(q)
@@ -244,9 +246,9 @@ def prompt(prompt, validator, confirm=False,
     if isinstance(validator, (str, unicode)):
         validator = re.compile(validator, re.U)
     elif isinstance(validator, dict):
-        prompt = '{}({}) '.format(prompt, '/'.join(validator.keys()))
+        prompt = u'{}({}) '.format(prompt, '/'.join(validator.keys()))
     elif isinstance(validator, list):
-        options = ['{}. {}'.format(x + 1, validator[x])
+        options = [u'{}. {}'.format(x + 1, validator[x])
                    for x in xrange(0, len(validator))]
     else:
         raw_input(fill('Error in minsci.helpers.prompt: '
@@ -257,7 +259,7 @@ def prompt(prompt, validator, confirm=False,
     while loop:
         # Print options
         if isinstance(validator, list):
-            print '{}\n{}'.format('\n'.join(options), '-' * 60)
+            print u'{}\n{}'.format('\n'.join(options), '-' * 60)
         # Prompt for value
         a = raw_input(prompt).decode(sys.stdin.encoding)
         if a.lower() == 'q':
@@ -410,43 +412,55 @@ def utfmap(s):
 
 
 
-def parse_catnum(catnum, attrs={}, default_suffix=False):
-    """Parse catalog numbers into a dictionary
+def parse_catnum(s, attrs={}, default_suffix=False, strip_suffix=False):
+    """Find and parse catalog numbers in a string
 
-    Keyword arguments:
-    s:               str. Catalog number as string.
-    identifier:      str. Unique identifier.
-    attrs:           dict. Additional parameters keyed to EMu field.
-    default_suffix:  bool. If true, assume suffix of 00 for minerals
+    Args:
+        s (str): string containingcatalog number(s) or range
+        attrs (dict): additional parameters keyed to EMu field
+        default_suffix (bool): add suffix -00 for minerals if True
+        strip_suffx (bool): strip leading zeroes from suffix if True
+
+    Returns:
+        List of dicts containing catalog numbers parsed into prefix, number,
+        and suffix: {'CatPrefix': 'G', 'CatNumber': '3551', 'CatSuffix': 00}.
+        Pass to format_catnums to convert to strings.
     """
 
+    # Regular expressions for use with catalog number functions
+    p_acr = '((USNM|NMNH)\s)?'
+    p_pre = '([A-Z]{3,4} ?|[BCGMR]-?)?'
+    p_num = '([0-9]{2,6})'
+    p_suf = '(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,][0-9]{1,2}|\.[0-9]+)?'
+    regex = re.compile('\\b(' + p_acr + p_pre + p_num + p_suf + ')\\b')
+
     try:
-        cps = regex.findall(catnum)
+        cps = regex.findall(s)
     except:
         return []
     else:
         keys = ('CatMuseumAcronym', 'CatPrefix', 'CatNumber', 'CatSuffix')
         temp = []
         for cp in cps:
-            d = dict(zip(keys, cp[1:]))
+            match = cp[0]
+            d = dict(zip(keys, cp[2:]))
             # Handle acronym
             if d['CatMuseumAcronym'] == 'USNM':
                 d['CatDivision'] = 'Meteorites'
             del d['CatMuseumAcronym']
             # Handle meteorite numbers
-            if ',' in d['CatSuffix'] or len(d['CatPrefix']) > 1:
+            if ',' in d['CatSuffix'] or 3 <= len(d['CatPrefix']) <= 4:
                 # Check for four-letter prefix (ex. ALHA)
-                s = catnum
                 try:
-                    float(s[3])
+                    int(match[3])
                 except:
-                    d['MetMeteoriteNumber'] = s
+                    d['MetMeteoriteName'] = match
                 else:
-                    d['MetMeteoriteNumber'] = s[0:3] + ' ' + s[3:]
+                    d['MetMeteoriteName'] = match[0:3] + ' ' + match[3:]
                 for key in keys:
                     try:
                         del d[key]
-                    except:
+                    except KeyError:
                         pass
             # Handle catalog numbers
             else:
@@ -499,6 +513,15 @@ def parse_catnum(catnum, attrs={}, default_suffix=False):
                     cp['CatSuffix'] = default_suffix
                 else:
                     del cp['CatSuffix']
+        try:
+            cp['CatSuffix']
+        except:
+            pass
+        else:
+            if strip_suffix:
+                cp['CatSuffix'] = cp['CatSuffix'].lstrip('0')
+                if not bool(cp['CatSuffix']):
+                    del cp['CatSuffix']
         temp.append(cp)
     cps = temp
     # Force values to strings and add additional attributes
@@ -531,9 +554,24 @@ def parse_catnums(catnums, attrs={}, default_suffix=False):
 
 
 def format_catnum(d, code=True, div=False):
+    """Formats parsed catalog number to a string
+
+    Args:
+        d (dict): parsed catalog number
+        code (bool): include museum code in catnum if True
+        div (bool): include div abbreviation in catnum if True
+
+    Returns:
+        Catalog number formatted as a string: 'G3551-00'. Use
+        format_catnums to process a list of parsed catalog numbers.
+    """
+    try:
+        return d['MetMeteoriteName']
+    except KeyError:
+        pass
     try:
         d['CatNumber']
-    except:
+    except KeyError:
         return ''
     keys = ('CatMuseumAcronym', 'CatDivision', 'CatPrefix', 'CatSuffix')
     for key in keys:
@@ -559,17 +597,29 @@ def format_catnum(d, code=True, div=False):
         )
     # Add division if necessary
     if bool(catnum) and div:
-        catnum += ' ({})'.format(d['CatDivision'][:3].upper())
-    # Return formatted catalog number
+        catnum += u' ({})'.format(d['CatDivision'][:3].upper())
     return catnum
 
 
 
 
-def format_catnums(catnums):
-    """Combine each entry in a list of parsed catalog numbers"""
-    catnums = handle_catnums(catnums)
-    return [format_catnum(d) for d in catnums]
+def format_catnums(parsed, code=True, div=False):
+    """Converts a list of parsed catalog numbers into strings
+
+    Args:
+        parsed (list): list of dicts containing parsed catnums
+        code (bool): include museum code in catnum if True
+        div (bool): include div abbreviation in catnum if True
+
+    Returns:
+        List of catalog numbers formatted as strings: ['G3551-00']
+    """
+    if not isinstance(parsed, list):
+        parsed = [parsed]
+    catnums = []
+    for d in parsed:
+        catnums.append(format_catnum(d, code, div))
+    return catnums
 
 
 
