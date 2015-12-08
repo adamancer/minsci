@@ -522,11 +522,15 @@ class XMu(object):
     def xml_init(self, **kwargs):
         """Initialize XML instance
 
-        XML instances use the following variables:
-          self.fi = path to the EMu export
-          self.path = path to the curernt working XML file
-            self.full = path to the full XML dataset
-            self.subset = path to an XML file containing a subset
+        Args:
+            fi (str): path to EMu XML report
+            fo (str): path to working XML file
+            force_format (bool): controls whether to force overwrite of
+                existing working file. If False, the working file will only
+                be overwritten if fi is newer.
+
+        Returns:
+            Self
         """
         print 'Initializing XML handler...'
         try:
@@ -565,50 +569,17 @@ class XMu(object):
 
 
 
-    def xml_search(self, params, store=False):
-        # Search for records matching params
-        # Return lxml.etree object of matching records
-        # params: list of dicts
-        tree = etree.Element('Records')
-        for event, element in self.records():
-            # Check children against all parameters
-            for key in params:
-                matches = 0
-                try:
-                    match = self.find(param) == params[key]
-                except:
-                    pass
-                else:
-                    if match:
-                        matches += 1
-            if matches == len(params):
-                tree.append(copy(element))
-                break
-            element.clear()
-        return self
-
-
-
-
-    def recurse_tree(self, element, tags, i=0, n=0):
-        try:
-            tags[i]
-        except:
-            pass
-        else:
-            for child in element:
-                if child.tag == tags[i]:
-                    if child.text:
-                        print child.tag, child.text.strip()
-                        n += 1
-                    self.recurse_tree(child, tags, i + 1, n)
-            print tags, n
-
-
-
-
     def xml_find(self, *args):
-        """Return value for a given key"""
+        """Return value for a given key
+
+        Args:
+            *args (str): strings comprising the full path to a given
+                field. Each field should be a separate argument.
+
+        Returns:
+            String (for atomic field) or list (for table) containg
+            value(s) along the path given by *args.
+        """
         # Handle aliases from self.paths
         try:
             args = self.paths[self.module][args[0]]
@@ -639,8 +610,19 @@ class XMu(object):
 
 
 
-    def xml_format(self, fi, fo, nbsp=''):
-        """Convert EMu export to functioning XML"""
+    def xml_format(self, fi, fo):
+        """Convert EMu XML export to parseable XML
+
+        Process the formatted file with fast_iter.
+
+        Args:
+            fi (str): path to input file
+            fo (str): path to output file. The formatted XML file
+                is written to this path.
+
+        Returns:
+            Self
+        """
         print 'Formatting ' + fi + ' as XML...'
         start_time = datetime.datetime.now()
         with open(fo, 'wb') as fw:
@@ -798,31 +780,24 @@ class XMu(object):
     def read_schema(self, fp):
         """Reads EMu schema file to dictionary
 
-        The EMu schema file includes (but is not limted to) these fields:
+        The EMu schema file includes (but is not limted to) these parameters:
          ColumnName: Name of field, table, or reference in current module
-         DataKind: One of the following:
-           dkAtom
-           dkNested
-           dkTable
-           dkTuple
-         DataType: One of the following:
-           Currency
-           Date
-           Float
-           Integer
-           Latitude
-           Longitude
-           String
-           Text
-           Time
-           UserId
-           UserName
+         DataKind: dkAtom, dkNested, dkTable, dkTuple
+         DataType: Currency, Date, Float, Integer, Latitude,
+           Longitude, String, Text, Time, UserId, UserName
          ItemName: Field name in current module
          RefLink: Name with Ref
          RefKey: Field used to link with other module
          LookupName: Name of lookup list. Appears only in highest field
           in a given lookup hierarchy.
          LookupParent: The name of next highest field in a lookup hierarchy.
+
+        Args:
+            fp (str): path to input file
+
+        Returns:
+            Dictionary with information about the XML schema:
+            {module : {field: { param_1: value_1,.., param_n: value_n}}}
         """
 
         print 'Reading EMu schema from {}...'.format(fp)
@@ -862,6 +837,14 @@ class XMu(object):
 
 
     def fast_iter(self, func):
+        """Iterate through records using callback function
+
+        Args:
+            func (str): name of callback function
+
+        Returns:
+            None
+        """
         context = self.records()
         for event, element in context:
             result = func(element)
@@ -1257,7 +1240,7 @@ class XMu(object):
 
 
 
-    
+
     ############################################################################
     # Helper functions
     ############################################################################
