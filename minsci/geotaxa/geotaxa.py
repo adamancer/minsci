@@ -4,11 +4,11 @@ import re
 from copy import copy
 
 from ..exceptions import TaxonNotFound
-from ..helpers import oxford_comma, plural
-from ..xmu.xmu import XMu
+from ..helpers import oxford_comma, plural, cprint, rprint
+from ..xmu import xmu
 
 
-class XMu(XMu):
+class XMu(xmu.XMu):
 
 
     def itertax(self, element):
@@ -52,44 +52,48 @@ class XMu(XMu):
 
 
 
-
 class GeoTaxa(object):
 
 
-    def __init__(self, fi=None, force_format=False):
+    def __init__(self, fp=None, force_format=False):
         """Read data from EMu export file
 
         Will check for pickled data first"""
-        self.dir = os.path.join(os.path.dirname(__file__), 'files')
-        if fi is None:
-            fi = os.path.join(self.dir, 'xmldata.xml')
-        self.elements = open(os.path.join(self.dir,
-                                          'elements.txt')).read().splitlines()
+        files = os.path.join(os.path.dirname(__file__), 'files')
+        if fp is None:
+            fp = os.path.join(files, 'xmldata.xml')
+
+        try:
+            with open(os.path.join(files, 'elements.txt'), 'rb') as f:
+                self.elements = f.read().splitlines()
+        except IOError:
+            raise
 
         # Check for pickled data
-        pickled = os.path.splitext(fi)[0] + '.p'
+        pickled = os.path.splitext(fp)[0] + '.p'
         if force_format:
             try:
-                os.remove(pickled)
+                os.remove(path)
             except OSError:
                 pass
         try:
-            f = open(pickled, 'rb')
+            tds = pickle.load(open(pickled, 'rb'))
         except IOError:
-            print u'Reading taxonomic data from {}...'.format(fi)
+            print u'Pickling taxonomic data...'
             self.taxa = {}
             self.map_narratives = {}  # maps taxon name to narrative irn
             self.map_emu_taxa = {}    # maps taxon irn to narrative irn
 
-            xmu = XMu(fi=fi, fo='geotaxa.xml', force_format=True)
-            xmu.format_key = self.format_key
-            xmu.taxa = self.taxa
-            xmu.map_narratives = self.map_narratives
-            xmu.map_emu_taxa = self.map_emu_taxa
-            xmu.fast_iter(xmu.itertax)
+            tax = xmu.instant(XMu, 'etaxonomy', fp)
+            tax.format_key = self.format_key
+            tax.taxa = self.taxa
+            tax.map_narratives = self.map_narratives
+            tax.map_emu_taxa = self.map_emu_taxa
+            tax.fast_iter(tax.itertax)
             print u'{:,} records read'.format(len(self.taxa))
 
             # Map tree for each taxon
+            print 'Mapping trees...'
             for irn in self.taxa:
                 tree = self.recurse_tree(self.taxa[irn]['name'], [])
                 self.taxa[irn]['tree'] = tree
@@ -102,16 +106,12 @@ class GeoTaxa(object):
                  }
             with open(pickled, 'wb') as f:
                 pickle.dump(tds, f)
-            os.remove('geotaxa.xml')
         else:
-            # Use pickled data. This is much faster.
-            print u'Reading taxonomic data from {}...'.format(pickled)
-            with open(pickled, 'rb') as f:
-                tds = pickle.load(f)
+            # Use serialized data. This is much faster.
+            print u'Reading saved taxonomic data...'
             self.taxa = tds['taxa']
             self.map_narratives = tds['map_narratives']
             self.map_emu_taxa = tds['map_emu_taxa']
-
 
 
 
@@ -155,8 +155,6 @@ class GeoTaxa(object):
                     raise TaxonNotFound
 
 
-
-
     def find_emu_taxon(self, irn):
         """Returns taxonomic data for an EMu Taxonomy irn
 
@@ -165,8 +163,6 @@ class GeoTaxa(object):
             return self.taxa[self.map_emu_taxa(irn)]
         except KeyError:
             return self.generate_taxon(taxon)
-
-
 
 
     def classify_taxon(self, taxon):
@@ -258,13 +254,43 @@ class GeoTaxa(object):
             return taxon[0].lower() + taxon[1:]
 
 
+    def get_official_taxon(self, taxon):
+        tdata = self(self.preferred_synonym(taxon))
+        if self.is_official(tdata):
+            return taxon
+        else:
+            for t in reversed(self(taxon)['tree']):
+                if self.is_official(self(t)):
+                    return t
+        return taxon
+
+
+    def is_official(self, tdata):
+        authorities = {
+            'BGS-MAIN': None,
+            'BGS-TAS': None,
+            'IMA Status': ['Approved', 'Grandfathered'],
+            'IUGS': None
+        }
+        for key in authorities:
+            try:
+                status = tdata['schemes'][key]
+            except KeyError:
+                pass
+            else:
+                if (authorities[key] is None or status[0] in authorities[key]):
+                    return True
+        else:
+            return False
+
+
 
 
 
     def clean_taxa(self, taxa, dedupe=False):
         """Removes duplicate taxa while retaining order"""
         taxa = [self.preferred_synonym(self.clean_taxon(taxon))
-                for taxon in taxa]
+                for taxon in taxa if bool(taxon)]
         if dedupe:
             temp = []
             while len(taxa):
@@ -284,17 +310,18 @@ class GeoTaxa(object):
         This function is intended for single specimens. To format a
         name for multiple items, use group_name().
 
-        Arguments:
-        taxa (list)
-        setting (str)
-        name (str)
+        Args:
+            taxa (list)
+            setting (str)
+            name (str)
 
         Returns:
-        Display name as string
+            Display name as string
         """
         if bool(name):
             return name
         # Taxa is required if name is not specified
+        orig = copy(taxa)
         taxa = [s for s in taxa if bool(s)]
         if not any(taxa):
             return 'Unidentified object'
@@ -302,30 +329,72 @@ class GeoTaxa(object):
             taxa = [taxa]
         taxa = self.clean_taxa(taxa, True)
         highest_common_taxon, taxa = self.group_taxa(taxa)
-        # Handle special gemstones as settings
-        kinds = ['Catseye', 'Jade', 'Moonstone', 'Sunstone']
+        # Special handling
         if len(taxa) > 1:
-            for kind in kinds:
-                if kind in taxa:
-                    setting = kind.lower()
-                    taxa.remove(kind)
-                    break
-        if bool(setting) and bool(taxa):
+            prepend = ['Catseye', 'Star']
+            append = ['Jade', 'Moonstone', 'Sunstone']
+            for i in xrange(len(taxa)):
+                try:
+                    taxon = taxa[i]
+                except IndexError:
+                    continue
+                if taxon in prepend:
+                    try:
+                        taxa[i-1] = u'{} {}'.format(
+                            taxon, taxa[i-1][0].lower() + taxa[i-1][1:])
+                    except IndexError:
+                        pass
+                    else:
+                        del taxa[i]
+                if taxon in append:
+                    try:
+                        taxa[i-1] = u'{} {}'.format(taxa[i-1], taxon.lower())
+                    except IndexError:
+                        pass
+                    else:
+                        del taxa[i]
+        if 'Elbaite' in taxa and 'Schorl' in taxa:
+            taxa.remove('Schorl')
+        # Remove parents
+        taxa = [self.preferred_synonym(taxon) for taxon in taxa]
+        for i in xrange(len(taxa)):
+            try:
+                taxon = self(taxa[i])
+            except IndexError:
+                continue
+            for parent in taxon['tree']:
+                try:
+                    j = taxa.index(parent)
+                except ValueError:
+                    pass
+                else:
+                    taxa[j] = taxa[i]
+        # Dedupe while maintaining list order
+        taxa = [taxa[i] for i in xrange(len(taxa)) if not taxa[i] in taxa[:i]]
+        # Special handling for jewelry
+        if bool(setting) and any(taxa):
             taxa = [taxon.replace(' Group', '') for taxon in taxa]
-            formatted = oxford_comma(taxa) + ' ' + setting
+            setting = setting.lower()
+            taxa = oxford_comma(taxa)
+            if setting == 'carved':
+                formatted = 'Carved {}'.format(taxa[0].lower() + taxa[1:])
+            else:
+                formatted = taxa + ' ' + setting.lower()
             return self.cap_taxa(formatted)
         formatted = []
-        for taxon in taxa:
-            preferred = self.preferred_synonym(taxon)
-            taxon = self(preferred)
+        for i in xrange(len(taxa)):
+            try:
+                taxon = self(taxa[i])
+            except IndexError:
+                continue
             name = taxon['name']
             # Handle minerals and varieties. Valid mineral species will
             # have an IMA status populated; a variety is anything defined
             # below an approved mineral in the taxonomic hierarchy. We
-            # only keep the lowest variety for display.
+            # only keep the lowest, most specific variety for display.
             try:
                 taxon['schemes']['IMA Status']
-            except:
+            except KeyError:
                 for parent in taxon['tree']:
                     parent = self(parent)
                     try:
@@ -346,7 +415,6 @@ class GeoTaxa(object):
                     name = u'{} ({})'.format(name, taxon['tree'][2].lower())
                 except IndexError:
                     pass
-
             formatted.append(name)
         # Some commonly used named for minerals are actually groups
         # (e.g., pyroxene). The hierarchy stores them as such, but
@@ -357,7 +425,14 @@ class GeoTaxa(object):
         # that mineral will be listed separately as well. We typically
         # don't want to include that information twice, so we'll
         # try to remove them here.
-        primary = formatted[0].lower()
+        try:
+            primary = formatted[0].lower()
+        except IndexError:
+            print 'FATAL ERROR'
+            print 'ORIGINAL:', orig
+            print 'MODIFIED:', taxa
+            raw_input()
+            raise
         for taxon in copy(formatted[1:]):
             if taxon.lower() in primary:
                 formatted.remove(taxon)
@@ -390,21 +465,10 @@ class GeoTaxa(object):
         @param list (of lists)
         @return string
         """
-        highest_common_taxa = []
-        all_taxa =[]
-        for taxa in taxas:
-            if not isinstance(taxa, list):
-                taxa = [taxa]
-            highest_common_taxon, taxa = self.group_taxa(taxa)
-            highest_common_taxa.append(highest_common_taxon)
-            all_taxa.extend(taxa)
-        highest_common_taxa = set(highest_common_taxa)
-        if len(highest_common_taxa) == 1 and len(all_taxa) > 1:
-            highest_common_taxon = highest_common_taxa.pop()
-            return self.cap_taxa(plural(highest_common_taxon, False))
-        else:
-            return self.cap_taxa(oxford_comma([self.item_name(taxa)
-                                                    for taxa in all_taxa]))
+        highest_common_taxon = self.highest_common_taxon(taxas)
+        if highest_common_taxon.endswith((' Group', 'Series')):
+            highest_common_taxon = highest_common_taxon.rsplit(' ', 1)[0]
+        return highest_common_taxon
 
 
 
@@ -417,22 +481,26 @@ class GeoTaxa(object):
         """
         taxon = self(taxon)
         while len(taxon['synonyms']):
-            taxon = self(taxon['synonyms'].pop())
+            taxon = self(copy(taxon['synonyms']).pop())
         return taxon['name']
 
 
 
 
     def group_taxa(self, taxa):
-        """Group synonyms and varieties while maintaining order
+        """Group synonyms and varieties for a single specimen
 
-        @param list
-        @return list of the form [string, list]
+        Args:
+            taxa (list): list of taxa from one specimen
+
+        Returns:
+            List of grouped taxa
         """
+        if not isinstance(taxa, list):
+            taxa = [taxa]
         taxa = [self.clean_taxon(taxon) for taxon in taxa]
         if len(taxa) == 1:
-            taxon = self(self.preferred_synonym(taxa[0]))
-            return [taxon['name'], [taxon['name']]]
+            return [self(self.preferred_synonym(taxa[0]))['name']]
         else:
             taxa = [self.preferred_synonym(taxon) for taxon in taxa]
             trees = [self(taxon)['tree'] + [self(taxon)['name']]
@@ -441,12 +509,7 @@ class GeoTaxa(object):
             _sets = copy(sets)
             _set = sets.pop(0)
             common = _set.intersection(*_sets)
-            highest_common_taxon = trees[0][len(common)-1]
-            # Some taxa aren't great for display, so we filter them out
-            # using exclude.
-            exclude = ['Informal group', 'Structural group', 'Ungrouped']
-            while highest_common_taxon in exclude:
-                highest_common_taxon = trees[0][len(common)-2]
+            # Group taxa
             grouped = [tree[len(common):].pop() for tree in trees
                        if len(tree[len(common):])]
             unique = list(set(grouped))
@@ -455,7 +518,41 @@ class GeoTaxa(object):
                 if taxon in unique:
                     taxa.append(taxon)
                     unique.remove(taxon)
-            return [highest_common_taxon, taxa]
+            return grouped
+
+
+    def highest_common_taxon(self, taxas):
+        """Identify the most specific common taxonomic element
+
+        Args:
+            taxas (list): list of taxa to group
+
+        Returns:
+            Highest common taxon as string
+        """
+        grouped = []
+        for taxa in taxas:
+            # Check for rocks
+            if 'Rocks and Sediments' in self(taxa[0])['tree']:
+                taxa = [taxa[0]]
+            grouped.extend(self.group_taxa(taxa))
+        # Because this function uses self.group_taxa, we already have the
+        # preferred synonym.
+        trees = [self(taxon)['tree'] + [self(taxon)['name']]
+                 for taxon in grouped]
+        sets = [set(tree) for tree in trees]
+        _sets = copy(sets)
+        _set = sets.pop(0)
+        common = _set.intersection(*_sets)
+        highest_common_taxon = trees[0][len(common)-1]
+        # Some taxa aren't intended for display, so we filter them out
+        # using exclude.
+        exclude = ['Informal group', 'Structural group', 'Ungrouped']
+        while highest_common_taxon in exclude:
+            highest_common_taxon = trees[0][len(common)-2]
+        return highest_common_taxon
+
+
 
 
 
