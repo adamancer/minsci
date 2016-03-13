@@ -6,20 +6,30 @@ import csv
 import hashlib
 import os
 import re
+import sys
+import time
 import Tkinter
+from copy import copy
 
 from lxml import etree
 from PIL import Image, ImageTk
 from scandir import walk
 
-from ..helpers import cprint, prompt, parse_catnum, format_catnums
+import xmu
+from ..helpers import (cprint, dedupe, prompt, oxford_comma,
+                       parse_catnum, format_catnums)
 from ..geotaxa import GeoTaxa
-from .xmu import XMu
 
 
 
 
-class XMu(XMu):
+
+# FIXME: Confirm overwriting behavior for multiple source files
+# FIXME: Handling multiple source files when used as input, not reference.
+#        Or should multimedia always be given as a file, and never a dir?
+
+
+class XMu(xmu.XMu):
 
 
     def verify_from_report(self, element):
@@ -37,17 +47,112 @@ class XMu(XMu):
 
 
 
-    def summarize_catalog_records(self, element):
-        """Summarize catalog data to allow matching of multimedia"""
+    def summarize_catalog(self, element):
+        """Summarize catalog data to allow matching of multimedia
+
+        self.catalog = {index: {suffix : {irn : summary}}}
+        """
         self.record = element
-        #raw_input(etree.tostring(element))
         irn = self.find('irn')
         prefix = self.find('CatPrefix')
         number = self.find('CatNumber')
         suffix = self.find('CatSuffix')
         catnum = u'{}{}-{}'.format(prefix, number, suffix).rstrip('-').upper()
-        index = [catnum]
+        indexes = [catnum.rsplit('-', 1)[0]]
+        # Handle Antarctic meteorites
+        name = self.find('MetMeteoriteName').upper()
+        if bool(suffix) and not bool(number):
+            indexes.append(name)
+        indexes = [s for s in indexes if bool(s.strip())]
+        if not len(indexes):
+            #cprint('irn: {}'.format(irn))
+            return True
 
+        # Skip records that already exist
+        try:
+            self.metadata[irn]
+        except KeyError:
+            pass
+        else:
+            # Confirm that irn appears in the right place in the catalog
+            # lookup. It's a problem if not.
+            cprint('{} already exists'.format(irn), self.verbose)
+            for index in indexes:
+                try:
+                    self.catalog[index][suffix][irn]
+                except KeyError:
+                    cprint('Fatal error: Existing irn not found in catalog.'
+                           ' Delete catalog.p and retry.')
+                    print irn, catnum, indexes
+                    raise
+            return True
+
+        collection = self.find('CatCollectionName_tab', 'CatCollectionName')
+        location = self.find('LocPermanentLocationRef', 'SummaryData')
+
+        country = self.find('BioEventSiteRef', 'LocCountry')
+        state = self.find('BioEventSiteRef', 'LocProvinceStateTerritory')
+        county = self.find('BioEventSiteRef', 'LocDistrictCountyShire')
+
+        if self.find('CatDivision') == 'Meteorites':
+            taxa = [self.find('MetMeteoriteType')]
+        else:
+            taxa = self.find('IdeTaxonRef_tab', 'ClaSpecies')
+
+        setting = self.find('MinJeweleryType')
+        cut = self.find('MinCut')
+        color = self.find('MinColor_tab', 'MinColor')
+        lot = self.find('BioLiveSpecimen')
+        weight = self.find('MeaCurrentWeight')
+        unit = self.find('MeaCurrentUnit')
+
+        status = self.find('SecRecordStatus').lower()
+        if not bool(status):
+            return True
+
+        # Objects that (1) are sometimes found in the cut field and
+        # (2) represent a whole object, not a setting. Order matters!
+        objects = [
+            'box',
+            'bead',
+            'bowl',
+            'bottle',
+            'cup',
+            'pendant',
+            'sphere',
+            'urn',
+            'vase',
+            'carved',
+            'carving'
+        ]
+        # Check cut for setting info if nothing is in the jewelery field
+        cut = cut.lower()
+        if not bool(setting) and bool(cut):
+            for term in objects:
+                if term == cut:
+                    # Special handling for exact matches
+                    setting = term
+                    if term != 'carved':
+                        cut = ''
+                    #print 'Cut is a setting: {}'.format(setting)
+                    break
+                elif (term + 's') in cut:
+                    setting = term + 's'
+                    #print 'Found setting in cut: {}'.format(setting)
+                    break
+                elif term in cut:
+                    setting = term
+                    #print 'Found setting in cut: {}'.format(setting)
+                    break
+        # General rule: beads should always be plural
+        if setting in cut:
+            setting = ''
+        if setting == 'bead':
+            setting += 's'
+        if cut == 'bead':
+            cut += 's'
+
+        # Fun with meteorites
         name = self.find('MetMeteoriteName')
         if bool(name):
             if bool(suffix) and not bool(number):
@@ -56,62 +161,229 @@ class XMu(XMu):
                 except:
                     print name, type(name)
                     print suffix, type(suffix)
-                index = [name]
-                catnum = None
-            else:
-                index.append(name)
         else:
             name = self.find('MinName')
 
         division = self.find('CatDivision')
         try:
-            division = division[:3].upper() + ':'
+            division = division[:3].upper()
         except:
             return True
+        if not bool(division):
+            return True
 
+        # Title
+        xname = self.gt.item_name(taxa, setting, name)
+        title = u'{} '.format(xname)  # must use catnum from multimedia record!
+
+        # Keywords
+        divmap = {
+            'MET' : 'Meteorite',
+            'MIN' : 'Mineral',
+            'PET' : 'Rock'
+        }
+        try:
+            stype = divmap[division]
+        except KeyError:
+            return True
+        else:
+            if stype == 'Mineral' and prefix == 'G':
+                stype = 'Gem'
+        keywords = [stype]
+        if bool(setting):
+            if setting == 'carved':
+                keywords.append('Carving')
+            else:
+                keywords.append(setting)
+        if any(taxa):
+            try:
+                keywords.extend(self.gt.clean_taxa(taxa, dedupe=True))
+            except:
+                print taxa
+                raw_input()
+        keywords.append(country)
+        if country.lower().startswith('united states') and bool(state):
+            keywords.append(state)
+        keywords = [s[0].upper() + s[1:] for s in keywords
+                    if bool(s) and not 'unknown' in s.lower()]
+
+        # Set descriptive caption
+        caption = []
+        if any([cut, setting]):
+            # Generate detailed description of gems and jewelery
+            setting = setting.lower().rstrip('. ')
+            caption = []
+            if bool(name):
+                caption.append(u'{}.'.format(name))
+            if bool(cut):
+                cut = cut.lower()
+                if cut.endswith(' cut'):
+                    cut = cut[:-4]
+                if 'beads' in cut or 'crystal' in cut:
+                    caption.append(u'{} of'.format(cut))
+                elif 'carv' in cut and not 'carving' in setting:
+                    caption.append(u'carved')
+                else:
+                    caption.append(u'{}-cut'.format(cut))
+            if bool(color):
+                color = oxford_comma(color[0].lower().split(','), False)
+                caption.append(u'{}'.format(color))
+            if any(taxa):
+                taxon = self.gt.item_name(taxa).split(' with ').pop(0).strip()
+                taxon = taxon[0].lower() + taxon[1:]
+                caption.append(u'{}'.format(taxon))
+            if bool(weight) and bool(unit):
+                weight = u'{} {}'.format(weight.rstrip('0.'), unit.lower())
+                if lot.lower().startswith(('set', 'with')) or bool(setting):
+                    caption.append(u'({})'.format(weight))
+                else:
+                    caption.append(u'weighing {}'.format(weight))
+            if bool(setting) and not ('carv' in cut and 'carv' in setting):
+                # Distinguish carved objects like bowls and spheres
+                if setting.rstrip('s') in objects[:-2]:
+                    caption.append(u'{}'.format(setting))
+                else:
+                    article = 'a '
+                    if setting.endswith('s'):
+                        article = ''
+                    elif setting.startswith(('a','e','i','o','u')):
+                        article = 'an '
+                    caption.append(u'in {}{}'.format(article, setting))
+            if len(lot):
+                lot = lot.lower()
+                if lot.startswith(('set', 'with')):
+                    caption.append(u'{}'.format(lot))
+                else:
+                    caption.append(u'. Lot described as "{}."'.format(
+                        lot.replace('"',"'").strip()))
+
+            if bool(name):
+                name = caption.pop(0)
+            else:
+                name = ''
+            caption[0] = caption[0][0].upper() + caption[0][1:]
+            if bool(name):
+                caption.insert(0, name)
+            caption = ' '.join(caption).replace(' .', '.')
+            if not caption.endswith('"') and not caption.endswith('.'):
+                caption += '.'
+            if status != 'active':
+                if status == 'inactive':
+                    status = 'made inactive'
+                caption += (' The catalog record associated with this'
+                            'specimen has been {}.').format(status)
+            # Neaten up the caption
+            pairs = [
+                ['  ', ' '],
+                [',-', ', '],
+                [' med ', ' medium '],
+                [' shaped', '-shaped'],
+                ['off white', 'off-white'],
+                ['play of color', 'play-of-color'],
+                ['light medium', 'light-to-medium'],
+                ['light to medium', 'light-to-medium'],
+                ['light dark', 'light-to-dark'],
+                ['light to dark', 'light-to-dark'],
+                ['medium light', 'medium-to-light'],
+                ['medium to light', 'medium-to-light'],
+                ['medium dark', 'medium-to-dark'],
+                ['medium to dark', 'medium-to-dark'],
+                ['dark light', 'dark-to-light'],
+                ['dark to light', 'dark-to-light'],
+                ['medium light', 'medium-to-light'],
+                ['medium to light', 'medium-to-light']
+            ]
+            for pair in pairs:
+                caption = caption.replace(pair[0], pair[1])
+        else:
+            # Provide less detailed caption for rocks and minerals
+            caption.append(xname)
+            locality = [county, state, country]
+            locality = ', '.join([s for s in locality if bool(s)])
+            if bool(locality):
+                try:
+                    caption.append(u'from {}'.format(locality))
+                except:
+                    pass
+            caption = ' '.join(caption)
+
+        # Set tags containing special information that can be
+        # useful in identifying specimens
         tags = []
-
-        collection = self.find('CatCollectionName_tab', 'CatCollectionName')
         try:
             if 'polished thin' in collection[0].lower():
                 tags.append('PTS')
         except IndexError:
             pass
-
-        location = self.find('LocPermanentLocationRef', 'SummaryData')
         if 'GGM' in location.upper():
             tags.append('GGM')
+        elif 'POD 4' in location.upper():
+            tags.append('POD 4')
 
-        taxa = self.find('IdeTaxonRef_tab', 'ClaSpecies')
-        try:
-            name = self.gt.item_name(taxa, name=name)
-        except:
-            raw_input(taxa)
-            raise
-
-        country = self.find('BioEventSiteRef', 'LocCountry')
-        state = self.find('BioEventSiteRef', 'LocProvinceStateTerritory')
-        county = self.find('BioEventSiteRef', 'LocDistrictCountyShire')
-        locality = [county, state, country]
-        locality = ', '.join([s for s in locality if bool(s)])
-
-        summary = [division, name]
+        # Set summary
         if catnum is not None:
-            summary.append(u'({})'.format(catnum))
-        if bool(locality):
-            try:
-                summary.append(u'from {}'.format(locality))
-            except:
-                pass
+            summary = ['{} {}:'.format(division, catnum), caption]
+        else:
+            summary = [division + ':', caption]
         if len(tags):
             summary.append(u'[{}]'.format(','.join(tags)))
+        try:
+            summary = ' '.join(summary)
+        except:
+            print summary
+            raw_input()
 
-        index = '|' + '|'.join([s.lower() for s in index])
-        summary = ' '.join(summary)
-        self.catalog.append([index, irn, summary])
-        if not len(self.catalog) % 25000:
-            print u'{:,} records processed'.format(len(self.catalog))
-        return True
+        for index in indexes:
+            index = index.upper()
+            try:
+                self.catalog[index]
+            except KeyError:
+                self.catalog[index] = {}
+            try:
+                self.catalog[index][suffix][irn] = summary
+            except KeyError:
+                self.catalog[index][suffix] = { irn : summary }
+            self.n += 1
+            if not self.n % 25000:
+                print u'{:,} records processed'.format(self.n)
+                #return False
+
+        # For multiple source files, the newer file will overwrite
+        # the older
+        self.metadata[irn] = {
+            'division' : division,
+            'title': title,
+            'caption' : caption,
+            'keywords' : keywords,
+            'status' : status
+            }
+
+
+
+
+    def summarize_links(self, element):
+        """Find multimedia attachments in catalog"""
+        self.record = element
+        irn = self.find('irn')
+
+        # Skip records that already exist
+        try:
+            self.links[irn]
+        except KeyError:
+            pass
+        else:
+            return True
+
+        multimedia = self.find('MulMultiMediaRef_tab', 'irn')
+        self.multimedia += multimedia
+        # Record multimedia linked to a given catalog record
+        self.links[irn] = multimedia
+        # Record catalog records linking to a given multimedia record
+        for mmirn in multimedia:
+            try:
+                self.mlinks[mmirn].append(irn)
+            except KeyError:
+                self.mlinks[mmirn] = [irn]
 
 
 
@@ -122,6 +394,11 @@ class XMu(XMu):
         irn = self.find('irn')
         val = self.find(self.field)
         mm = self.find('Multimedia')
+        self.n += 1
+        if os.path.splitext(mm)[1].lower() != '.jpg':
+            print '{} is not a JPEG'.format(os.path.basename(mm))
+            return True
+        print 'FILE #{:,}'.format(self.n)
         try:
             im = Image.open(mm)
         except:
@@ -134,44 +411,57 @@ class XMu(XMu):
             self.panel.place(x=0, y=0, width=640, height=640)
             try:
                 self.old_panel.destroy()
-            except:
+            except AttributeError:
                 pass
+            except:
+                raise
             self.old_panel = self.panel
             self.root.title(val)
 
-        val = self.find(self.field)
         catnums = format_catnums(parse_catnum(val), code=False)
         catirns = []
         n = len(self.field)
         for catnum in catnums:
+            # Set up options for user to select from
             other = ['No match']
             if catnum == catnums[0]:
                 other = ['No match', 'Write import']
-            regex = re.compile('\\b' + catnum + '\\b', re.I)
-            matches = [rec for rec in self.catalog if regex.search(rec[0])]
-            matches = [m for m in matches if not '-' + catnum in m[0]]
+            matches = match(catnum, self.catalog)
             # Check to see if this irn has already been added. This can
             # happen with Antarctic meteorites when the catnum function
             # finds both a catalog number and meteorite number.
-            if len([m for m in matches if m[1] in catirns]):
+            if len([m for m in matches if m[0] in catirns]):
                 print 'Term already matched'
                 matches = []
             if len(matches):
                 print '-' * 60
                 print '{}: {}'.format(self.field, val)
                 print 'Term:{} {}'.format(' '*(n-4), catnum)
+                caption = self.find('MulDescription')
+                if bool(caption):
+                    print 'Caption: ' + ''.join([c if ord(c) <= 128 else '_'
+                                                 for c in caption])
                 notes = self.find('NotNotes').split(';')
-                for note in notes:
+                for i in xrange(len(notes)):
+                    note = notes[i]
                     if note.lower().startswith('slide data'):
                         note = u'Note:{} {}'.format(' '*(n-4),
                                                     note.split(':')[1].strip())
+                        # Semicolons within notes--blech
+                        while not note.strip().endswith('"'):
+                            try:
+                                note += notes[i+1]
+                            except IndexError:
+                                break
+                            else:
+                                i += 1
                         print ''.join([c if ord(c) <= 128 else '_'
                                        for c in note])
                         break
-                options = other + sorted([m[2] for m in matches])
+                options = other + sorted([m[1] for m in matches])
                 m = prompt('Select best match:', options)
                 try:
-                    catirn = [rec[1] for rec in matches if rec[2] == m][0]
+                    catirn = [rec[0] for rec in matches if rec[1] == m][0]
                 except IndexError:
                     if m == 'Write import':
                         return False
@@ -182,7 +472,7 @@ class XMu(XMu):
                     except KeyError:
                         pass
                     else:
-                        print 'Existing irns: {}'.format(irns)
+                        print 'Existing irns: {}'.format(', '.join(irns))
                         if irn in irns:
                             continue
                     cprint(('Multimedia record {} added to'
@@ -191,29 +481,69 @@ class XMu(XMu):
                         self.results[catirn].append(irn)
                     except KeyError:
                         self.results[catirn] = [irn]
-                    self.n += 1
-        try:
-            os.remove(mm)
-        except OSError:
-            cprint('Could not remove {}'.format(mm))
+        n = 1
+        m = 5
+        while True:
+            try:
+                os.remove(mm)
+            except OSError:
+                if n > 5:
+                    return False
+                cprint('Could not remove {}'.format(mm))
+                time.sleep(2)
+                print 'Retrying ({}/{})...'.format(n, m)
+                n += 1
+            else:
+                break
         return True
 
 
 
 
+    def blind_match_against_catalog(self, element):
+        """Match against catalog with no review
 
-    def find_multimedia(self, element):
-        """Find multimedia attachments in catalog"""
+        Configured for ledgers
+        """
         self.record = element
         irn = self.find('irn')
-        multimedia = self.find('MulMultiMediaRef_tab', 'irn')
-        self.multimedia += multimedia
-        self.links[irn] = multimedia
+        val = self.find(self.field)
+        catnums = format_catnums(parse_catnum(val, strip_suffix=True),
+                                 code=False)
+        if 'Meteorite Collection' in val:
+            divs = ['MET']
+        elif 'Mineral Collection' in val:
+            divs = ['MIN']
+        elif 'Rock & Ore Collection' in val:
+            divs = ['PET']
+        elif val.startswith(('Bosch', 'Petrographic')):
+            return True
+        else:
+            divs = ['MIN', 'PET']
+        matches = []
+        for catnum in [catnum for catnum in catnums
+                       if not (catnum[0].isdigit() and len(catnum) < 4)]:
+            matches.extend(match(catnum, self.catalog, divs))
+        matches = [m for m in matches if not irn in self.links[m[0]]]
+        if len(matches):
+            cprint('{} yielded {:,} new matches'.format(val, len(matches)))
+        for m in matches:
+            '''
+            for m in matches:
+                try:
+                    cprint(u' {}'.format(': '.join(m)))
+                except UnicodeEncodeError:
+                    cprint(m[0])
+            '''
+            try:
+                self.results[m[0]].append(irn)
+            except KeyError:
+                self.results[m[0]] = [irn]
 
 
 
 
-    def record_links(self, element):
+    def mark_links(self, element):
         """Record multimedia attachments in catalog in multimedia"""
         self.record = element
         #print etree.tostring(element)
@@ -223,8 +553,9 @@ class XMu(XMu):
             linked = 'Linked: Yes'
         elif not self.unlink:
             return True
-        orig = self.find('NotNotes')
-        notes = [s.strip() for s in orig.split(';')]
+        notes = self.find('NotNotes')
+        orig = copy(notes)
+        notes = [s.strip() for s in notes.split(';')]
         i = 0
         while i < len(notes):
             note = notes[i]
@@ -242,9 +573,267 @@ class XMu(XMu):
             }
         self.n += 1
         if not self.n % 5000:
-            print (u'{:,} multimedia records checked'
-                    ' ({:,} to be updated)').format(self.n, len(self.update))
+            cprint((u'{:,} multimedia records checked'
+                     ' ({:,} to be updated)').format(self.n, len(self.update)))
         return True
+
+
+
+
+    def assign_collections(self, element):
+        self.record = element
+        valid = [
+            'Behind the scenes (Mineral Sciences)',
+            'Collections objects (Mineral Sciences)',
+            'Documents and data (Mineral Sciences)',
+            'Exhibit (Mineral Sciences)',
+            'Field pictures (Mineral Sciences)',
+            'Inventory (Mineral Sciences)',
+            'Macro photographs (Mineral Sciences)',
+            'Micrographs (Mineral Sciences)',
+            'Non-collections objects (Mineral Sciences)',
+            'Pretty pictures (Mineral Sciences)',
+            'Research pictures (Mineral Sciences)',
+            'Unidentified objects (Mineral Sciences)'
+        ]
+        cmap = {
+            'Behind the Scenes' : 'Behind the scenes',
+            'Catalog Cards': 'Documents and data',
+            'Datasets': 'Documents and data',
+            'Demonstrations': 'Behind the scenes',
+            'Documentation': 'Documents and data',
+            'Exhibit': 'Exhibit',
+            'Inventory': 'Inventory',
+            'Ledgers': 'Documents and data',
+            'Logs': 'Documents and data',
+            'Maps': 'Documents and data',
+            'Micrographs': 'Micrographs',
+            'Miscellaneous': '',
+            'Other': '',
+            'Pretty Pictures': 'Pretty pictures',
+            'Publications': 'Documents and data',
+            'Research': 'Research pictures',
+            'Specimens': '',
+            'Meteorite Datapacks': 'Documents and data'
+        }
+        for key in cmap.keys():
+            newkey = key
+            if not newkey in ('Meteorite Datapacks'):
+                newkey = 'Mineral Sciences {}'.format(newkey)
+                cmap[newkey] = cmap[key]
+                del cmap[key]
+
+        irn = self.find('irn')
+        # Skip record if no match in active links file
+        if not irn in self.multimedia:
+            return True
+        title = self.find('MulTitle')
+        collections = self.find('DetCollectionName_tab', 'DetCollectionName')
+        keywords = [s.lower() for s in
+                    self.find('DetSubject_tab', 'DetSubject')]
+        resource_type = self.find('DetResourceType')
+
+        # Map old collection names to preferred values, discarding
+        # names that contain no information
+        revised = []
+        for key in collections:
+            try:
+                val = cmap[key]
+            except KeyError:
+                if key in valid:
+                    revised.append(key)
+                else:
+                    cprint(u'{} not found'.format(key))
+            else:
+                if bool(val):
+                    revised.append('{} (Mineral Sciences)'.format(val))
+
+        # Assign object that is linked in catalog
+        if resource_type == 'Specimen/Object':
+            if irn in self.multimedia:
+                revised.append('Collections objects (Mineral Sciences)')
+            else:
+                revised.append('Unidentified objects (Mineral Sciences)')
+        elif 'Exhibit (Mineral Sciences)' in revised and irn in self.multimedia:
+            cprint('Exhibit object found')
+            revised.append('Collections objects (Mineral Sciences)')
+
+        # Clear unidentified flag if collections object found. This is
+        # not ideal for assigning collections generally and will
+        # need to be revisited.
+        if ('Collections objects (Mineral Sciences)' in revised
+            and 'Unidentified objects (Mineral Sciences)' in revised):
+            revised.remove('Unidentified objects (Mineral Sciences)')
+
+
+        if len([s for s in keywords if 'micrograph' in s]):
+            revised.append('Micrographs (Mineral Sciences)')
+
+        if 'macro' in title.lower():
+            try:
+                revised.pop(revised.index('Micrographs (Mineral Sciences)'))
+            except ValueError:
+                pass
+
+        revised = [revised[i] for i in xrange(len(revised))
+                   if not revised[i] in revised[:i]]
+        # Move object status to front
+        temp = []
+        for collection in revised:
+            if 'object' in collection:
+                temp.insert(0, collection)
+            else:
+                temp.append(collection)
+        revised = temp
+
+        invalid = [val for val in revised if not val in valid]
+        if len(invalid):
+           cprint('Invalid collections names: {}'.format(', '.join(invalid)))
+        cprint('Revised:  {}'.format(revised), VERBOSE)
+        cprint('Original: {}'.format(collections), VERBOSE)
+        cprint('-' * 60, VERBOSE)
+        if revised != collections:
+            try:
+                self.update[irn]['DetCollectionName'] = revised
+            except KeyError:
+                self.update[irn] = {
+                    'irn': irn,
+                    'DetCollectionName': revised
+                }
+                self.n += 1
+                if not self.n % 500:
+                    print '{:,} records assigned to new collection(s)'.format(
+                              self.n)
+
+
+
+
+    def assign_related(self, element):
+        """Assigns"""
+        self.record = element
+        # Skip anything that isn't a specimen
+        if self.find('DetResourceType') != 'Specimen/Object':
+            return True
+        irn = self.find('irn')
+        val = self.find('MulTitle')
+        orig = self.find('DetRelation_tab', 'DetRelation')
+        catnums = format_catnums(parse_catnum(val), code=False)
+        try:
+            divs = sorted(list(set([self.metadata[catirn]['division']
+                                    for catirn in self.mlinks[irn]])))
+        except KeyError:
+            divs = ['MET', 'MIN', 'PET']
+        related = []
+        for catnum in catnums:
+            matches = match(catnum, self.catalog, divs)
+            if not len(matches):
+                continue
+            nt = len(matches)
+            try:
+                n = len([m for m in matches if m[0] in self.mlinks[irn]])
+            except KeyError:
+                n = 0
+            # Add division, if appropriate
+            div = ''
+            if len(divs) < 3:
+                div = '({}) '.format('/'.join(divs))
+            # Add the museum code, if appropriate
+            mcode = ''
+            if bool(div) and not 'MET' in div:
+                mcode = 'NMNH '
+            elif bool(div) and not catnum[:3].isalpha():
+                mcode = 'USNM '
+            related.append('{}{} {}({}/{})'.format(mcode, catnum, div, n, nt))
+            # Capture catalog irn
+            catirn = matches[0][0]
+        related.sort()
+        if len(related) and related != orig:
+            try:
+                self.update[irn]['DetRelation'] = related
+            except KeyError:
+                self.update[irn] = { 'irn': irn, 'DetRelation' : related }
+            self.n += 1
+            if not self.n % 5000:
+                print '{:,} records related to catalog!'.format(self.n)
+                #return False
+
+        # Assign metadata based on catalog record
+        if len(related) == 1 and related[0].endswith('(1/1)'):
+            result = {}
+            # Title
+            val = self.find('MulTitle').strip()
+            if (val.startswith('Mineral Sciences Specimen Photo')
+                or val.endswith('[AUTO]')):
+                catnum = val.rsplit('(', 1).pop().strip('() ')
+                title = u'{} ({}) [AUTO]'.format(
+                    self.metadata[catirn]['title'].strip(), catnum)
+                if title.lower() != val.lower() and '(NMNH' in title:
+                    result['MulTitle'] = title
+                else:
+                    raw_input(title)
+
+            # Caption
+            val = self.find('MulDescription').strip()
+            if not bool(val) or val.endswith('[AUTO]'):
+                caption = u'{} [AUTO]'.format(self.metadata[catirn]['caption'])
+                if caption.lower() != val.lower():
+                    result['MulDescription'] = caption
+
+            # Keywords
+            whitelist = [
+                'Allure of Pearls',
+                'Blue Room',
+                'Splendor of Diamonds',
+                'Micrograph, cross-polarized light',
+                'Micrograph, plane-polarized light',
+                'Micrograph, reflected light'
+            ]
+            whitelist = [kw.lower() for kw in whitelist]
+            existing = self.find('DetSubject_tab', 'DetSubject')
+            keywords = copy(self.metadata[catirn]['keywords'])
+            keywords.extend([kw for kw in existing
+                             if kw.lower() in whitelist and not kw in keywords])
+            if existing != keywords:
+                self.added.extend([kw.lower() for kw in keywords])
+                result['DetSubject'] = keywords
+                missing = sorted(list(set(existing) - set(keywords)))
+                if len(missing):
+                    self.removed.extend([kw.lower() for kw in missing])
+                    print (u'Warning: The following keywords will be'
+                            ' lost: {}').format(', '.join(missing))
+
+            # Handle non-active records. These will sometimes preservce
+            # info for photographs of objects no longer in the collection.
+            if self.metadata[catirn]['status'] != 'active':
+                results['MulTitle'] = '{} (catalog record {}) [AUTO]'.format(
+                    results['MulTitle'][:-7], status)
+                result['DetRights'] = ('One or more objects depicted in'
+                                     ' this image are not owned by the'
+                                     ' Smithsonian Institution.')
+                collection = 'Non-collections object (Mineral Sciences)'
+                try:
+                    collections = self.update[irn]['DetCollectionName']
+                except KeyError:
+                    collections = self.find('DetCollectionName_tab',
+                                            'DetCollectionName')
+                for i in xrange(len(collections)):
+                    if 'objects' in collections[i]:
+                        collections[i] = collection
+                        break
+                else:
+                    collections.append(collection)
+                result['DetCollectionName'] = dedupe(collections)
+
+            if len(result):
+                try:
+                    self.update[irn]
+                except KeyError:
+                    self.update[irn] = {'irn': irn}
+                for key in result:
+                    self.update[irn][key] = result[key]
+                status = self.find('SecRecordStatus').lower()
+                if status != 'active':
+                    print result
 
 
 
@@ -274,7 +863,14 @@ class XMu(XMu):
                 try:
                     is_object = self.is_object[irn]
                 except:
-                    pass
+                    # This is dangerous--anything not in the multimedia
+                    # lookup will be removed. This means that organize
+                    # shouldn't be run on partial multimedia reports,
+                    # which is not ideal. Of course, this also means
+                    # retired records will be automcaitcally detached,
+                    # which is fine.
+                    self.warning = True
+                    return False
                 else:
                     if is_object:
                         multimedia.append(irn)
@@ -284,7 +880,6 @@ class XMu(XMu):
                 print 'Duplicate in {}'.format(orig)
         multimedia += bumped
         if multimedia != orig:
-            print catirn, multimedia
             self.update[catirn] = {
                 'irn': catirn,
                 'MulMultiMediaRef': multimedia
@@ -293,18 +888,19 @@ class XMu(XMu):
 
 
 
-def verify_import(path, report_file, delete_verified=False):
+VERBOSE = True
+
+
+def verify_import(path, report_path, delete_verified=False):
     """Verifies imported media by comparing hashes between local and imported
 
     Arguments:
-    import_file (str): path to import file
-    report_file (str): path to report file for records created via import.
+    import_path (str): path to import file
+    report_path (str): path to report file for records created via import.
         Use the VerifyImport report to generate this file.
     """
 
-    fo = os.path.join(os.path.dirname(report_file),
-                      'wk' + os.path.basename(report_file))
-    emu = XMu(fi=report_file, fo=fo)
+    emu = xmu.instant(XMu, 'emultimedia', fp=report_path)
     emu.hashes = {}
     emu.fast_iter(emu.verify_from_report)
     os.remove(fo)
@@ -361,27 +957,26 @@ def verify_import(path, report_file, delete_verified=False):
 
 
 
-def attach_prematched(match_file, link_file):
+def attach_prematched(match_path, catalog_path):
     """Link multimedia records to catalog based on premade list of matches
 
     Args:
-        match_file (str): tab-delimited text file listing of media
+        match_path (str): tab-delimited text file listing of media
             records and their corresponding catalog records. The match
             file contains two fields: "irn" (irn of the multimedia record)
             and "irns" (semicolon-delimited list of catalog irns).
-        link_file (str): path to EMu report with attachments to multimedia.
-            Generate using DMS_MultimediaLinks.
+        catalog_path (str): path to EMu report containing catalog records.
+            Generate using DMS_MultimediaData for recently modified records.
     """
 
-    fo = os.path.join(os.path.dirname(link_file),
-                      'wk' + os.path.basename(link_file))
-    lnk = XMu(fi=link_file, fo=fo)
+    lnk = xmu.instant(XMu, 'ecatalogue', fp=catalog_path)
     lnk.links = {}
+    lnk.mlinks = {}
     lnk.multimedia = []
-    lnk.fast_iter(lnk.find_multimedia)
+    lnk.fast_iter(lnk.summarize_links)
 
     output = {}
-    with open(match_file, 'rb') as f:
+    with open(match_path, 'rb') as f:
         rows = csv.reader(f, delimiter='\t')
         for row in rows:
             try:
@@ -404,155 +999,343 @@ def attach_prematched(match_file, link_file):
                                 'MulMultiMediaRef': [mm_irn]
                             }
 
-    fields = ['irn']
-    grids = [['MulMultiMediaRef_tab']]
-    lnk.write_import('update_cat.xml', output, fields, grids, update=True)
+    #fields = ['irn']
+    #grids = [['MulMultiMediaRef_tab']]
+    #lnk.write_import('update_cat.xml', output, fields, grids)
+    lnk.write('update_cat.xml', output, 'ecatalogue')
     print 'Done!'
 
 
 
 
-def mark_attached(multimedia_file, link_file):
+def mark_attached(multimedia_path, catalog_path):
     """Identify multimedia attachments in catalog
 
     Args:
-        multimedia_file (str): path to EMu report containg info from
+        multimedia_path (str): path to EMu report containg info from
             multimedia subset. Generate using DMS_MultimediaDataWithImages.
-        link_file (str): path to EMu report with attachments to multimedia.
-            Generate using DMS_MultimediaLinks.
-    """
-
-    fo = os.path.join(os.path.dirname(link_file),
-                      'wk' + os.path.basename(link_file))
-    lnk = XMu(fi=link_file, fo=fo)
-    lnk.links = {}
-    lnk.multimedia = []
-    lnk.fast_iter(lnk.find_multimedia)
-    #os.remove(fo)
-
-    fo = os.path.join(os.path.dirname(multimedia_file),
-                      'wk' + os.path.basename(multimedia_file))
-    mul = XMu(fi=multimedia_file, fo=fo)
-    mul.multimedia = list(set(lnk.multimedia))
-    validator = {'y' : True, 'n' : False}
-    mul.unlink = prompt('Update multimedia if no link found?', validator)
-    mul.n = 0
-    mul.update = {}
-    mul.fast_iter(mul.record_links)
-    #os.remove(fo)
-
-    if len(mul.update):
-        fields = ['irn', 'NotNotes']
-        mul.write_import('update_mm.xml', mul.update, fields, update=True)
-    else:
-        print 'No update required'
-    print 'Done!'
-
-
-
-
-def organize_multimedia(multimedia_file, link_file):
-    """Clean list of multimedia in catalog record
-
-    Args:
-        multimedia_file (str): path to EMu report containg info from
-            ALL multimedia records. Generate using DMS_MultimediaDataWithImages.
-        link_file (str): path to EMu report with attachments to multimedia.
-            Generate using DMS_MultimediaLinks.
-    """
-
-    fo = os.path.join(os.path.dirname(multimedia_file),
-                      'wk' + os.path.basename(multimedia_file))
-    mul = XMu(fi=multimedia_file, fo=fo)
-    mul.is_object = {}
-    mul.fast_iter(mul.test_object)
-
-    fo = os.path.join(os.path.dirname(link_file),
-                      'wk' + os.path.basename(link_file))
-    lnk = XMu(fi=link_file, fo=fo)
-    lnk.is_object = mul.is_object
-    lnk.update = {}
-    lnk.fast_iter(lnk.organize_multimedia)
-
-    if len(lnk.update):
-        print '{:,} records to be updated'.format(len(lnk.update))
-        fields = ['irn']
-        grids = [['MulMultiMediaRef_tab']]
-        # Update is false here because the entire grid is replaced
-        lnk.write_import('update_cat.xml', lnk.update, fields, grids)
-    print 'Done!'
-
-
-
-
-def match_multimedia(multimedia_file, catalog_file, link_file, field='MulTitle'):
-    """Match EMu multimedia to catalog records
-
-    Args:
-        multimedia_file (str): path to EMu report containg info from
-            multimedia subset. Generate using DMS_MultimediaDataWithImages.
-        catalog_file (str): path to EMu report containing information about
-            ALL catalog records. Generate using DMS_MultimediaData.
-        link_file (str): path to EMu report with attachments to multimedia.
-            Generate using DMS_MultimediaLinks.
+        catalog_path (str): path to EMu report containing catalog records.
+            Generate using DMS_MultimediaData for recently modified records.
     """
 
     print 'Reading catalog data...'
+    cat = xmu.instant(XMu, 'ecatalogue', fp=catalog_path)
+    fp = os.path.join(os.path.join('sources', 'catalog.p'))
     try:
-        catalog = pickle.load(open(os.path.join('sources','catalog.p'), 'rb'))
+        pickled = pickle.load(open(fp, 'rb'))
     except IOError:
-        fo = os.path.join(os.path.dirname(catalog_file),
-                          'wk' + os.path.basename(catalog_file))
-        cat = XMu(fi=catalog_file, fo=fo)
+        pickled = {'catalog' : {}, 'metadata': {}}
+    if len(cat.new_files) or not len(pickled['metadata']):
+        print 'Processing new files...'
+        files = copy(cat.files)
+        if len(cat.new_files):
+            cat.files = cat.new_files  # limit fast_iter to new files
         cat.gt = GeoTaxa()
-        cat.catalog = []
-        cat.fast_iter(cat.summarize_catalog_records)
-        with open(os.path.join('sources','catalog.p'), 'wb') as f:
-            pickle.dump(cat.catalog, f)
-        catalog = cat.catalog
+        cat.catalog = {}
+        cat.metadata = {}
+        cat.n = 0
+        cat.fast_iter(cat.summarize_catalog)
+        # Merge into pickled and update file
+        print 'Merging new data with existing...'
+        pickled['catalog'] = merge(pickled['catalog'], cat.catalog)
+        pickled['metadata'] = merge(pickled['metadata'], cat.metadata)
+        with open(fp, 'wb') as f:
+            pickle.dump(pickled, f)
+        cat.files = files
+    catalog = pickled['catalog']
+    metadata = pickled['metadata']
+
+    cprint(catalog['EET 96311'])
+    raw_input()
+
+    lnk = xmu.instant(XMu, 'ecatalogue', fp=catalog_path)
+    lnk.links = {}
+    lnk.mlinks = {}
+    lnk.multimedia = []
+    lnk.fast_iter(lnk.summarize_links)
+
+    mul = xmu.instant(XMu, 'emultimedia', fp=multimedia_path)
+    mul.multimedia = list(set(lnk.multimedia))
+    mul.update = {}
+    # Specifies how to handle updates based on length of the links dict
+    # If False, only positives will be updated in the mul functions.
+    # FIXME: Only implemented for mark_links so far
+    mul.unlink = True
+    if len(lnk.links) < 300000:
+        print 'Will not update multimedia if no link found'
+        mul.unlink = False
+
+    print 'Marking linked multimedia records...'
+    mul.n = 0
+    mul.fast_iter(mul.mark_links)
+
+    print 'Assigning collections...'
+    mul.n = 0
+    mul.fast_iter(mul.assign_collections)
+
+    print 'Assigning relations...'
+    mul.n = 0
+    mul.catalog = catalog
+    mul.metadata = metadata
+    mul.mlinks = lnk.mlinks
+    mul.added = []
+    mul.removed = []
+    mul.fast_iter(mul.assign_related)
+    missing = sorted(list(set(mul.removed) - set(mul.added)))
+    if len(missing):
+        print u'Missing:'
+        print u'\n'.join(missing)
+        print ">> Add any terms you'd like to keep to the whitelist and re-run"
+        raw_input()
+
+    if len(mul.update):
+        '''
+        fields = [
+            'irn',
+            'MulTitle',
+            'MulDescription',
+            'NotNotes'
+            ]
+        tables = [
+            ['DetCollectionName_tab'],
+            ['DetRelation_tab'],
+            ['DetSubject_tab']
+            ]
+        mul.write_import('update_mm.xml', mul.update, fields, tables)
+        '''
+        handlers = {
+            'DetCollectionName_tab': 'overwrite',
+            'DetRelation_tab': 'overwrite',
+            'DetSubject_tab': 'overwrite'
+            }
+        mul.write('update_mm.xml', mul.update, 'emultimedia', handlers)
+    else:
+        print 'No update required'
+
+
+
+
+def organize_multimedia(multimedia_path, catalog_path):
+    """Clean list of multimedia in catalog record
+
+    Args:
+        multimedia_path (str): path to EMu report containg info from
+            ALL multimedia records. Generate using DMS_MultimediaDataWithImages.
+        catalog_path (str): path to EMu report containing catalog records.
+            Generate using DMS_MultimediaData for recently modified records.
+    """
+
+    mul = xmu.instant(XMu, 'emultimedia', fp=multimedia_path)
+    mul.is_object = {}
+    mul.fast_iter(mul.test_object)
+
+    lnk = xmu.instant(XMu, 'ecatalogue', fp=catalog_path)
+    lnk.is_object = mul.is_object
+    lnk.warning = False
+    lnk.update = {}
+    lnk.fast_iter(lnk.organize_multimedia)
+
+    if lnk.warning:
+        cprint('update_cat.xml not written: Could not find all'
+               ' multimedia in {}'.format(multimedia_path))
+    elif len(lnk.update):
+        print '{:,} records to be updated'.format(len(lnk.update))
+        #fields = ['irn']
+        #grids = [['MulMultiMediaRef_tab']]
+        # Update is false here because the entire grid is replaced
+        #lnk.write_import('update_cat.xml', lnk.update, fields, grids)
+        handlers = {'MulMultiMediaRef' : {}}
+        lnk.write('update_cat.xml', lnk.update, fields, handlers)
+    print 'Done!'
+
+
+
+
+def match_multimedia(multimedia_path, catalog_path,
+                     field='MulTitle', blind=False):
+    """Match EMu multimedia to catalog records
+
+    Args:
+        multimedia_path (str): path to EMu report containg info from
+            multimedia subset. Generate using DMS_MultimediaDataWithImages.
+        catalog_path (str): path to EMu report containing catalog records.
+            Generate using DMS_MultimediaData for recently modified records.
+    """
+
+    print 'Reading catalog data...'
+    cat = xmu.instant(XMu, 'ecatalogue', fp=catalog_path)
+    fp = os.path.join(os.path.join('sources', 'catalog.p'))
+    try:
+        pickled = pickle.load(open(fp, 'rb'))
+    except IOError:
+        pickled = {'catalog' : {}, 'metadata': {}}
+    if len(cat.new_files) or not len(pickled['metadata']):
+        print 'Processing new files...'
+        files = copy(cat.files)
+        if len(cat.new_files):
+            cat.files = cat.new_files  # limit fast_iter to new files
+        cat.gt = GeoTaxa()
+        cat.catalog = {}
+        cat.metadata = {}
+        cat.n = 0
+        cat.fast_iter(cat.summarize_catalog)
+        # Merge into pickled and update file
+        print 'Merging new data with existing...'
+        pickled['catalog'] = merge(pickled['catalog'], cat.catalog)
+        pickled['metadata'] = merge(pickled['metadata'], cat.metadata)
+        with open(fp, 'wb') as f:
+            pickle.dump(pickled, f)
+        cat.files = files
+    catalog = pickled['catalog']
+    metadata = pickled['metadata']
 
     print 'Finding links between catalog and multimedia...'
-    fo = os.path.join(os.path.dirname(link_file),
-                      'wk' + os.path.basename(link_file))
-    lnk = XMu(fi=link_file, fo=fo)
+    lnk = xmu.instant(XMu, 'ecatalogue', fp=catalog_path)
     lnk.links = {}
+    lnk.mlinks = {}
     lnk.multimedia = []
-    #lnk.fast_iter(lnk.find_multimedia)
-    #os.remove(fo)
+    lnk.fast_iter(lnk.summarize_links)
 
     print '-' * 60
     print 'Processing multimedia...'
-    fo = os.path.join(os.path.dirname(multimedia_file),
-                      'wk' + os.path.basename(multimedia_file))
-    mul = XMu(fi=multimedia_file, fo=fo)
-    mul.root = Tkinter.Tk()
-    mul.root.geometry('640x640+100+100')
+    mul = xmu.instant(XMu, 'emultimedia', fp=multimedia_path)
     mul.field = field
     mul.links = lnk.links
     mul.catalog = catalog
     mul.results = {}
     mul.n = 0
-    mul.fast_iter(mul.match_against_catalog)
-    os.remove(fo)
+    if not blind:
+        mul.root = Tkinter.Tk()
+        mul.root.geometry('640x640+100+100')
+        try:
+            mul.fast_iter(mul.match_against_catalog)
+        except:
+            # This is horrible
+            print "Fatal error! Writing what you've done so far..."
+    else:
+        mul.fast_iter(mul.blind_match_against_catalog)
 
     output = {}
     for key in mul.results:
-        output[key] = {'irn' : key, 'MulMultiMediaRef': mul.results[key]}
+        output[key] = {
+            'irn' : key,
+            'MulMultiMediaRef': sorted(mul.results[key])
+            }
 
-    fields = ['irn']
-    grids = [['MulMultiMediaRef_tab']]
-    mul.write_import('update_cat.xml', output, fields, grids, update=True)
+    #fields = ['irn']
+    #grids = [['MulMultiMediaRef_tab']]
+    #mul.write_import('update_cat.xml', output, fields, grids, update=True)
+    mul.write('update_cat.xml', output, 'ecatalogue')
     print 'Done!'
 
 
-def organize_and_mark(multimedia_file, link_file):
+
+
+def organize_and_mark(multimedia_path, catalog_path):
     """Helper function to organize and mark attached multimedia
 
     Args:
-        multimedia_file (str): path to EMu report containg info from
-            ALL multimedia records. Generate using DMS_MultimediaDataWithImages.
-        link_file (str): path to EMu report with attachments to multimedia.
-            Generate using DMS_MultimediaLinks.
+        multimedia_path (str): path to EMu report containg info from
+            multimedia records. Generate using DMS_MultimediaDataWithImages.
+        catalog_path (str): path to EMu report containing catalog records.
+            Generate using DMS_MultimediaData for recently modified records.
     """
-    organize_multimedia(multimedia_file, link_file)
-    mark_attached(multimedia_file, link_file)
+    organize_multimedia(multimedia_path, catalog_path)
+    mark_attached(multimedia_path, catalog_path)
+
+
+
+
+def match(id_num, catalog, divs=None):
+    """Checks catalog for matches against given id number
+
+    Args:
+        id_num (str): catalog number or Antarctic meteorite number
+        catalog (dict): lookup dictionary
+        div (str): specifies division (MET, MIN, or PET), if known
+
+    Returns:
+        List of [irn, summary] for matches
+    """
+    id_num = id_num.upper()
+    for delim in ('-', ','):
+        if delim in id_num:
+            stem, suffix = id_num.rsplit(delim, 1)
+            break
+    else:
+        stem = id_num
+        suffix = None
+    if divs is None:
+        divs = ['MET', 'MIN', 'PET']
+    else:
+        divs = [div.upper() for div in divs]
+    cprint(u'Searching for {} in {}...'.format(
+        id_num, oxford_comma(divs, False)), VERBOSE)
+    cprint(u'Stem is {}, suffix is {}'.format(stem, suffix), VERBOSE)
+    matches = []
+    if suffix is None:
+        cprint(u'Checking stem...', VERBOSE)
+        try:
+            suffixes = catalog[stem]
+        except KeyError:
+            pass
+        else:
+            for suffix in suffixes:
+                for irn in catalog[stem][suffix]:
+                    matches.append([irn, catalog[stem][suffix][irn]])
+    else:
+        cprint(u'Checking stem and suffix...', VERBOSE)
+        try:
+            for irn in catalog[stem][suffix]:
+                matches.append([irn, catalog[stem][suffix][irn]])
+        except KeyError:
+            pass
+    s = ''
+    if len(matches) != 1:
+        s = 'es'
+    cprint(u'Found {} match{}!'.format(len(matches), s), VERBOSE)
+    if len(divs) < 3:
+        temp = []
+        for div in divs:
+            cprint(u'Checking for matches in {}...'.format(div), VERBOSE)
+            temp.extend([m for m in matches if m[1].startswith(div)])
+        matches = temp
+        s = ''
+        if len(matches) != 1:
+            s = u'es'
+        cprint(u'Found {} match{} in the specified divisions!'.format(
+            len(matches), s), VERBOSE)
+    if VERBOSE:
+        for match in sorted(matches):
+            cprint(u' {}'.format(': '.join(match)), VERBOSE)
+    cprint('-' * 60, VERBOSE)
+    return matches
+
+
+
+
+def merge(a, b, path=None, kill_on_conflict=False):
+    """Merges b into a such that b overwrites a for the same key
+
+    Modified from http://stackoverflow.com/questions/7204805/
+    """
+    # Returns b if a is empty
+    if path is None and not len(a) and len(b):
+        return b
+    if path is None:
+        path = []
+    for key in b:
+        if key in a:
+            if isinstance(a[key], dict) and isinstance(b[key], dict):
+                merge(a[key], b[key], path + [str(key)])
+            elif a[key] == b[key]:
+                pass # same leaf value
+            else:
+                if kill_on_conflict:
+                    cpath = '.'.join(path + [str(key)])
+                    raise Exception('Conflict at {}'.format(cpath))
+                else:
+                    a[key] = b[key]
+        else:
+            a[key] = b[key]
+    return a
