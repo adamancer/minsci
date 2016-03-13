@@ -1,0 +1,22 @@
+# Compiled python modules.
+*.pyc
+
+# Setuptools distribution folder.
+/build/
+/dist/
+
+# Python egg metadata, regenerated from source files by setuptools.
+/*.egg-info
+/*.egg
+
+# PyPI Registration helpers
+register.py
+README.rst
+
+# OS files
+*.DS_Store
+
+# Other files to ignore
+*_helpers.py
+*_old.py
+*.pl
