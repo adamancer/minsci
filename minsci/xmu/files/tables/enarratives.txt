@@ -1,0 +1,11 @@
+# Tables (as Nickname, Field)
+Associated,AssAssociatedWithRef_tab
+Associated,AssAssociatedWithComment_tab
+Objects,ObjObjectsRef_tab
+Objects,ObjObjectNotes_tab
+Parties,ParPartiesNotes_tab
+Parties,ParPartiesRef_tab
+Multimedia,MulMultiMediaRef_tab
+Tasks,TasDescription_tab
+Tasks,TasTaskAssignerRef_tab
+Tasks,TasCommencementDate0
