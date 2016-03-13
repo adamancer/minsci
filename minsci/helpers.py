@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 
 # Standard imports
+import collections
 import os
 import re
 import string
 import sys
 from copy import copy
-from operator import itemgetter
 from itertools import groupby
+from operator import itemgetter
+from pprint import pprint
 from textwrap import fill
 
 # Third-party imports
@@ -39,38 +41,78 @@ def base2int(x, base):
 
 
 
-def init_odbc(fp, kind='access'):
-    """Opens ODBC connection based on database type"""
-    dbs = {
-        'access' : 'DRIVER={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=',
-        'excel' : ('DRIVER={Microsoft Excel Driver'
-                    ' (*.xls, *.xlsx, *.xlsm, *.xlsb)};DBQ=')
-        }
-    db = pyodbc.connect(dbs[kind] + fp)
-    return db
+def init_odbc(fn):
+    """Opens ODBC connection based on database type
+
+    Args:
+        fn (string): filename (or path)
+
+    Returns:
+        pyodbc.Connection object
+    """
+    # Use file extenstion to find the appropriate driver
+    drivers = [
+        '{Microsoft Access Driver (*.mdb, *.accdb)}',
+        '{Microsoft Excel Driver (*.xls, *.xlsx, *.xlsm, *.xlsb)}'
+    ]
+    ext = '*' + os.path.splitext(fn)[1].lower()
+    for driver in drivers:
+        if ext in driver:
+            break
+    else:
+        raise Exception('No suitable driver found for {}'.format(ext))
+    # Excel does not support transactions, so set autocommit for that driver
+    autocommit = False
+    if driver.startswith('{Microsoft Excel'):
+        autocommit = True
+    # ODBC connection string requires a full path
+    fp = os.path.abspath(fn)
+    dsn = 'DRIVER={};DBQ={};CHARSET=LATIN-1'.format(driver, fp)
+    return pyodbc.connect(dsn, autocommit=autocommit)
 
 
 
 
-def dict_from_odbc(cursor, tbl, col='*', where='',
-                   rec_id='ID', encoding='cp1252'):
+def dict_from_odbc(cursor, tbl, row_id=None, cols=None, where=None,
+                   encoding='cp1252'):
+    """
+    Args:
+        cursor (pyodbc.Cursor)
+        tbl (str): name of table to query. For Excel, table name must be
+            formatted as [tbl$].
+        row_id (list): name of field(s) to use as key for dictionary
+        col (list): list of columns to return. If None, will return all.
+        where (str): formatted where clause
+        encoding (str): encoding of source file
+
+    Returns:
+        Dictionary keyed to row_id
+    """
+    for arg in [row_id, cols]:
+        if arg is not None and not isinstance(arg, list):
+            raise Exception('Bad argument')
     # Get list of columns
-    if col == '*':
-        col = [row.column_name for row in cursor.columns(tbl.strip('[]'))]
-    elif not ',' in col:
-        rec_id = col.strip('`')
-        col = [col]
+    if cols is None:
+        cols = [row.column_name for row in cursor.columns(tbl.strip('[]'))]
+    else:
+        cols = [s.strip('`') for s in cols]
     # Prepare where clause
-    if bool(where):
+    if where is None:
+        where = ''
+    else:
         where = u' WHERE {}'.format(where.replace('"', "'"))
     # Assemble query
-    q = u'SELECT {} FROM {}{}'.format(','.join(col), tbl, where)
-    print q
+    q = u'SELECT {} FROM {}{}'.format(','.join(cols), tbl, where)
     # Execute query
-    cursor.execute(q)
+    try:
+        cursor.execute(q)
+    except:
+        print q
+        raise
     records = {}
     result = cursor.fetchmany()
     error = ''
+    n = 0  # count of records to comparse to length of dict
     while result:
         for row in result:
             for fld in row.cursor_description:
@@ -79,16 +121,24 @@ def dict_from_odbc(cursor, tbl, col='*', where='',
                                  'found. Convert the input sheet '
                                  'to text to prevent data loss.')
             row = [s if bool(s) else '' for s in row]
-            row = [s.decode(encoding) if isinstance(s, str)
-                   else s for s in row]
-            rec = dict(zip(col, row))
-            if rec_id:
-                records[rec[rec_id]] = rec
+            row = [s.decode(encoding) if isinstance(s, str) else s for s in row]
+            rec = dict(zip(cols, row))
+            if row_id is not None:
+                key = '-'.join([u'{}'.format(rec[key]) for key in row_id])
             else:
-                records[len(records)] = rec
+                key = len(records)
+            try:
+                records[key]
+            except KeyError:
+                records[key] = rec
+            else:
+                pass#cprint('Warning: Multiple rows have key "{}"'.format(key))
+            n += 1
         result = cursor.fetchmany()
     if bool(error):
         print error
+    if len(records) < n:
+        cprint('Warning: Duplicate keys. Some data not included in dict.')
     return records
 
 
@@ -142,6 +192,7 @@ def oxford_comma(lst, lowercase=True):
     @param boolean
     @return string
     """
+    lst = copy(lst)
     if lowercase:
         lst = [s[0].lower() + s[1:] for s in lst]
     if len(lst) <= 1:
@@ -156,13 +207,27 @@ def oxford_comma(lst, lowercase=True):
 
 
 def singular(s):
-    return inflect.engine().singular(s)
+    inflected = inflect.engine().singular_noun(s)
+    if inflected:
+        return inflected
+    return s
 
 
 
 
 def plural(s):
-    return inflect.engine().plural(s)
+    return inflect.engine().plural(singular(s))
+
+
+
+
+def dedupe(lst, lower=True):
+    """Dedupes list while maintaining order and case"""
+    orig = copy(lst)
+    if lower:
+        lst = [val.lower() for val in lst]
+    keep = [i for i in xrange(len(lst)) if not lst[i] in lst[:i]]
+    return [orig[i] for i in keep]
 
 
 
@@ -259,7 +324,10 @@ def prompt(prompt, validator, confirm=False,
     while loop:
         # Print options
         if isinstance(validator, list):
-            print u'{}\n{}'.format('\n'.join(options), '-' * 60)
+            print '-' * 60 + '\nOPTIONS\n-------'
+            for option in options:
+                cprint(option)
+            print '-' * 60
         # Prompt for value
         a = raw_input(prompt).decode(sys.stdin.encoding)
         if a.lower() == 'q':
@@ -430,114 +498,146 @@ def parse_catnum(s, attrs={}, default_suffix=False, strip_suffix=False):
     # Regular expressions for use with catalog number functions
     p_acr = '((USNM|NMNH)\s)?'
     p_pre = '([A-Z]{3,4} ?|[BCGMR]-?)?'
-    p_num = '([0-9]{2,6})'
-    p_suf = '(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,][0-9]{1,2}|\.[0-9]+)?'
+    p_num = '([0-9]{1,6})'  # this will pick up ANY number
+    p_suf = '\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,][0-9]{1,2}|\.[0-9]+)?'
     regex = re.compile('\\b(' + p_acr + p_pre + p_num + p_suf + ')\\b')
 
-    try:
-        cps = regex.findall(s)
-    except:
-        return []
-    else:
-        keys = ('CatMuseumAcronym', 'CatPrefix', 'CatNumber', 'CatSuffix')
-        temp = []
-        for cp in cps:
-            match = cp[0]
-            d = dict(zip(keys, cp[2:]))
-            # Handle acronym
-            if d['CatMuseumAcronym'] == 'USNM':
-                d['CatDivision'] = 'Meteorites'
-            del d['CatMuseumAcronym']
-            # Handle meteorite numbers
-            if ',' in d['CatSuffix'] or 3 <= len(d['CatPrefix']) <= 4:
-                # Check for four-letter prefix (ex. ALHA)
-                try:
-                    int(match[3])
-                except:
-                    d['MetMeteoriteName'] = match
-                else:
-                    d['MetMeteoriteName'] = match[0:3] + ' ' + match[3:]
-                for key in keys:
-                    try:
-                        del d[key]
-                    except KeyError:
-                        pass
-            # Handle catalog numbers
-            else:
-                d['CatNumber'] = int(d['CatNumber'])
-                # Handle petrology suffix format (.0001)
-                if d['CatSuffix'].startswith('.'):
-                    d['CatSuffix'] = d['CatSuffix'].lstrip('.0')
-                else:
-                    d['CatSuffix'] = d['CatSuffix'].strip('-,.')
-            temp.append(d)
-    cps = temp
-    # Check for ranges misidentified as suffixes
-    if len(cps) == 1:
-        d = cps[0]
+    results = []
+    for s in re.split('\s(and|&)\s', s, flags=re.I):
         try:
-            suffix = int(d['CatSuffix'])
+            cps = regex.findall(s)
+        except:
+            return []
+        else:
+            keys = ('CatMuseumAcronym', 'CatPrefix', 'CatNumber', 'CatSuffix')
+            temp = []
+            for cp in cps:
+                match = cp[0]
+                d = dict(zip(keys, cp[2:]))
+                # Handle acronym
+                if d['CatMuseumAcronym'] == 'USNM':
+                    d['CatDivision'] = 'Meteorites'
+                del d['CatMuseumAcronym']
+                # Handle meteorite numbers
+                if ',' in d['CatSuffix'] or 3 <= len(d['CatPrefix']) <= 4:
+                    # Check for four-letter prefix (ex. ALHA)
+                    try:
+                        int(match[3])
+                    except:
+                        d['MetMeteoriteName'] = match
+                    else:
+                        d['MetMeteoriteName'] = match[0:3] + ' ' + match[3:]
+                    for key in keys:
+                        try:
+                            del d[key]
+                        except KeyError:
+                            pass
+                # Handle catalog numbers
+                else:
+                    d['CatNumber'] = int(d['CatNumber'])
+                    # Handle petrology suffix format (.0001)
+                    if d['CatSuffix'].startswith('.'):
+                        d['CatSuffix'] = d['CatSuffix'].lstrip('.0')
+                    else:
+                        d['CatSuffix'] = d['CatSuffix'].strip('-,.')
+                temp.append(d)
+        cps = temp
+        # Check for ranges misidentified as suffixes
+        if len(cps) == 1:
+            d = cps[0]
+            try:
+                suffix = int(d['CatSuffix'])
+            except:
+                pass
+            else:
+                # Suffix appears to be a second catalog number
+                if suffix > d['CatNumber']:
+                    cps = [
+                        dict(zip(keys,
+                                 ['', d['CatPrefix'], d['CatNumber'], ''])),
+                        dict(zip(keys,
+                                 ['', d['CatPrefix'], int(d['CatSuffix']), '']))
+                        ]
+        # Check for ranges
+        try:
+            is_range = (
+                len(cps) == 2
+                and len([cp for cp in cps if 'CatNumber' in cp]) == 2
+                and s.count('-') and s.count('-') != 2
+                and cps[0]['CatPrefix'] == cps[1]['CatPrefix']
+                and cps[1]['CatNumber'] > cps[0]['CatNumber']
+            )
         except:
             pass
-        else:
-            # Suffix appears to be a second catalog number
-            if suffix > d['CatNumber']:
-                cps = [
-                    dict(zip(keys,
-                             [d['CatPrefix'],d['CatNumber'], ''])),
-                    dict(zip(keys,
-                             [d['CatPrefix'], int(d['CatSuffix']), '']))
-                    ]
-    # Check for ranges
-    if len(cps) == 2\
-       and '-' in cps\
-       and catnum.count('-') != len(cps)\
-       and cps[0]['CatPrefix'] == cps[1]['CatPrefix']\
-       and cps[1]['CatNumber'] > cps[0]['CatNumber']:
-        # Fill range
-        print catnum + ' id\'d as a range'
-        cps = [{'CatPrefix' : cps[0]['CatPrefix'], 'CatNumber' : x}
-               for x in xrange(cps[0]['CatNumber'],
-                               cps[1]['CatNumber'] + 1)]
-    # Special handling for suffixes
-    temp =[]
-    for cp in cps:
-        try:
-            cp['CatSuffix']
-        except:
-            if default_suffix != False:
-                cp['CatSuffix'] = default_suffix
-        else:
-            if not bool(cp['CatSuffix']):
+            #print cps
+            #raise
+        if is_range:
+            # Fill range
+            print '{} appears to contain a range'.format(s)
+            cps = [{'CatPrefix' : cps[0]['CatPrefix'], 'CatNumber' : x}
+                   for x in xrange(cps[0]['CatNumber'],
+                                   cps[1]['CatNumber'] + 1)]
+        # Special handling for suffixes
+        temp =[]
+        for cp in cps:
+            try:
+                cp['CatSuffix']
+            except:
                 if default_suffix != False:
                     cp['CatSuffix'] = default_suffix
-                else:
-                    del cp['CatSuffix']
-        try:
-            cp['CatSuffix']
-        except:
-            pass
-        else:
-            if strip_suffix:
-                cp['CatSuffix'] = cp['CatSuffix'].lstrip('0')
-                if not bool(cp['CatSuffix']):
-                    del cp['CatSuffix']
-        temp.append(cp)
-    cps = temp
-    # Force values to strings and add additional attributes
-    temp =[]
-    for cp in cps:
-        for key in cp:
-            if bool(cp[key]):
-                cp[key] = str(cp[key])
             else:
-                cp[key] = None
-        for key in attrs:
-            cp[key] = str(attrs[key])
-        temp.append(cp)
-    cps = temp
-    # Return
-    return cps
+                if not bool(cp['CatSuffix']):
+                    if default_suffix != False:
+                        cp['CatSuffix'] = default_suffix
+                    else:
+                        del cp['CatSuffix']
+            try:
+                cp['CatSuffix']
+            except:
+                pass
+            else:
+                if strip_suffix:
+                    cp['CatSuffix'] = cp['CatSuffix'].lstrip('0')
+                    if not bool(cp['CatSuffix']):
+                        del cp['CatSuffix']
+            temp.append(cp)
+        cps = temp
+        # Force values to strings and blanks to None and add
+        # additional attributes
+        temp =[]
+        for cp in cps:
+            for key in cp:
+                if bool(cp[key]):
+                    cp[key] = str(cp[key])
+                else:
+                    cp[key] = None
+            for key in attrs:
+                cp[key] = str(attrs[key])
+            temp.append(cp)
+        cps = temp
+        # Require unprefixed numeric catalog numbers integers to meet a
+        # minimum length. This reduces false positives at the expense of
+        # excluding records with low catalog numbers.
+        temp = []
+        for cp in cps:
+            try:
+                pre = cp['CatPrefix']
+            except KeyError:
+                pre = None
+            try:
+                num = cp['CatNumber']
+            except KeyError:
+                # This is a meteorite number
+                temp.append(cp)
+            else:
+                if num is None:
+                    print s
+                    raw_input(cps)
+                if not (pre is None and len(num) < 4):
+                    temp.append(cp)
+        results.extend(cps)
+    # Return parsed catalog numbers
+    return results
 
 
 
@@ -580,6 +680,8 @@ def format_catnum(d, code=True, div=False):
                 d[key] = ''
         except:
             d[key] = ''
+        else:
+            d[key] = d[key].strip('-')
     # Set museum code
     if code:
         d['CatMuseumAcronym'] = 'NMNH'
@@ -598,6 +700,7 @@ def format_catnum(d, code=True, div=False):
     # Add division if necessary
     if bool(catnum) and div:
         catnum += u' ({})'.format(d['CatDivision'][:3].upper())
+        #catnum = u'{} {}'.format(d['CatDivision'][:3].upper(), catnum)
     return catnum
 
 
@@ -677,7 +780,26 @@ def fxrange(start, stop, step):
 
 
 
-def cprint(s, show=True):
+def cprint(s, show=True, encoding='cp1252'):
     """Conditional print"""
-    if bool(s) and show:
+    if not isinstance(s, basestring) and show:
+        pprint(s)
+    elif bool(s) and show:
         print fill(s, subsequent_indent='  ')
+
+
+
+def rprint(s):
+    cprint(s)
+    raw_input('Paused. Press any key to continue.')
+
+
+def read_file(path, success, error=None):
+    try:
+        with open(path, 'rb') as f:
+            return success(f)
+    except IOError:
+        if error is None:
+            raise
+        else:
+            return error(path)
