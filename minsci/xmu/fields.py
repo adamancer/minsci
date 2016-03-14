@@ -160,7 +160,7 @@ class XMuFields(object):
         """Creates object containing metadata about fields in EMu
 
         Args:
-            schema_path (str): path to EMu schema file. If None, defaults to
+            schema_path (str): path to EMu schema file. If None, looks for
                 a copy of the schema stored in files.
             whitelist (list): list of EMu modules to include. If None,
                 anything not on the blacklist is included.
@@ -173,6 +173,8 @@ class XMuFields(object):
                 cache the new object if cached object not found. If False,
                 don't check for or create cache. If None, create but don't
                 check for cache.
+            suppress_pickle_warning (bool): whether to show pickle security
+                warning
 
         Attributes:
             self.schema (dict): path-keyed dicts of field data
@@ -181,9 +183,10 @@ class XMuFields(object):
             self.map_tables (dict): path-keyed lists of paths to tables
         """
         self.verbose = False
-        self.basepath = os.path.dirname(__file__)
-        self.fpath = os.path.join(self.basepath, 'files')
+        self._fpath = os.path.join(os.path.dirname(__file__), 'files')
         if pickle is True:
+            # This has to be pickle. The JSON equivalent is enormous
+            # because of all the aliasing.
             if not suppress_pickle_warning:
                 rprint('***WARNING: The cache feature uses pickle. The'
                        ' pickle module is not secure against erroneous'
@@ -213,11 +216,13 @@ class XMuFields(object):
                     pickle = None
         if not pickle:
             if schema_path is None:
-                schema_path = os.path.join(self.fpath, 'NMNH-schema.pl')
+                schema_path = os.path.join(self._fpath, 'NMNH-schema.pl')
             cprint('Reading EMu schema from {}...'.format(schema_path))
             if expand is None:
                 expand = []
-            # Extend schema based on source file, if specified
+            # Extend schema based on source file, if specified. This
+            # guarantees that any paths in the source file are included
+            # in the resulting XMuFields object.
             if source_path is not None:
                 source_paths = self.read_fields(source_path)
                 module = source_paths[0].split('.')[0]
@@ -269,7 +274,6 @@ class XMuFields(object):
                 self.aliases = self._map_aliases(tuple(whitelist))
             except TypeError:
                 self.aliases = self._map_aliases()
-            self.modules = {}
         # Dump fields object as json
         if pickle is None:
             cprint('Caching XMuFields object...')
@@ -424,7 +428,7 @@ class XMuFields(object):
     def _read_tables(self):
         """Update table data from text files in files/tables"""
         tables = {}
-        for fp in glob.iglob(os.path.join(self.fpath, 'tables', 'e*.txt')):
+        for fp in glob.iglob(os.path.join(self._fpath, 'tables', 'e*.txt')):
             module_name = os.path.splitext(os.path.basename(fp))[0]
             _tables = {}
             with open(fp, 'rb') as f:
@@ -608,16 +612,47 @@ class XMuFields(object):
                    ' module to your whitelist'.format(startswith, endswith))
 
 
+    def _find_references(self, paths):
+        """Look for references in the schema in an EMu export file
+
+        Args:
+            paths (list): paths found in the schema in an EMu export file
+
+        Returns:
+            List of (startswith, endswith) suitable for
+            self._expand_references()
+        """
+        expand = []
+        for path in paths:
+            components = path.split('.')
+            for i in xrange(1, len(components)):
+                if 'Ref' in components[i] and not components[i+1] == 'irn':
+                    temp = components[:i+2]
+                    # All first level references are expanded automatically,
+                    # so skip anything with three components
+                    if len(temp) != 3:
+                        temp[-1] = 'irn'
+                        startswith = endswith = '.'.join(temp)
+                        raw_input(startswith)
+                        expand.append(('.'.join(components[:i+1]), None))
+        return expand
+
 
     def _map_aliases(self, module=None):
         """Update schema with user-defined aliases based on files/aliases.txt
 
         Aliases can be called directly from schema. Additional aliases
         can be set using set_aliases().
+
+        Args:
+            module (str): name of base module
+
+        Returns:
+            Dict of {alias: path} pairs
         """
         cprint('Reading user-defined aliases...')
         aliases = {}
-        with open(os.path.join(self.fpath, 'aliases.txt')) as f:
+        with open(os.path.join(self._fpath, 'aliases.txt')) as f:
             for line in [line.strip() for line in f.read().splitlines()
                          if ',' in line and not line.startswith('#')]:
                 alias, path = line.split(',')
@@ -645,8 +680,141 @@ class XMuFields(object):
         return aliases
 
 
+    def get_path(self, path, module=None):
+        """Convert EMu export xpath to XMuFields path
+
+        The paths read from an EMu export differ from the paths used in the
+        XMuFields schema. This function converts from the raw EMu style to the
+        XMuFields style. For example:
+
+        EMu export: ecatalogue.IdeTaxonRef_tab.ClaSpecies
+        XMuFields.schema: ecatalogue.IdeTaxonRef_tab.etaxonomy.ClaSpecies
+
+        Args:
+            path (str): path from the schema in an EMu XML export
+            module (str): the name of the module in the EMu XML export.
+                If not provided, the module is determined from the path,
+                if possible.
+
+        Returns:
+            Path string reformatted for XMuFields schema
+        """
+        if module is not None and not path.startswith(module):
+            path = '{}.{}'.format(module, path)
+        try:
+            return self.schema.pull(path)['path']
+        except KeyError:
+            d = self.schema
+            temp = []
+            for key in path.split('.'):
+                try:
+                    d = d[key]
+                except KeyError:
+                    # Paths in the EMu export do not include the module name,
+                    # but self.schema does. Check to see if that is what's
+                    # causing the KeyError.
+                    keys = d.keys()
+                    if len(d) == 1 and keys[0].startswith(('e','l')):
+                        d = d[keys[0]][key]
+                        temp.append(keys[0])
+                    else:
+                        #cprint('Original path: {}'.format(path))
+                        #cprint('Derived path : {}'.format('.'.join(temp)))
+                        raise
+                temp.append(key)
+        return '.'.join(temp)
+
+
+    def get_xpath(self, path):
+        """Convert XMuFields path to EMu xpath
+
+        The paths in an EMu export differ from the paths used in the
+        XMuFields schema. This function converts from the XMuFields style to
+        the EMu xpath style. For example:
+
+        XMuFields.schema: ecatalogue.IdeTaxonRef_tab.etaxonomy.ClaSpecies
+        EMu xpath: table[@name='ecatalogue']/tuple
+                   /table[@name='IdeTaxonRef_tab']/tuple
+                   /atom[@name='ClaSpecies']
+
+        Args:
+            path (str): an XMuFields path
+
+        Returns:
+            Path string reformatted as in an EMu export
+        """
+        xpath = []
+        for name in [name for name in path.split('.')
+                     if not name.startswith(('e', 'l'))]:
+            if self.is_table(name):
+                xpath.append("table[@name='{}']".format(name))
+                xpath.append('tuple')
+            elif self.is_reference(name):
+                xpath.append("tuple[@name='{}']".format(name))
+            else:
+                xpath.append("atom[@name='{}']".format(name))
+        return '/'.join(xpath)
+
+
+    def read_fields(self, fp):
+        """Reads paths from the schema in an EMu XML export
+
+        Args:
+            fp (str): path to the EMu XML report
+
+        Returns:
+            List of paths in the EMu schema
+        """
+        paths = []
+        schema = []
+        with open(path, 'rb') as f:
+            for line in f:
+                schema.append(line.rstrip())
+                if line.strip() == '?>':
+                    break
+        schema = schema[schema.index('<?schema')+1:-1]
+        containers = ['schema']
+        for field in schema:
+            kind, field = [s.strip() for s in field.rsplit(' ', 1)]
+            if kind in ('table', 'tuple'):
+                containers.append(field)
+                continue
+            if field == 'end':
+                containers.pop()
+            else:
+                paths.append('.'.join(containers[1:] + [field]))
+        return paths
+
+
+    def bracketize_path(self, path):
+        """Mark tuples in given path with {0}
+
+        Args:
+            path (str): path to be modified
+
+        Returns:
+            Path modified to include {0} where each tuple occurs
+        """
+        cmps = path.split('.')
+        path = [cmps[0]]
+        for i in xrange(1, len(cmps)):
+            this = cmps[i]
+            last = cmps[i-1]
+            if last.endswith(('0', '_nesttab', '_nesttab_inner', '_tab')):
+                path.append('{0}')
+            path.append(this)
+        return '.'.join(path)
+
+
     def return_key(self, key):
-        """Return key matching or containing search term"""
+        """Return key matching or containing search term
+
+        Args:
+            key (str): search term
+
+        Returns:
+            None
+        """
         try:
             cprint(self.schema[key])
         except KeyError:
@@ -660,8 +828,9 @@ class XMuFields(object):
         """Update schema with aliases from a reference field to a module
 
         Args:
-            ref_module (str): name of module to reference
-            ref_field (str): name of reference to map alises to
+            ref_module (str): the module being referenced
+            ref_field (str): the field from which the module is being
+                referenced
         """
         paths = self.schema.pathfinder(ref_module)
         aliases = {}
@@ -693,16 +862,27 @@ class XMuFields(object):
 
 
     def set_alias(self, alias, path):
+        """Add alias: path to self.schema
+
+        Args:
+            alias (str): name of alias
+            path (str): path to alias
+
+        """
         self.schema.push(alias, self.schema.pull(path))
 
 
     def reset_aliases(self):
-        """Update schema to reset all aliases set using set_aliases()"""
+        """Update schema to remove all aliases set using set_aliases()"""
         self.schema = copy(self.master)
 
 
     def add_table(self, fields):
-        """Update containers with new table"""
+        """Update table containers with new table
+
+        Args:
+            fields (list): list of fields in the table to be added
+        """
         module = fields[0].split('.')[0]
         tkey = []
         for cmp in fields[0].split('.'):
@@ -734,7 +914,7 @@ class XMuFields(object):
         return bool(len([s for s in path.split('.') if s.endswith(tabends)]))
 
 
-    def is_ref(self, path):
+    def is_reference(self, path):
         """Assess whether a path is a reference
 
         Args:
@@ -745,96 +925,3 @@ class XMuFields(object):
         """
         refends = ('Ref')
         return bool(len([s for s in path.split('.') if s.endswith(refends)]))
-
-
-    def bracketize_path(self, path):
-        """Mark tuples in given path with {0}"""
-        cmps = path.split('.')
-        path = [cmps[0]]
-        for i in xrange(1, len(cmps)):
-            this = cmps[i]
-            last = cmps[i-1]
-            if last.endswith(('0', '_nesttab', '_nesttab_inner', '_tab')):
-                path.append('{0}')
-            path.append(this)
-        return '.'.join(path)
-
-
-    def get_path(self, path, module=None):
-        """Convert EMu export xpath to XMuFields path"""
-        if module is not None and not path.startswith(module):
-            path = '{}.{}'.format(module, path)
-        try:
-            return self.schema.pull(path)['path']
-        except KeyError:
-            d = self.schema
-            temp = []
-            for key in path.split('.'):
-                try:
-                    d = d[key]
-                except KeyError:
-                    keys = d.keys()
-                    if len(d) == 1 and keys[0].startswith(('e','l')):
-                        d = d[keys[0]][key]
-                        temp.append(keys[0])
-                    else:
-                        #cprint('Original path: {}'.format(path))
-                        #cprint('Derived path : {}'.format('.'.join(temp)))
-                        raise
-                temp.append(key)
-        return '.'.join(temp)
-
-
-    def get_xpath(self, path):
-        """Convert XMuFields path to EMu export xpath"""
-        xpath = []
-        for name in [name for name in path.split('.')
-                     if not name.startswith(('e', 'l'))]:
-            if self.is_table(name):
-                xpath.append("table[@name='{}']".format(name))
-                xpath.append('tuple')
-            elif self.is_ref(name):
-                xpath.append("tuple[@name='{}']".format(name))
-            else:
-                xpath.append("atom[@name='{}']".format(name))
-        return '/'.join(xpath)
-
-
-    def read_fields(self, path):
-        """Reads paths to fields from schema in EMu XML export"""
-        paths = []
-        schema = []
-        with open(path, 'rb') as f:
-            for line in f:
-                schema.append(line.rstrip())
-                if line.strip() == '?>':
-                    break
-        schema = schema[schema.index('<?schema')+1:-1]
-        containers = ['schema']
-        for field in schema:
-            kind, field = [s.strip() for s in field.rsplit(' ', 1)]
-            if kind in ('table', 'tuple'):
-                containers.append(field)
-                continue
-            if field == 'end':
-                containers.pop()
-            else:
-                paths.append('.'.join(containers[1:] + [field]))
-        return paths
-
-
-    def _find_references(self, paths):
-        expand = []
-        for path in paths:
-            components = path.split('.')
-            for i in xrange(1, len(components)):
-                if 'Ref' in components[i] and not components[i+1] == 'irn':
-                    temp = components[:i+2]
-                    # All first level references are expanded automatically,
-                    # so skip anything with three components
-                    if len(temp) != 3:
-                        temp[-1] = 'irn'
-                        startswith = endswith = '.'.join(temp)
-                        raw_input(startswith)
-                        expand.append(('.'.join(components[:i+1]), None))
-        return expand
