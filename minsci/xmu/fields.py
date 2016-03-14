@@ -514,7 +514,6 @@ class XMuFields(object):
         paths = [path for path in paths
                  if path.endswith(endswith) and path.count('.') > 1]
         print '{:,} matching paths found!'.format(len(paths))
-        cprint(sorted(paths))
 
         # Run before the root of the schema is polluted by aliases
         modules = {}
@@ -767,7 +766,7 @@ class XMuFields(object):
         """
         paths = []
         schema = []
-        with open(path, 'rb') as f:
+        with open(fp, 'rb') as f:
             for line in f:
                 schema.append(line.rstrip())
                 if line.strip() == '?>':
