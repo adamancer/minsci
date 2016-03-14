@@ -61,9 +61,15 @@ class GeoTaxa(object):
         if fp is None:
             fp = os.path.join(self._fpath, 'xmldata.xml')
 
+        # Load captilization exceptions
         try:
-            with open(os.path.join(self._fpath, 'elements.txt'), 'rb') as f:
-                self.elements = f.read().splitlines()
+            with open(os.path.join(self._fpath, 'exceptions.txt'), 'rb') as f:
+                exceptions = [line for line in f.read().splitlines()
+                              if bool(line.strip())
+                              and not line.startswith('#')]
+                self.exceptions = dict([(val.lower(), val)
+                                        for val in exceptions
+                                        if not val in ('In', 'S')])
         except IOError:
             raise
 
@@ -236,23 +242,56 @@ class GeoTaxa(object):
 
 
     def clean_taxon(self, taxon):
-        """Reformats taxon of the form 'Gneiss, Garnet' to 'Garnet gneiss'"""
+        """Reformats taxon of the form 'Gneiss, Garnet' to 'Garnet Gneiss'"""
         if taxon.count(',') == 1:
             taxon = ' '.join([s.strip() for s in taxon.split(',')][::-1])
         return taxon
 
 
-    def cap_taxa(self, taxon, ucfirst=True):
-        """Capitalize string
-
-        @param string
-        @param boolean
-        @return string
-        """
-        if ucfirst:
-            return taxon[0].upper() + taxon[1:]
+    def cap_taxa(self, s, ucfirst=True):
+        """Returns a properly capitalized taxon name"""
+        # Reorder terms and force lower case
+        orig = copy(s)
+        s = s.lower()
+        # Split into words
+        p = re.compile('(\W)', re.U)
+        try:
+            words = re.split('(\W)', s)
+        except:
+            raise
         else:
-            return taxon[0].lower() + taxon[1:]
+            temp = []
+            for word in words:
+                for w in re.split('([A-z]+)', word):
+                    try:
+                        temp.append(self.exceptions[w])
+                    except KeyError:
+                        temp.append(w)
+        s = ''.join(temp)
+        # Clean up string
+        replacements = {
+            '  ': ' ',
+            ' /': '/',
+            ' ?': '?',
+            ' )': ')',
+            '( ': '(',
+            '<sup>': '',
+            '</sup>': '',
+            '<sub>': '',
+            '</sub>': '',
+            'et Al': 'et al'
+        }
+        for key in replacements:
+            while key in s:
+                s = s.replace(key, replacements[key])
+        while s.count('(') > s.count(')'):
+            s += ')'
+        if ucfirst:
+            try:
+                s = s[0].upper() + s[1:]
+            except IndexError:
+                s = s.upper()
+        return s
 
 
     def get_official_taxon(self, taxon):
@@ -540,109 +579,3 @@ class GeoTaxa(object):
         while highest_common_taxon in exclude:
             highest_common_taxon = trees[0][len(common)-2]
         return highest_common_taxon
-
-
-    def _cap_taxa(self, s, ucfirst=True):
-        """Returns a properly capitalized taxon name"""
-        # Exceptions to capitlization rules, mostly meteorite classes.
-        # These should always be capitalized.
-        exceptions = [
-            'CB', 'CH', 'CK', 'CM', 'CR', 'CV', 'CO', 'CI',
-            'EH', 'EL',
-            'H', 'HED',
-            'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
-            'IAB', 'IA', 'IB', 'IC', 'ID', 'IE',
-            'IIAB', 'IICD', 'IIA', 'IIB', 'IIC', 'IID', 'IIE', 'IIF', 'IIG',
-            'IIIAB', 'IIICD', 'IIIA', 'IIIB', 'IIIC', 'IIID', 'IIIE', 'IIIF',
-            'IVAB', 'IVA', 'IVB',
-            'L', 'LL',
-            'TAS',
-            'Cerny', 'Chen', 'Hauser', 'Hogarth',
-            'Leake', 'Nicol', 'Shephard', 'Voloshin'
-            ]
-        # Reorder terms and force lower case
-        s = s.lower()
-        orig = copy(s)
-        # Elements and exceptions
-        exclude = ('in', 's')
-        elements = [e.lower() for e in self.elements if not e in exclude]
-        lc_exceptions = [e.lower() for e in exceptions]
-        # Handle suffixes of, e.g Mineral-(La) or Mineral-(CaMnMg)
-        p = re.compile('(\W)', re.U)
-        try:
-            arr = p.split(s)
-        except:
-            pass
-        else:
-            capped = []
-            for s in arr:
-                # Stripped s
-                s_stripped = s.rstrip('1234567890.')
-                # Capitalize elements
-                if s in elements:
-                    try:
-                        s = s[0].upper() + s[1].lower()
-                    except:
-                        s = s.upper()
-                elif s_stripped in lc_exceptions:
-                    s = exceptions[lc_exceptions.index(s_stripped)] +\
-                        s[len(s_stripped):]
-                # Capitalize element groups (e.g., CaFeMg)
-                elif not self.taxon_exists(s):
-                    temp = ''
-                    i = 0
-                    while i < len(s):
-                        try:
-                            sub = s[i:i+2]
-                        except:
-                            sub = s[i]
-                            if sub.lower() in elements:
-                                #print sub + ' is an element'
-                                temp += sub.upper()
-                                i += 1
-                            else:
-                                #print 'Not elemental: ' + suffix
-                                temp = ''
-                                i = len(s)
-                        else:
-                            # Case 1: One-two letter element
-                            if sub.lower() in elements:
-                                #print 'Case 1: ' + sub + ' is an element'
-                                try:
-                                    temp += sub[0].upper() + sub[1].lower()
-                                except:
-                                    temp += sub.upper()
-                                i += 2
-                            # Case 2: Two one-letter elements
-                            elif sub[0] in elements:
-                                #print 'Case 2: ' + sub[0] + ' is an element'
-                                temp += sub[0].upper()
-                                i += 1
-                            else:
-                                #print 'Not elemental: ' + suffix
-                                temp = ''
-                                i = len(s)
-                # Special handling
-                if s == 'S':
-                    s = s.lower()
-                capped.append(s)
-            s = ''.join(capped)
-        # Capitalize first letter if ucfirst
-        if ucfirst:
-            try:
-                s = s[0].upper() + s[1:]
-            except:
-                s = s.upper()
-        else:
-            try:
-                s = s[0].lower() + s[1:]
-            except:
-                s = s.lower()
-        # Special handling
-        if s.lower().startswith('bgs-'):
-            s = s.upper()
-        s = s.replace(' et al.', 'et al.')
-        # Return capitalized string
-        if self.debug and orig.lower() != s.lower():
-            print 'Capitalization error: ' + orig, s
-        return s
