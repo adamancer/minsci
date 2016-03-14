@@ -57,19 +57,18 @@ class GeoTaxa(object):
 
     def __init__(self, fp=None, force_format=False):
         """Read data from EMu export file"""
-
-        files = os.path.join(os.path.dirname(__file__), 'files')
+        self._fpath = os.path.join(os.path.dirname(__file__), 'files')
         if fp is None:
-            fp = os.path.join(files, 'xmldata.xml')
+            fp = os.path.join(self._fpath, 'xmldata.xml')
 
         try:
-            with open(os.path.join(files, 'elements.txt'), 'rb') as f:
+            with open(os.path.join(self._fpath, 'elements.txt'), 'rb') as f:
                 self.elements = f.read().splitlines()
         except IOError:
             raise
 
         # Check for serialized data
-        serialized = os.path.splitext(fp)[0] + '.json'
+        serialized = os.path.join(self._fpath, 'geotaxa.json')
         if force_format:
             try:
                 os.remove(serialized)
@@ -78,45 +77,7 @@ class GeoTaxa(object):
         try:
             tds = serialize.load(open(serialized, 'rb'))
         except IOError:
-            print u'Pickling taxonomic data...'
-            self.taxa = {}
-            self.map_narratives = {}  # maps taxon name to narrative irn
-            self.map_emu_taxa = {}    # maps taxon irn to narrative irn
-
-            whitelist = [
-                'emultimedia',
-                'enarratives',
-                'etaxonomy'
-            ]
-            fields = xmu.XMuFields(whitelist=whitelist, source_path=fp)
-            expand = [(None, None)]
-            tax = XMu(fp, fields)
-            tax.format_key = self.format_key
-            tax.taxa = self.taxa
-            tax.map_narratives = self.map_narratives
-            tax.map_emu_taxa = self.map_emu_taxa
-            tax.fast_iter(tax.itertax)
-            print u'{:,} records read'.format(len(self.taxa))
-
-            # Map tree for each taxon
-            print 'Mapping trees...'
-            n = 0
-            for irn in self.taxa:
-                tree = self.recurse_tree(self.taxa[irn]['name'], [])
-                self.taxa[irn]['tree'] = tree
-                n += 1
-                if not n % 1000:
-                    print '{:,} tress mapped!'.format(n)
-            print '{:,} tress mapped!'.format(n)
-
-            # Serialize the taxanomic dictionaries for later use
-            tds = {
-                'taxa' : self.taxa,
-                'map_narratives' : self.map_narratives,
-                'map_emu_taxa' : self.map_emu_taxa,
-                 }
-            with open(serialized, 'wb') as f:
-                serialize.dump(tds, f)
+            self.update_taxonomy(fp, serialized)
         else:
             # Use serialized data. This is much faster.
             print u'Reading saved taxonomic data...'
@@ -125,20 +86,56 @@ class GeoTaxa(object):
             self.map_emu_taxa = tds['map_emu_taxa']
 
 
-
-
     def __call__(self, taxon, classify_unknown=True):
         """Returns taxonomic data when instance is called"""
         return self.find(taxon, classify_unknown)
 
 
+    def update_taxonomy(self, source_path, json_path):
+        """Writes JSON file based on EMu export"""
+        print u'Updating taxonomic data...'
+        self.taxa = {}
+        self.map_narratives = {}  # maps taxon name to narrative irn
+        self.map_emu_taxa = {}    # maps taxon irn to narrative irn
+
+        whitelist = [
+            'emultimedia',
+            'enarratives',
+            'etaxonomy'
+        ]
+        fields = xmu.XMuFields(whitelist=whitelist, source_path=source_path)
+        tax = XMu(source_path, fields)
+        tax.format_key = self.format_key
+        tax.taxa = self.taxa
+        tax.map_narratives = self.map_narratives
+        tax.map_emu_taxa = self.map_emu_taxa
+        tax.fast_iter(tax.itertax)
+        print u'{:,} records read'.format(len(self.taxa))
+
+        # Map tree for each taxon
+        print 'Mapping trees...'
+        n = 0
+        for irn in self.taxa:
+            tree = self.recurse_tree(self.taxa[irn]['name'], [])
+            self.taxa[irn]['tree'] = tree
+            n += 1
+            if not n % 1000:
+                print '{:,} tress mapped!'.format(n)
+        print '{:,} tress mapped!'.format(n)
+
+        # Serialize the taxanomic dictionaries for later use
+        taxadicts = {
+            'taxa' : self.taxa,
+            'map_narratives' : self.map_narratives,
+            'map_emu_taxa' : self.map_emu_taxa,
+             }
+        with open(json_path, 'wb') as f:
+            serialize.dump(taxadicts, f)
 
 
     def format_key(self, key):
         """Standardize formatting of keys in taxa dictionary"""
         return key.lower().replace(' ', '-')
-
-
 
 
     def find(self, taxon, classify_unknown=True):
@@ -212,8 +209,6 @@ class GeoTaxa(object):
         }
 
 
-
-
     def recurse_tree(self, taxon, tree):
         try:
             irn = self(taxon)['parent']
@@ -230,13 +225,9 @@ class GeoTaxa(object):
         return tree[::-1]
 
 
-
-
     def simple_tree(self, tree):
         """Simplify the full tree for retrieval"""
         return tree
-
-
 
 
     def format_taxon(self, taxon):
@@ -244,16 +235,11 @@ class GeoTaxa(object):
         pass
 
 
-
-
     def clean_taxon(self, taxon):
         """Reformats taxon of the form 'Gneiss, Garnet' to 'Garnet gneiss'"""
         if taxon.count(',') == 1:
             taxon = ' '.join([s.strip() for s in taxon.split(',')][::-1])
         return taxon
-
-
-
 
 
     def cap_taxa(self, taxon, ucfirst=True):
@@ -299,9 +285,6 @@ class GeoTaxa(object):
             return False
 
 
-
-
-
     def clean_taxa(self, taxa, dedupe=False):
         """Removes duplicate taxa while retaining order"""
         taxa = [self.preferred_synonym(self.clean_taxon(taxon))
@@ -314,9 +297,6 @@ class GeoTaxa(object):
                     temp.insert(0, taxon)
             taxa = temp
         return taxa
-
-
-
 
 
     def item_name(self, taxa=[], setting=None, name=None):
@@ -472,8 +452,6 @@ class GeoTaxa(object):
             return ''.join(formatted)
 
 
-
-
     def group_name(self, *taxas):
         """Format display name for a group of specimens, as in a photo
 
@@ -486,8 +464,6 @@ class GeoTaxa(object):
         return highest_common_taxon
 
 
-
-
     def preferred_synonym(self, taxon):
         """Recursively find the preferred synonym for this taxon
 
@@ -498,8 +474,6 @@ class GeoTaxa(object):
         while len(taxon['synonyms']):
             taxon = self(copy(taxon['synonyms']).pop())
         return taxon['name']
-
-
 
 
     def group_taxa(self, taxa):
@@ -568,13 +542,8 @@ class GeoTaxa(object):
         return highest_common_taxon
 
 
-
-
-
-
     def _cap_taxa(self, s, ucfirst=True):
         """Returns a properly capitalized taxon name"""
-
         # Exceptions to capitlization rules, mostly meteorite classes.
         # These should always be capitalized.
         exceptions = [
@@ -595,7 +564,6 @@ class GeoTaxa(object):
         s = s.lower()
         orig = copy(s)
         # Elements and exceptions
-        self.elements = []
         exclude = ('in', 's')
         elements = [e.lower() for e in self.elements if not e in exclude]
         lc_exceptions = [e.lower() for e in exceptions]
