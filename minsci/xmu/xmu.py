@@ -42,13 +42,15 @@ class XMu(object):
                                 reverse=True)
                 xpaths = []
                 for fp in self.files:
-                    xpaths.extend(self._read_fields(fp))
+                    xpaths.extend(self.fields.read_fields(fp))
                 self.xpaths = list(set(xpaths))
             elif path.endswith('.xml'):
-                self.xpaths = self._read_fields(path)
+                self.xpaths = self.fields.read_fields(path)
                 self.files = [path]
             else:
                 raise
+            for path in self.xpaths:
+                self.fields(path)
             self.module = self.xpaths[0].split('.')[0]
             self.newest = max([os.path.getmtime(fp) for fp in self.files])
             self.paths_found = {}  # dictionary tracking paths checked and found
@@ -373,39 +375,6 @@ class XMu(object):
                 return old_val.rstrip('; ') + ';' + new_val, False
         elif action == 'replace':
             return new_val, False
-
-
-    def _read_fields(self, path):
-        """Reads paths to fields from schema in EMu XML export"""
-        paths = []
-        schema = []
-        with open(path, 'rb') as f:
-            for line in f:
-                schema.append(line.rstrip())
-                if line.strip() == '?>':
-                    break
-        schema = schema[schema.index('<?schema')+1:-1]
-        containers = ['schema']
-        for field in schema:
-            kind, field = [s.strip() for s in field.rsplit(' ', 1)]
-            if kind in ('table', 'tuple'):
-                containers.append(field)
-                continue
-            if field == 'end':
-                containers.pop()
-            else:
-                path = '.'.join(containers[1:] + [field])
-                try:
-                    self.fields.schema.pull(path)
-                except KeyError:
-                    path = self.fields.get_path(path)
-                    try:
-                        self.fields.schema.pull(path)
-                    except KeyError:
-                        print path
-                        raise
-                paths.append(path)
-        return paths
 
 
     def fill_paths(self, record):
