@@ -1,4 +1,4 @@
-import cPickle as pickle
+import json as serialize
 import os
 import re
 from copy import copy
@@ -56,9 +56,8 @@ class GeoTaxa(object):
 
 
     def __init__(self, fp=None, force_format=False):
-        """Read data from EMu export file
+        """Read data from EMu export file"""
 
-        Will check for pickled data first"""
         files = os.path.join(os.path.dirname(__file__), 'files')
         if fp is None:
             fp = os.path.join(files, 'xmldata.xml')
@@ -69,22 +68,29 @@ class GeoTaxa(object):
         except IOError:
             raise
 
-        # Check for pickled data
-        pickled = os.path.splitext(fp)[0] + '.p'
+        # Check for serialized data
+        serialized = os.path.splitext(fp)[0] + '.json'
         if force_format:
             try:
-                os.remove(path)
+                os.remove(serialized)
             except OSError:
                 pass
         try:
-            tds = pickle.load(open(pickled, 'rb'))
+            tds = serialize.load(open(serialized, 'rb'))
         except IOError:
             print u'Pickling taxonomic data...'
             self.taxa = {}
             self.map_narratives = {}  # maps taxon name to narrative irn
             self.map_emu_taxa = {}    # maps taxon irn to narrative irn
 
-            tax = xmu.instant(XMu, 'etaxonomy', fp)
+            whitelist = [
+                'emultimedia',
+                'enarratives',
+                'etaxonomy'
+            ]
+            fields = xmu.XMuFields(whitelist=whitelist, source_path=fp)
+            expand = [(None, None)]
+            tax = XMu(fp, fields)
             tax.format_key = self.format_key
             tax.taxa = self.taxa
             tax.map_narratives = self.map_narratives
@@ -94,18 +100,23 @@ class GeoTaxa(object):
 
             # Map tree for each taxon
             print 'Mapping trees...'
+            n = 0
             for irn in self.taxa:
                 tree = self.recurse_tree(self.taxa[irn]['name'], [])
                 self.taxa[irn]['tree'] = tree
+                n += 1
+                if not n % 1000:
+                    print '{:,} tress mapped!'.format(n)
+            print '{:,} tress mapped!'.format(n)
 
-            # Pickle the taxanomic dictionaries for later use
+            # Serialize the taxanomic dictionaries for later use
             tds = {
                 'taxa' : self.taxa,
                 'map_narratives' : self.map_narratives,
                 'map_emu_taxa' : self.map_emu_taxa,
                  }
-            with open(pickled, 'wb') as f:
-                pickle.dump(tds, f)
+            with open(serialized, 'wb') as f:
+                serialize.dump(tds, f)
         else:
             # Use serialized data. This is much faster.
             print u'Reading saved taxonomic data...'
@@ -207,7 +218,11 @@ class GeoTaxa(object):
         try:
             irn = self(taxon)['parent']
             taxon = self(irn)['name']
-        except:
+        except KeyboardInterrupt:
+            raise
+        except KeyError:
+            pass
+        except IndexError:
             pass
         else:
             tree.append(taxon)
