@@ -153,12 +153,14 @@ class DeepDict(dict):
 
 class XMuFields(object):
 
-    def __init__(self, fp=None, whitelist=None, blacklist=None, expand=None,
+    def __init__(self, schema_path=None,
+                 whitelist=None, blacklist=None,
+                 expand=None, source_path=None,
                  pickle=False, suppress_pickle_warning=False):
         """Creates object containing metadata about fields in EMu
 
         Args:
-            fp (str): path to EMu schema file. If None, defaults to
+            schema_path (str): path to EMu schema file. If None, defaults to
                 a copy of the schema stored in files.
             whitelist (list): list of EMu modules to include. If None,
                 anything not on the blacklist is included.
@@ -166,11 +168,11 @@ class XMuFields(object):
                 no modules are specifically excluded.
             expand (tuple): tuple of tuples (startswith, endswith)
                 used by the second iteration of the expand function
+            source_path (str): path to EMu export file.
             pickle (tuple): if True, check for cached XMuFields object or
                 cache the new object if cached object not found. If False,
                 don't check for or create cache. If None, create but don't
                 check for cache.
-
 
         Attributes:
             self.schema (dict): path-keyed dicts of field data
@@ -210,10 +212,42 @@ class XMuFields(object):
                     print 'Could not read cache!'
                     pickle = None
         if not pickle:
-            if fp is None:
-                fp = os.path.join(self.fpath, 'NMNH-schema.pl')
+            if schema_path is None:
+                schema_path = os.path.join(self.fpath, 'NMNH-schema.pl')
+            cprint('Reading EMu schema from {}...'.format(schema_path))
+            if expand is None:
+                expand = []
+            # Extend schema based on source file, if specified
+            if source_path is not None:
+                source_paths = self.read_fields(source_path)
+                module = source_paths[0].split('.')[0]
+                schema = self._read_schema(schema_path, [module], None)
+                self.schema = self._enhance_schema(schema)[0]
+                paths = []
+                for src_path in source_paths:
+                    alt_path = '.'.join(src_path.split('.')[:-1] + ['irn'])
+                    for path in [src_path, alt_path]:
+                        try:
+                            path = self.get_path(path)
+                        except KeyError:
+                            pass
+                        else:
+                            paths.append(path)
+                            break
+                modules = [component for component
+                           in '.'.join(list(set(paths))).split('.')
+                           if component.startswith(('e', 'l'))]
+                if whitelist is not None:
+                    whitelist.extend(modules)
+                else:
+                    whitelist = modules
+                whitelist = sorted(list(set(whitelist)))
+                if blacklist is not None:
+                    blacklist = list(set(blackleist) - set(modules))
+                expand.extend(self._find_references(source_paths))
+                expand = sorted(list(set(expand)))
 
-            schema = self._read_schema(fp, whitelist, blacklist)
+            schema = self._read_schema(schema_path, whitelist, blacklist)
             self.schema, self.atoms = self._enhance_schema(schema)
 
             # Read tables
@@ -222,11 +256,9 @@ class XMuFields(object):
             self.hashed_tables = {}  # maps hash of tables to tables
             self.tables = self._read_tables()
 
-            cprint('Expanding references...')
             self._expand_references()
-            if expand is not None:
-                for e in expand:
-                    self._expand_references(e[0], e[1])
+            for e in expand:
+                self._expand_references(e[0], e[1])
 
             # FIXME: Map table fields not specified in the tables folder
 
@@ -284,8 +316,6 @@ class XMuFields(object):
             Dictionary with information about the XML schema:
             {module : {field: { param_1: value_1,.., param_n: value_n}}}
         """
-
-        cprint('Reading EMu schema from {}...'.format(fp))
         # These regexes are used to split the .pl file into
         # modules and fileds
         re_module = re.compile('\te[a-z]+ =>.*?\{.*?\n\t\}', re.DOTALL)
@@ -462,22 +492,25 @@ class XMuFields(object):
         passes are limited to the fields specified in the expand argument
         in __init__; otherwise the schema expands geometrically.
 
-        path: the path to the
-
         Args:
             startswith (str): limit expansion to fields starting with this
-            endswith (str): limit expansion to fields ending with this
+                string
+            endswith (str): limit expansion to fields ending with this string
 
         """
         if endswith is None:
             endswith = '.irn'
         if startswith is not None:
+            cprint('Expanding {}...'.format(startswith))
             paths = self.schema.pathfinder(path=startswith)
             startswith = startswith.split('.')
         else:
+            cprint('Expanding references in base module...')
             paths = self.schema.pathfinder()
         paths = [path for path in paths
                  if path.endswith(endswith) and path.count('.') > 1]
+        print '{:,} matching paths found!'.format(len(paths))
+        cprint(sorted(paths))
 
         # Run before the root of the schema is polluted by aliases
         modules = {}
@@ -566,7 +599,14 @@ class XMuFields(object):
                 dt = datetime.datetime.now() - t1
                 t1 = datetime.datetime.now()
                 cprint(' {:,} references expanded (t={})'.format(i, dt))
-        cprint('{:,} references expanded'.format(i))
+        if i:
+            cprint('{:,} references expanded'.format(i))
+        else:
+            # FIXME: Move read_schema earlier?
+            cprint('Warning: No references expanded for {}. If you need to'
+                   ' access fields in this reference, add the appropriate'
+                   ' module to your whitelist'.format(startswith, endswith))
+
 
 
     def _map_aliases(self, module=None):
@@ -758,3 +798,43 @@ class XMuFields(object):
             else:
                 xpath.append("atom[@name='{}']".format(name))
         return '/'.join(xpath)
+
+
+    def read_fields(self, path):
+        """Reads paths to fields from schema in EMu XML export"""
+        paths = []
+        schema = []
+        with open(path, 'rb') as f:
+            for line in f:
+                schema.append(line.rstrip())
+                if line.strip() == '?>':
+                    break
+        schema = schema[schema.index('<?schema')+1:-1]
+        containers = ['schema']
+        for field in schema:
+            kind, field = [s.strip() for s in field.rsplit(' ', 1)]
+            if kind in ('table', 'tuple'):
+                containers.append(field)
+                continue
+            if field == 'end':
+                containers.pop()
+            else:
+                paths.append('.'.join(containers[1:] + [field]))
+        return paths
+
+
+    def _find_references(self, paths):
+        expand = []
+        for path in paths:
+            components = path.split('.')
+            for i in xrange(1, len(components)):
+                if 'Ref' in components[i] and not components[i+1] == 'irn':
+                    temp = components[:i+2]
+                    # All first level references are expanded automatically,
+                    # so skip anything with three components
+                    if len(temp) != 3:
+                        temp[-1] = 'irn'
+                        startswith = endswith = '.'.join(temp)
+                        raw_input(startswith)
+                        expand.append(('.'.join(components[:i+1]), None))
+        return expand
