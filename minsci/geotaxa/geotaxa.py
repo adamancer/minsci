@@ -10,7 +10,6 @@ from ..xmu import xmu
 
 class XMu(xmu.XMu):
 
-
     def itertax(self, element):
         """Reads taxonomic hierarchy from narratives export
 
@@ -33,8 +32,13 @@ class XMu(xmu.XMu):
                 schemes[name].append(_id)
             except KeyError:
                 schemes[name] = [_id]
-
-        self.taxa[irn] = {
+        # Skip taxa with no parent unless name is "Geological material"
+        if not bool(parent):
+            if title.lower() == 'geological material':
+                parent = None
+            else:
+                return True
+        self.geotaxa.taxa[irn] = {
             'irn' : irn,
             'name' : title,
             'parent' : parent,
@@ -43,17 +47,17 @@ class XMu(xmu.XMu):
             'schemes' : schemes,
             'taxa_ids' : taxa
         }
-        key = self.format_key(title)
-        self.map_narratives[key] = irn
+        key = self.geotaxa.format_key(title)
+        self.geotaxa.map_narratives[key] = irn
         for taxon in taxa:
-            self.map_emu_taxa[taxon] = irn
-        if not len(self.taxa) % 2500:
-            print u'{:,} records read'.format(len(self.taxa))
+            self.geotaxa.map_emu_taxa[taxon] = irn
+        if not len(self.geotaxa.taxa) % 5000:
+            print u'{:,} records read'.format(len(self.geotaxa.taxa))
+
 
 
 
 class GeoTaxa(object):
-
 
     def __init__(self, fp=None, force_format=False):
         """Read data from EMu export file"""
@@ -111,10 +115,7 @@ class GeoTaxa(object):
         ]
         fields = xmu.XMuFields(whitelist=whitelist, source_path=source_path)
         tax = XMu(source_path, fields)
-        tax.format_key = self.format_key
-        tax.taxa = self.taxa
-        tax.map_narratives = self.map_narratives
-        tax.map_emu_taxa = self.map_emu_taxa
+        tax.geotaxa = self
         tax.fast_iter(tax.itertax)
         print u'{:,} records read'.format(len(self.taxa))
 
@@ -122,7 +123,7 @@ class GeoTaxa(object):
         print 'Mapping trees...'
         n = 0
         for irn in self.taxa:
-            tree = self.recurse_tree(self.taxa[irn]['name'], [])
+            tree = self._recurse_tree(self.taxa[irn]['name'], [])
             self.taxa[irn]['tree'] = tree
             n += 1
             if not n % 1000:
@@ -215,30 +216,23 @@ class GeoTaxa(object):
         }
 
 
-    def recurse_tree(self, taxon, tree):
+    def _recurse_tree(self, taxon, tree):
         try:
-            irn = self(taxon)['parent']
-            taxon = self(irn)['name']
+            parent = self(taxon)['parent']
         except KeyboardInterrupt:
             raise
         except KeyError:
             pass
         except IndexError:
             pass
+        except RuntimeError:
+            raise
         else:
-            tree.append(taxon)
-            self.recurse_tree(taxon, tree)
+            if parent is not None:
+                taxon = self(parent)['name']
+                tree.append(taxon)
+                self._recurse_tree(taxon, tree)
         return tree[::-1]
-
-
-    def simple_tree(self, tree):
-        """Simplify the full tree for retrieval"""
-        return tree
-
-
-    def format_taxon(self, taxon):
-        """Looks for alternative spellings"""
-        pass
 
 
     def clean_taxon(self, taxon):
