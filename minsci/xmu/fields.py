@@ -65,7 +65,7 @@ class DeepDict(dict):
                 break
 
 
-    def appush(self, path, val):
+    def push_list(self, path, val):
         """Create or extend list for the given path"""
         d = self
         keys = path.split('.')
@@ -74,6 +74,20 @@ class DeepDict(dict):
             d = d.setdefault(key, DeepDict())
         try:
             d.setdefault(last, []).extend(val)
+        except AttributeError:
+            raise
+
+
+    def push_int(self, path, n):
+        """Create or extend list for the given path"""
+        d = self
+        keys = path.split('.')
+        last = keys.pop()
+        for key in keys:
+            d = d.setdefault(key, DeepDict())
+        try:
+            d.setdefault(last, 0)
+            d[last] += n
         except AttributeError:
             raise
 
@@ -298,7 +312,7 @@ class XMuFields(object):
             raise Exception('PathError: {}'.format(path))
 
 
-    def _read_schema(self, fp, whitelist, blacklist):
+    def _read_schema(self, fp, whitelist=None, blacklist=None):
         """Reads EMu schema file to dictionary
 
         The EMu schema file includes (but is not limted to) these parameters:
