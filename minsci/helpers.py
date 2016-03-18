@@ -310,8 +310,12 @@ def prompt(prompt, validator, confirm=False,
     # Prepare validator
     if isinstance(validator, (str, unicode)):
         validator = re.compile(validator, re.U)
-    elif isinstance(validator, dict):
+    elif isinstance(validator, dict) and sorted(validator.keys()) == ['n', 'y']:
         prompt = u'{}({}) '.format(prompt, '/'.join(validator.keys()))
+    elif isinstance(validator, dict):
+        keys = validator.keys()
+        keys.sort(key=lambda s:s.zfill(100))
+        options = [u'{}. {}'.format(key, validator[key]) for key in keys]
     elif isinstance(validator, list):
         options = [u'{}. {}'.format(x + 1, validator[x])
                    for x in xrange(0, len(validator))]
@@ -323,11 +327,13 @@ def prompt(prompt, validator, confirm=False,
     loop = True
     while loop:
         # Print options
-        if isinstance(validator, list):
+        try:
             print '-' * 60 + '\nOPTIONS\n-------'
             for option in options:
                 cprint(option)
             print '-' * 60
+        except UnboundLocalVariable:
+            pass
         # Prompt for value
         a = raw_input(prompt).decode(sys.stdin.encoding)
         if a.lower() == 'q':
