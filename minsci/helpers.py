@@ -328,12 +328,14 @@ def prompt(prompt, validator, confirm=False,
     while loop:
         # Print options
         try:
+            options
+        except UnboundLocalError:
+            pass
+        else:
             print '-' * 60 + '\nOPTIONS\n-------'
             for option in options:
                 cprint(option)
             print '-' * 60
-        except UnboundLocalVariable:
-            pass
         # Prompt for value
         a = raw_input(prompt).decode(sys.stdin.encoding)
         if a.lower() == 'q':

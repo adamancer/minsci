@@ -1,14 +1,15 @@
-class DMSException(Exception):
+class MinSciException(Exception):
     """Root exception. Used only to except any error, never raised."""
     pass
 
-class DMSException1(DMSException):
-    """Root exception. Used only to except any error, never raised."""
+class PathError(MinSciException):
+    """Called when pull request on DeepDict fails to resolve"""
     pass
 
-class DMSException2(DMSException):
-    """Root exception. Used only to except any error, never raised."""
+class RowMismatch(MinSciException):
+    """Called when columns in table have different numbers of rows"""
     pass
 
-class TaxonNotFound(DMSException):
+class TaxonNotFound(MinSciException):
+    """Called when columns in table have different numbers of rows"""
     pass
