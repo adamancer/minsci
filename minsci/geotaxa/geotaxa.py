@@ -1,3 +1,7 @@
+"""Analyzes and formats classifications for rocks, minerals, and meteorites.
+Identifies deprecated terms, official terms, preferred synonyms,
+and varieities. :code:`pip install bloop`"""
+
 import json as serialize
 import os
 import re
@@ -5,62 +9,14 @@ from copy import copy
 
 from ..exceptions import TaxonNotFound
 from ..helpers import oxford_comma, plural, cprint, rprint
-from ..xmu import xmu
-
-
-class XMu(xmu.XMu):
-
-    def itertax(self, element):
-        """Reads taxonomic hierarchy from narratives export
-
-        @param lxml object
-        """
-        self.record = element
-        irn = self.find('irn')
-        title = self.find('NarTitle')
-        parent = self.find('AssMasterNarrativeRef', 'irn')
-        synonyms = self.find('AssAssociatedWithRef_tab', 'irn')
-        tags = self.find('DesSubjects_tab', 'DesSubjects')
-        taxa = self.find('TaxTaxaRef_tab', 'irn')
-
-        # Read schemes
-        names = self.find('NarType_tab', 'NarType')
-        ids = self.find('NarExplanation_tab', 'NarExplanation')
-        schemes = {}
-        for name, _id in zip(names, ids):
-            try:
-                schemes[name].append(_id)
-            except KeyError:
-                schemes[name] = [_id]
-        # Skip taxa with no parent unless name is "Geological material"
-        if not bool(parent):
-            if title.lower() == 'geological material':
-                parent = None
-            else:
-                return True
-        self.geotaxa.taxa[irn] = {
-            'irn' : irn,
-            'name' : title,
-            'parent' : parent,
-            'synonyms' : synonyms,
-            'tags' : tags,
-            'schemes' : schemes,
-            'taxa_ids' : taxa
-        }
-        key = self.geotaxa.format_key(title)
-        self.geotaxa.map_narratives[key] = irn
-        for taxon in taxa:
-            self.geotaxa.map_emu_taxa[taxon] = irn
-        if not len(self.geotaxa.taxa) % 5000:
-            print u'{:,} records read'.format(len(self.geotaxa.taxa))
-
-
 
 
 class GeoTaxa(object):
 
     def __init__(self, fp=None, force_format=False):
+        # TODO: Fix so that the EMu function is calle manually
         """Read data from EMu export file"""
+        self.hints = {}
         self._fpath = os.path.join(os.path.dirname(__file__), 'files')
         if fp is None:
             fp = os.path.join(self._fpath, 'xmldata.xml')
@@ -97,15 +53,20 @@ class GeoTaxa(object):
 
 
     def __call__(self, taxon, classify_unknown=True):
-        """Returns taxonomic data when instance is called"""
+        """Shorthand for GeoTaxa.find()"""
         return self.find(taxon, classify_unknown)
 
 
     def update_taxonomy(self, source_path, json_path):
-        """Writes JSON file based on EMu export"""
+        """Writes JSON file summarizing the data in the EMu export
+
+        Args:
+            source_path (str): path to EMu export containing taxonomic data
+            json_path (str): path to JSON file to which to write
+        """
         print u'Updating taxonomic data...'
         self.taxa = {}
-        self.map_narratives = {}  # maps taxon name to narrative irn
+        self.map_narratives = {}  # maps taxon to narrative irn
         self.map_emu_taxa = {}    # maps taxon irn to narrative irn
 
         whitelist = [
@@ -141,12 +102,28 @@ class GeoTaxa(object):
 
 
     def format_key(self, key):
-        """Standardize formatting of keys in taxa dictionary"""
+        """Standardize formatting of keys in taxa dictionary
+
+        Args:
+            key (str): a taxon or irn
+
+        Returns:
+            Properly formatted key as string
+        """
         return key.lower().replace(' ', '-')
 
 
     def find(self, taxon, classify_unknown=True):
-        """Returns taxonomic data for a taxon name or narrative irn"""
+        """Returns taxonomic data for a taxon or narrative irn
+
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+            classify_unknown (bool): if True, will attempt to place
+                an unrecognized taxon in the existing hierarchy
+
+        Returns:
+            Dict containing taxonomic data for the given taxon
+        """
         taxon = self.clean_taxon(taxon)
         try:
             int(taxon)
@@ -173,15 +150,27 @@ class GeoTaxa(object):
     def find_emu_taxon(self, irn):
         """Returns taxonomic data for an EMu Taxonomy irn
 
-        For a more general function, use find()"""
-        try:
-            return self.taxa[self.map_emu_taxa(irn)]
-        except KeyError:
-            return self.generate_taxon(taxon)
+        For a more general function, use GeoTaxa.find().
+
+        Args:
+            irn (str): the identification number for a given taxon
+
+        Returns:
+            Dict containing taxonomic data for the taxon at the given irn
+        """
+        return self.taxa[self.map_emu_taxa(irn)]
 
 
     def classify_taxon(self, taxon):
-        """Classify unknown taxon"""
+        """Classify unknown taxon
+
+        Args:
+            taxon (str): an unrecognized type of rock, mineral, or meteorite
+
+        Returns:
+            Taxonomic data for where the unknown taxon was placed into the
+            existing hierarchy
+        """
         taxon = self.clean_taxon(taxon)
         # Confirm tha taxon does not exist
         try:
@@ -217,6 +206,16 @@ class GeoTaxa(object):
 
 
     def _recurse_tree(self, taxon, tree):
+        """Trace classification hierarchy for a given taxon
+
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+            tree (list): the taxonomic hierarchy for the taxon compiled so far.
+                This list is modified as the function proceeds.
+
+        Returns:
+            A list containing the taxonomic hierarchy for the given taxon
+        """
         try:
             parent = self(taxon)['parent']
         except KeyboardInterrupt:
@@ -236,17 +235,33 @@ class GeoTaxa(object):
 
 
     def clean_taxon(self, taxon):
-        """Reformats taxon of the form 'Gneiss, Garnet' to 'Garnet Gneiss'"""
+        """Reformat NMNH index taxa
+
+        Changes taxa of the form "Gneiss, Garnet" to "Garnet Gneiss."
+
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+
+        Returns:
+            Reformatted taxon as a string
+        """
         if taxon.count(',') == 1:
             taxon = ' '.join([s.strip() for s in taxon.split(',')][::-1])
         return taxon
 
 
-    def cap_taxa(self, s, ucfirst=True):
-        """Returns a properly capitalized taxon name"""
+    def cap_taxa(self, taxon, ucfirst=True):
+        """Capitalizes taxon while maintaining proper case for elements, etc.
+
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+
+        Return:
+            Capitalized taxon as a string
+        """
         # Reorder terms and force lower case
-        orig = copy(s)
-        s = s.lower()
+        orig = copy(taxon)
+        s = taxon.lower()
         # Split into words
         p = re.compile('(\W)', re.U)
         try:
@@ -289,6 +304,15 @@ class GeoTaxa(object):
 
 
     def get_official_taxon(self, taxon):
+        """Find the most specific officially recognized taxon for a given tree
+
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+
+        Returns:
+            The name of the closest official taxon, if found, as a string.
+            If no official taxon can be found, returns the original taxon.
+        """
         tdata = self(self.preferred_synonym(taxon))
         if self.is_official(tdata):
             return taxon
@@ -300,6 +324,14 @@ class GeoTaxa(object):
 
 
     def is_official(self, tdata):
+        """Check a taxon is recognized by an authority
+
+        Args:
+            tdata (dict): data about a type of rock, mineral, or meteorite
+
+        Returns:
+            Boolean. True if the given taxon is official, False if not.
+        """
         authorities = {
             'BGS-MAIN': None,
             'BGS-TAS': None,
@@ -319,7 +351,16 @@ class GeoTaxa(object):
 
 
     def clean_taxa(self, taxa, dedupe=False):
-        """Removes duplicate taxa while retaining order"""
+        """Removes duplicate taxa while retaining order
+
+        Args:
+            taxa (list): one or more types of rock, mineral, or meteorite
+            dedupe (bool): if True, remove exact duplicates from the list
+
+        Returns:
+            List of the preferred synonyms for each taxon in the original
+            list, standardized for word order and, if stipulated, deduped
+        """
         taxa = [self.preferred_synonym(self.clean_taxon(taxon))
                 for taxon in taxa if bool(taxon)]
         if dedupe:
@@ -336,27 +377,37 @@ class GeoTaxa(object):
         """Format display name for a specimen based on taxa and other info
 
         This function is intended for single specimens. To format a
-        name for multiple items, use group_name().
+        name for multiple items, use :py:func:`~GeoTaxa.group_name()`.
 
         Args:
-            taxa (list)
-            setting (str)
-            name (str)
+            taxa (list): one or more types of rock, mineral, or meteorite
+            setting (str): kind of object. Necklace, bowl, etc.
+            name (str): proper name of object, if exists
 
         Returns:
             Display name as string
         """
         if bool(name):
             return name
+        # Check hints
+        key = '|'.join([s.lower().strip() for s
+                        in taxa + [setting] if s is not None])
+        try:
+            return self.hints[key]
+        except KeyError:
+            pass
         # Taxa is required if name is not specified
         orig = copy(taxa)
         taxa = [s for s in taxa if bool(s)]
         if not any(taxa):
-            return 'Unidentified object'
+            name = 'Unidentified object'
+            self.hints[key] = name
+            return name
         if not isinstance(taxa, list):
             taxa = [taxa]
         taxa = self.clean_taxa(taxa, True)
-        highest_common_taxon, taxa = self.group_taxa(taxa)
+        taxa = self.group_taxa(taxa)
+        highest_common_taxon = self.highest_common_taxon(taxa)
         # Special handling
         if len(taxa) > 1:
             prepend = ['Catseye', 'Star']
@@ -408,6 +459,8 @@ class GeoTaxa(object):
                 formatted = 'Carved {}'.format(taxa[0].lower() + taxa[1:])
             else:
                 formatted = taxa + ' ' + setting.lower()
+            name = self.cap_taxa(formatted)
+            self.hints[key] = name
             return self.cap_taxa(formatted)
         formatted = []
         for i in xrange(len(taxa)):
@@ -480,16 +533,24 @@ class GeoTaxa(object):
         # We're done! Format the list as a string.
         if len(formatted) > 1:
             primary = formatted.pop(0)
-            return primary + ' with ' + oxford_comma(formatted)
+            name = primary + ' with ' + oxford_comma(formatted)
         else:
-            return ''.join(formatted)
+            name = ''.join(formatted)
+        self.hints[key] = name
+        return name
 
 
     def group_name(self, *taxas):
         """Format display name for a group of specimens, as in a photo
 
-        @param list (of lists)
-        @return string
+        Essentially a wrapper for :py:func:`~GeoTaxa.highest_common_taxon()`
+        at present.
+
+        Args:
+            *taxas: lists of taxa for each object in the group
+
+        Returns:
+            The name of taxon common to the group
         """
         highest_common_taxon = self.highest_common_taxon(taxas)
         if highest_common_taxon.endswith((' Group', 'Series')):
@@ -500,8 +561,12 @@ class GeoTaxa(object):
     def preferred_synonym(self, taxon):
         """Recursively find the preferred synonym for this taxon
 
-        @param string
-        @return string
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+
+        Returns:
+            Preferred synonym as a string, if found. If not, returns the
+            original taxon string.
         """
         taxon = self(taxon)
         while len(taxon['synonyms']):
@@ -513,13 +578,15 @@ class GeoTaxa(object):
         """Group synonyms and varieties for a single specimen
 
         Args:
-            taxa (list): list of taxa from one specimen
+            taxa (list): one or more types of rock, mineral, or meteorite
 
         Returns:
             List of grouped taxa
         """
         if not isinstance(taxa, list):
             taxa = [taxa]
+        if not len(taxa):
+            return []
         taxa = [self.clean_taxon(taxon) for taxon in taxa]
         if len(taxa) == 1:
             return [self(self.preferred_synonym(taxa[0]))['name']]
@@ -547,7 +614,7 @@ class GeoTaxa(object):
         """Identify the most specific common taxonomic element
 
         Args:
-            taxas (list): list of taxa to group
+            taxas: lists of taxa for each object being compared
 
         Returns:
             Highest common taxon as string
