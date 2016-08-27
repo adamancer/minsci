@@ -1,19 +1,24 @@
 """Read and write XML for Axiell EMu"""
 
+import collections
 import glob
 import hashlib
 import os
 from copy import copy
+from datetime import datetime
 
 from lxml import etree
 
-from .fields import XMuFields, DeepDict
+from .deepdict import XMuRecord
+from .fields import XMuFields, is_table, is_reference
+from ..exceptions import PathError, RowMismatch
 from ..helpers import cprint, rprint
 
+FIELDS = XMuFields()
 
 class XMu(object):
 
-    def __init__(self, path, fields=None):
+    def __init__(self, path, fields=None, container=None, module=None):
         """Read and search XML export files from EMu
 
         Attributes:
@@ -29,58 +34,93 @@ class XMu(object):
             path (str): path to EMu XML report or directory containing
                 multiple reports. If multiple reports are found, they
                 are handled from newest to oldest.
-            fields: an XMuFields object
+            fields (XMuFields): contains data about field
+            container (DeepDict): class to use to store EMu data
         """
         # Class-wide switches
         self.verbose = False
-        self.module = None
+        self.module = module
 
-        # Create fields if not defined
+        # Create a fields object based on the path if none provided
         if fields is None:
-            fields = XMuFields()
+            fields = FIELDS
         self.fields = fields
-        self.schema = fields.schema
-        self.tables = fields.tables
+
+        # DeepDict or subclass to use as container for EMu data
+        if container is None:
+            container = XMuRecord
+        self._container = container
+
+        self.xpaths = []
+        self.newest = []
+        self._files = []
+        self._paths_found = {}
 
         # Handle a directory
-        if os.path.isdir(path):
-            self._files = [fp for fp in
-                           glob.glob(os.path.join(path,'*.xml'))]
-            self._files.sort(key=lambda fp: os.path.getmtime(fp),
-                             reverse=True)
+        if path is None:
+            xpaths = []
+        elif os.path.isdir(path):
+            self._files = [fp for fp in glob.glob(os.path.join(path,'*.xml'))]
+            self._files.sort(key=lambda fp: os.path.getmtime(fp), reverse=True)
             xpaths = []
             for fp in self._files:
                 xpaths.extend(self.fields.read_fields(fp))
-            self.xpaths = list(set(xpaths))
+            xpaths = list(set(xpaths))
         elif path.endswith('.xml'):
-            self.xpaths = self.fields.read_fields(path)
+            xpaths = self.fields.read_fields(path)
             self._files = [path]
         else:
             raise
-        for path in self.xpaths:
-            self.fields(path)
-        self.module = self.xpaths[0].split('.')[0]
-        self.newest = max([os.path.getmtime(fp) for fp in self._files])
+        # Check that all xpaths are valid according to schema
+        remove = []
+        for i in xrange(len(xpaths)):
+            path = xpaths[i].split('/')
+            try:
+                self.fields(*path)
+            except:
+                cprint('Removed invalid path: {}'.format('/'.join(path)))
+                remove.append(path)
+        self.xpaths = [xpath for xpath in xpaths if not xpath in remove]
+        # Record basic metadata about the import file
+        if xpaths or self.module is None:
+            self.module = self.xpaths[0].split('/')[0]
+            self.newest = max([os.path.getmtime(fp) for fp in self._files])
         self._paths_found = {}
 
 
-    def fast_iter(self, callback, report=0, stop=0):
-        """Iterate through EMu export using callback function
+    def container(self, *args):
+        container = self._container(*args)
+        container.fields = self.fields
+        container.module = self.module
+        return container
+
+
+    def fast_iter(self, func, report=0, stop=0, callback=None):
+        """Use callback to iterate through an EMu export file
 
         Args:
-          callback (function): name of callback function
-          report_progress (int): number of records at which to report
-            progress. If 0, no progress report is made.
+            func (function): name of iteration function
+            report (int): number of records at which to report
+                progress. If 0, no progress report is made.
+            stop (int): number of record at which to stop
+            callback (function): name of function to run upon completion
+
+        Returns:
+            Boolean indicating whether the entire file was processed
+            successfully.
         """
+        if report:
+            starttime = datetime.now()
         n = 0
         for fp in self._files:
-            cprint('Reading {}...'.format(fp))
+            if report:
+                cprint('Reading {}...'.format(fp))
             context = etree.iterparse(fp, events=['end'], tag='tuple')
             for event, element in context:
                 # Process children of module table only
                 parent = element.getparent().get('name')
                 if parent is not None and parent.startswith('e'):
-                    result = callback(element)
+                    result = func(element)
                     if result is False:
                         del context
                         return False
@@ -89,27 +129,75 @@ class XMu(object):
                         del element.getparent()[0]
                     n += 1
                     if report and not n % report:
-                        print '{:,} records processed!'.format(n)
+                        now = datetime.now()
+                        dt = now - starttime
+                        starttime = now
+                        print '{:,} records processed! (t={}s)'.format(n, dt)
                     if stop and not n % stop:
                         del context
                         return False
             del context
         print '{:,} records processed!'.format(n)
+        if callback is not None:
+            callback()
         return True
-        # Notify user paths checked and found
-        #print 'Path information:'
-        #for key in sorted(self._paths_found):
-        #    val = self._paths_found[key]
-        #    print key + ': ', max(val)
 
 
-    def find(self, *args):
+    def read(self, root, keys=None, result=None, counter=None):
+        """Read an EMu XML record to a dictionary
+
+        This is much faster than iterating through the XMu.xpaths list.
+
+        Args:
+            root (lxml.etree): an EMu XML record
+            keys (list): parents of the current key
+            result (XMuRecord): path-keyed representation of root updated as
+                the record is read
+            counter (dict): tracks row counts by path
+
+        Returns:
+            Path-keyed dictionary representing root
+        """
+        if keys is None:
+            keys = [self.module]
+        if result is None:
+            result = self.container()
+        if counter is None:
+            counter = {}
+        for child in root:
+            name = child.get('name')
+            # Check for tuples
+            if name is None:
+                path = tuple(keys)
+                try:
+                    counter[path] += 1
+                except KeyError:
+                    counter[path] = 0
+                name = counter[path]
+            keys.append(name)
+            if not len(child):
+                # lxml always returns ascii-encoded strings in Python2, so
+                # so convert to unicode here
+                val = unicode(child.text) if child.text is not None else u''
+                # Handle gaps in tables where the fields are also references
+                if val == '\n      ' and isinstance(keys[-1], int):
+                    keys.append(None)
+                    result.push(None, *keys)
+                    keys.pop()
+                else:
+                    result.push(val.strip(), *keys)
+            else:
+                result = self.read(child, keys, result)
+            keys.pop()
+        return result
+
+
+    def find(self, record, *args):
         """Return value(s) for a given path in the EMu XML export
 
         Args:
-            *args (str): strings comprising the full path to a given field
-              within XMuFields.record. Each components along the path should
-              be a separate argument, i.e., ('BioEventSiteRef', 'irn')
+            record (lxml.etree.ElementTree): EMu-formated XML
+            *args (str): strings comprising the path to a field
 
         Returns:
             String (for atomic field) or list (for table) containing
@@ -137,35 +225,9 @@ class XMu(object):
         return results
 
 
-    def read(self, root, module, keys=None, result=None):
-        """Read an EMu XML record to a dictionary
-
-        This is much faster than iterating through the XMu.xpaths list.
-
-        Args:
-            root (lxml.etree): an EMu XML record
-            keys (list): parents of the current key
-            result (dict): path-keyed representation of root assembled so far
-
-        Returns:
-            Path-keyed dictionary representing root
-        """
-        if keys is None:
-            keys = [module]
-        if result is None:
-            result = {}
-        for child in root:
-            name = child.get('name')
-            keys.append(name)
-            if child.text and bool(child.text.strip()):
-                path = '.'.join([key for key in keys if key is not None])
-                result.setdefault(path, []).append(child.text)
-            else:
-                result = self.read(child, module,keys, result)
-            keys.pop()
-        return result
-
-
+    # TODO: Deprecated in favor of below, but need to integrate the handler
+    # and validation functions.
+    '''
     def write(self, fp, records, module='ecatalogue', handlers=None):
         """Write EMu import file based on records
 
@@ -203,7 +265,7 @@ class XMu(object):
             # group append. This can be overridden using the handlers dict.
             irn_fields = ['{}.irn'.format(module)]
             try:
-                irn_fields.append(self.schema.pull(irn_fields[0])['alias'])
+                irn_fields.append(self.fields(irn_fields[0])['alias'])
             except KeyError:
                 pass
             for key in irn_fields:
@@ -342,71 +404,7 @@ class XMu(object):
         print '{:,} records written!'.format(row_num)
         root.getroottree().write(fp, pretty_print=True,
                                  xml_declaration=True, encoding='utf-8')
-
-
-    def _write(self, path, d, xml, module, handlers):
-        """Recursively write XML for EMu
-
-        Writes both new and update import files; including an irn triggers
-        an update. Recordsets can mix and match create and update.
-
-        Args:
-            path (str): path
-            d (dict): a complete record
-            xml (lxml.etree): the XML document
-            module (str): module to import to
-            handlers (dict): field-keyed dictionary with instructions for
-                special handling. Key is the name of the table.
-
-        Returns:
-            An EMu-formatted lxml object
-        """
-        try:
-            d = d[path]
-        except AttributeError:
-            raise
-        except KeyError:
-            raise
-        else:
-            try:
-                paths = d.keys()
-            except AttributeError:
-                atom = etree.SubElement(xml, 'atom')
-                atom.set('name', path)
-                atom.text = d
-            else:
-                if path.isnumeric():
-                    # How to add group and append?
-                    xml = etree.SubElement(xml, 'tuple')
-                    try:
-                        name = xml.getparent().get('name')
-                        attr = handlers[name]
-                    except KeyError:
-                        pass
-                    else:
-                        for key in attr:
-                            if attr[key] is not None:
-                                xml.set(key, attr[key])
-                                if key == 'row':
-                                    # Get unique group ids by hashing tables
-                                    tkey = '{}.{}'.format(module, name)
-                                    table = self.fields.map_tables[tkey]
-                                    s = '.'.join(sorted(table))
-                                    h = hashlib.md5(s).hexdigest()
-                                    xml.set('group', '{}_{}'.format(h, path))
-                elif path.endswith(('0', '_nesttab', '_nesttab_inner', '_tab')):
-                    xml = etree.SubElement(xml, 'table')
-                    xml.set('name', path)
-                elif path.endswith(('Ref')):
-                    xml = etree.SubElement(xml, 'tuple')
-                    xml.set('name', path)
-                elif bool(path) and not path.startswith(('e', 'l')):
-                    xml = etree.SubElement(xml, 'atom')
-                    xml.set('name', path)
-                for path in sorted(paths):
-                    self._write(path, d, xml, module, handlers)
-                xml = xml.getparent()
-        return xml
+    '''
 
 
     def harmonize(self, new_val, old_val, path, action='fill'):
@@ -440,116 +438,209 @@ class XMu(object):
             return new_val, False
 
 
-    def fill_paths(self, record):
-        """Map all keys in a single record from an alias to a full path
+class XMuString(unicode):
 
-        The opposite function is XMu.alias_paths().
-
-        Args:
-            record (dict): a complete record
-
-        Returns:
-            Tuple (record, keymap), where record is the record rekeyed to
-            full paths and keymap contains the mapping between the aliases
-            and full paths
-        """
-        keymap = dict([(self.fields(key)['path'], key) for key in record])
-        record = dict([(self.fields(key)['path'], record[key])
-                        for key in record])
-        return record, keymap
+    def __init__(self, *args, **kwargs):
+        super(XMuString, self).__init__(*args, **kwargs)
+        self._dict = {}
 
 
-    def alias_paths(self, record, keymap):
-        """Map all keys in record from full path to alias
-
-        The opposite function is XMu.fill_paths().
-
-        Args:
-            record (dict): a complete record
-
-        Returns:
-            Record rekeyed to use aliases
-        """
-        for key in [key for key in record.keys() if key != keymap[key]]:
-            record[keymap[key]] = record[key]
-            del record[key]
-        return record
+    def get(self, key):
+        return self._dict[key]
 
 
-    def pad_tables(self, record):
-        """Pad tables to same length
-
-        Args:
-            record (dict): a complete record
-
-        Returns:
-
-        """
-        record, keymap = self.fill_paths(record)
-        for path in record:
-            try:
-                related = self.fields(path)['table_fields']
-            except KeyError:
-                # Not a table
-                pass
-            else:
-                paths = [path for path in related if path in record]
-                if len(paths) > 1:
-                    maxlen = max([len(record[path]) for path in paths
-                                  if len(record[path])])
-                    for path in paths:
-                        record[path] += [''] * (maxlen - len(record[path]))
-        return self.alias_paths(record, keymap)
+    def set(self, key, val):
+        self._dict[key] = val
 
 
-def instant(subclass, module, path=None):
-    """Convenience function to create a simple XMu object
+    def delete(self, key):
+        del self._dict[key]
+
+
+def check_table(rec, *args):
+    try:
+        return check_columns(*[rec.smart_pull(arg) for arg in args])
+    except TypeError:
+        rec.pprint()
+        raise
+
+
+def check_columns(*args):
+    """Check if columns in the same table are the same length
 
     Args:
-        module (str): the name of the module
-        path (str): path to an EMu export file
+        *args: Lists of value for each column
     """
-    fields = XMuFields(whitelist=module, source_path=path)
-    fields.set_aliases(module)
-    return subclass(path, fields)
+    if len(set([len(arg) for arg in args if arg is not None and len(arg)])) > 1:
+        raise RowMismatch(args)
 
 
-def make_fields(module):
-    """Convenience function to create a simple XMuFields object
+def _emuize(record, root=None, path=None, handlers=None,
+            module=None, fields=None, group=None):
+    """Formats record in XML suitable for EMu
 
     Args:
-        module (str): name of module
+        record (minsci.xmu.XMuRecord): contains data to be written
+        root (lxml.etree.ElementTree): XML document updated as the
+            record is written
+        path (str):
 
-    Returns:
-        XMuFields object, or None if module is not recognized
+    Return:
+        EMu-formatted XML
     """
-    if module == 'ecatalogue':
-        whitelist = [
-            'ebibliography',
-            'ecatalogue',
-            'ecollectionevents',
-            'elocations',
-            'emultimedia',
-            'enmnhanalysis',
-            'enmnhorig',
-            'enmnhtransactions',
-            'eparties',
-            'etaxonomy'
-            ]
-        expand = [
-            ('ecatalogue.BioEventSiteRef', 'eparties.irn'),
-            ('ecatalogue.PetChemicalAnalysisRef_tab', 'eparties.irn')
-            ]
-        fields = XMuFields(whitelist=whitelist, expand=expand)
-
-        fields.set_aliases('ecatalogue')
-        fields.set_aliases('ecollectionevents', 'ecatalogue.BioEventSiteRef')
-        fields.set_aliases('etaxonomy', 'ecatalogue.IdeTaxonRef_tab')
-        fields.set_aliases('enmnhanalysis',
-                           'ecatalogue.PetChemicalAnalysisRef_tab')
-        fields.set_aliases('enmnhtransactions', 'ecatalogue.AcqTransactionRef')
-        fields.set_aliases('ebibliography', 'ecatalogue.BibBibliographyRef_tab')
-        fields.set_aliases('emultimedia', 'ecatalogue.MulMultiMediaRef_tab')
+    if root is None:
+        module = record.keys()[0]
+        root = etree.Element('table')
+        root.set('name', module)
+        root.addprevious(etree.Comment('Data'))
+    if path is None:
+        path = root.getroottree().getroot().get('name')
+        root = etree.SubElement(root, 'tuple')
+    if handlers is None:
+        handlers = {}
+    if fields is None:
+        fields = record.fields
+    record = record[path]
+    # Check if for append, prepend, and replacement operators. If found,
+    # determines the necessary attributes and passes it to any immediate
+    # children.
+    if hasattr(path, 'endswith') and path.endswith(')'):
+        path = path.rstrip('(+)')
+        try:
+            table = fields.map_tables[(module, path)]
+        except KeyError:
+            # Check for tables that aren't being handled
+            if path.endswith('tab'):
+                print 'Unassigned column: {}'.format(path)
+        except AttributeError:
+            pass
+        else:
+            group = '|'.join(['|'.join(field) for field in sorted(table)])
+    if isinstance(record, (int, str, unicode)):
+        atom = etree.SubElement(root, 'atom')
+        atom.set('name', path.rstrip('_'))
+        try:
+            atom.text = str(record)  # FIXME
+        except UnicodeEncodeError:
+            atom.text = record
     else:
-        return None
-    return fields
+        try:
+            paths = record.keys()
+        except AttributeError:
+            paths = [i for i in xrange(len(record))]
+        if isinstance(path, (int, long)):
+            root = etree.SubElement(root, 'tuple')
+            # Add append attributes if required
+            if group is not None:
+                group = hashlib.md5(group + '|{}'.format(path)).hexdigest()
+                root.set('row', '+')
+                root.set('group', group)
+                group = None
+        elif is_table(path):
+            root = etree.SubElement(root, 'table')
+            root.set('name', path)
+        elif is_reference(path):
+            root = etree.SubElement(root, 'tuple')
+            root.set('name', path)
+        for path in _sort(paths):
+            _emuize(record, root, path, handlers, module, fields, group)
+        # Get parent returns None when you hit the outermost container
+        parent = root.getparent()
+        if parent is not None:
+            root = parent
+    return root
+
+
+def _sort(paths):
+    paths.sort()
+    if 'OpeDateToRun' in paths:
+        group = ('OpeExecutionTime', 'OpeDateToRun', 'OpeTimeToRun')
+        for path in group:
+            paths.remove(path)
+        paths.extend(group)
+    return paths
+
+
+
+def _check(rec, module=None):
+    # Check for irn, formatting the record to update if present
+    if module is None:
+        module = rec.module
+    try:
+        rec.fields
+    except AttributeError:
+        print 'Warning: Could not check tables'
+        return rec
+    else:
+        if rec.fields is None:
+            print 'Warning: Could not check tables'
+            return rec
+    # Convert values to XMuStrings and add attributes as needed
+    tables = []
+    for key in rec.keys():
+        try:
+            table = rec.fields.map_tables[(module, key.strip('+'))]
+        except KeyError:
+            # Check for tables that aren't being handled
+            if key.endswith('tab'):
+                print 'Unassigned column: {}'.format(key)
+            # Convert strings to XMuStrings
+            #path, val = rec.smart_drill(key)[0]
+            #rec.push(rec.pull(*path), *path)
+        else:
+            # Assign row and group attributes if appropriate
+            fields = [field[1] for field in table]
+            if key.endswith('+'):
+                fields = [field + '+' for field in fields]
+            tables.append(fields)
+    # Verify that all columns in tables are the correct length
+    for table in tables:
+        check_table(rec, *table)
+    return rec
+
+
+def emuize(records, module=None):
+    """
+
+    Args:
+        records (list): list of records
+        module (str): name of module
+    """
+    if module is None:
+        module = records[0].module
+    checked = [_check(rec, module) for rec in records]
+    root = None
+    for rec in checked:
+        try:
+            root = _emuize(rec.wrap(module), root, module=module)
+        except:
+            rec.pprint()
+            raise
+    return root
+
+
+def write(fp, records, module=None):
+    """Convenience function for formatting and writing EMu XML
+
+    Args:
+        fp (str): path to file
+        records (list): list of XMuRecord() objects
+        module (str): name of module
+    """
+    _writer(fp, emuize(records, module))
+
+
+def _writer(fp, root):
+    """Write EMu-formatted XML to file
+
+    Args:
+        root (lxml.etree.ElementTree): EMu-formatted XML. This can be
+            generated using XMu.format().
+        fp (str): path to file
+    """
+    n = 1
+    for rec in list(root):
+        rec.addprevious(etree.Comment('Row {}'.format(int(n))))
+        n += 1
+    root.getroottree().write(fp, pretty_print=True,
+                             xml_declaration=True, encoding='utf-8')
