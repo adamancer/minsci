@@ -1,0 +1,2 @@
+# Tables (as Nickname, Field)
+Method,DetAnalyticalMethod_tab

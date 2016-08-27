@@ -1,0 +1,7 @@
+# Tables (as Nickname, Field)
+GUIDs,AdmGUIDIsPreferred_tab
+GUIDs,AdmGUIDType_tab
+GUIDs,AdmGUIDValue_tab
+Authors,ArtAuthorsRef_tab
+Authors,ArtRole_tab
+Multimedia,MulMultiMediaRef_tab

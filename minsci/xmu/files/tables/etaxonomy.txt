@@ -1,0 +1,6 @@
+# Tables (as Nickname, Field)
+Citations,CitCitedInRef_tab
+Citations,CitPrimary_tab
+Citations,CitRemarks_tab
+Rank,ClaOtherRank_tab
+Rank,ClaOtherValue_tab

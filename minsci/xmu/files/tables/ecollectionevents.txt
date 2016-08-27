@@ -36,6 +36,7 @@ LatLong,LatCentroidLongitudeDec_tab
 LatLong,LatDeriveCentroid_tab
 LatLong,LatCentroidLongitudeDec_tab
 LatLong,LatGeoreferencingNotes0
+LatLong,LatPreferred_tab
 UTM,MapUTMEastingFloat_tab
 UTM,MapUTMNorthingFloat_tab
 UTM,MapUTMZone_tab

@@ -1,0 +1,3 @@
+# Tables (as Nickname, Field)
+Notify,OpeNotifyCompleteRef_tab
+ToProcess,IrnsToBeProcessedRef_tab

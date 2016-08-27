@@ -1,0 +1,6 @@
+# Tables (as Nickname, Field)
+Creator,MulCreator_tab
+Collection,DetCollectionName_tab
+Subjects,DetSubject_tab
+Supplementary,Supplementary_tab
+Supplementary,SupUsage_nesttab
