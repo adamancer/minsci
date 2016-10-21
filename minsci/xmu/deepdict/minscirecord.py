@@ -15,7 +15,8 @@ class MinSciRecord(XMuRecord):
         super(MinSciRecord, self).__init__(*args)
 
 
-    def get_identifier(self, include_code=True, include_div=False):
+    def get_identifier(self, include_code=True, include_div=False,
+                       force_catnum=False):
         """Derive sample identifier based on record
 
         Args:
@@ -27,7 +28,7 @@ class MinSciRecord(XMuRecord):
         """
         metnum = self('MetMeteoriteName')
         suffix = self('CatSuffix')
-        if ANTMET.match(metnum):
+        if ANTMET.match(metnum) and not force_catnum:
             if suffix == metnum:
                 return metnum
             else:
@@ -84,8 +85,8 @@ class MinSciRecord(XMuRecord):
                 break
         else:
             taxa = []
-        # HACK: Get rid of empty list in empty row. This is a problem
-        # with how gaps in tables are read from the export file.
+        # Get rid of empty list in empty row. This is a problem with how gaps
+        # in tables are read from the export file.
         taxa = [taxon if taxon else '' for taxon in taxa]
         if not isinstance(taxa, list):
             taxa = [taxa]
@@ -99,16 +100,43 @@ class MinSciRecord(XMuRecord):
 
 
     def get_guid(self, kind='EZID'):
-        guids = rec('AdmGUIDValue_tab', 'AdmGUIDValue')
-        return [guid for guid in guids if guid.startswith('ark:/')][0]
+        """Get value from the GUID table for a given key
+
+        Args:
+            kind (str): name of GUID
+
+        Returns:
+            First match from the GUID table for the key
+        """
+        matches = self._get_rows(kind, 'AdmGUIDType_tab', 'AdmGUIDValue_tab')
+        try:
+            return matches[0]
+        except IndexError:
+            return None
 
 
     def get_field_numbers(self):
-        kinds = rec('CatOtherNumbersType_tab', 'CatOtherNumbersType')
-        values = rec('CatOtherNumbersValue_tab', 'CatOtherNumbersValue')
-        field_nums = []
-        for i in xrange(len(kinds)):
-            kind = kinds[i].lower()
-            if kind == "collector's field number":
-                field_numbers.append(values[i])
-        return field_nums
+        """Gets all the collector's field numbers for a record"""
+        return self._get_rows("Collector's field number",
+                              'CatOtherNumbersType_tab',
+                              'CatOtherNumbersValue_tab')
+
+
+    def _get_rows(self, match, label_field, value_field):
+        """Helper function to find rows in any table matching a kind/label
+
+        Args:
+            match (str): the name of the label to match
+            label_field (str): field in a table containing the label
+            value_field (str): field in a table containing the value
+
+        Returns:
+            List of values matching the match string
+        """
+        rows = zip(self(label_field), self(value_field))
+        match = standardize(match)
+        return [val for label, val in rows if standardize(label) == match]
+
+
+def standardize(s):
+    return re.sub('[^\W]', '', s.upper()).upper()
