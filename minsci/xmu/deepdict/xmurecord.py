@@ -10,14 +10,15 @@ class XMuRecord(DeepDict):
         self.tabends = ('0', '_nesttab', '_nesttab_inner', '_tab')
         self.fields = None
         self.module = None
+        self.found = []
 
 
-    def __call__(self, *args):
+    def __call__(self, *args, **kwargs):
         """Shorthand for XMuRecord.smart_pull(*args)"""
         return self.smart_pull(*args)
 
 
-    def smart_pull(self, *args):
+    def smart_pull(self, *args, **kwargs):
         """Pull data from the record, formatting the result based on the path
 
         Args:
@@ -32,24 +33,37 @@ class XMuRecord(DeepDict):
                 A reference table that specifies a field returns a list
                 A reference table returns a list of XMuRecord objects
         """
-        # Reference tables return a list of dictionaries
-        # Reference tables that specify a field return a list of values
+        # Reference tables return a list of dictionaries, unless a field
+        # is specified, in which case they return a list of values
         if [arg for arg in args if arg.endswith('Ref_tab')]:
-            return self.get_reference(*args)
+            retval = self.get_reference(*args, **kwargs)
         # One-dimensional tables return a list of values
         elif [arg for arg in args if arg.endswith(self.tabends)]:
-            return self.get_rows(*args)
-        # Atomic references return a single dictionary
-        # Atomic fields return a value
+            retval = self.get_rows(*args, **kwargs)
+        # Atomic references return a single dictionary, whereas atomic
+        # fields return a value
         else:
             try:
-                val = self.pull(*args)
+                val = self.pull(*args, **kwargs)
             except PathError:
-                return ''
+                retval = ''
             else:
-                return val if val is not None else ''
+                retval = val if val is not None else ''
+        # Verify path against the schema if no value is returned. A failed
+        # call does not itself return an error because not all fields will
+        # be present in all records.
+        if not retval:
+            path = [self.module] + list(args)
+            try:
+                self.fields.schema(*path)
+            except AttributeError:
+                pass
+            except KeyError:
+                raise PathError('/'.join(args))
+        return retval
 
 
+    '''
     def smart_push(self, val, *args):
         """Add value to paths stipulated by args
 
@@ -95,9 +109,10 @@ class XMuRecord(DeepDict):
                     d = [self.__class__()]
                 d = d[-1]
         d[args[-1].rstrip('+')] = val
+    '''
 
 
-    def get_rows(self, *args):
+    def get_rows(self, *args, **kwargs):
         """Returns a list of values corresponding to the table rows
 
         Args:
@@ -129,7 +144,7 @@ class XMuRecord(DeepDict):
             return rows
 
 
-    def get_reference(self, *args):
+    def get_reference(self, *args, **kwargs):
         """Returns a list of values corresponding to the table rows
 
         Args:
