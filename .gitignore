@@ -20,3 +20,6 @@ README.rst
 *_helpers.py
 *_old.py
 *.pl
+
+# Precompiled Sphinx docs
+/docs/
