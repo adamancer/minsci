@@ -3,6 +3,7 @@
 import collections
 import glob
 import hashlib
+import json
 import os
 from copy import copy
 from datetime import datetime
@@ -14,7 +15,9 @@ from .fields import XMuFields, is_table, is_reference
 from ..exceptions import PathError, RowMismatch
 from ..helpers import cprint, rprint
 
+
 FIELDS = XMuFields()
+
 
 class XMu(object):
 
@@ -38,6 +41,8 @@ class XMu(object):
             container (DeepDict): class to use to store EMu data
         """
         # Class-wide switches
+        self.path = path
+        self.keep = []
         self.verbose = False
         self.module = module
 
@@ -56,7 +61,7 @@ class XMu(object):
         self._files = []
         self._paths_found = {}
 
-        # Handle a directory
+        # Walk through a directory
         if path is None:
             xpaths = []
         elif os.path.isdir(path):
@@ -73,8 +78,8 @@ class XMu(object):
             raise
         # Check that all xpaths are valid according to schema
         remove = []
-        for i in xrange(len(xpaths)):
-            path = xpaths[i].split('/')
+        for xpath in xpaths:
+            path = xpath.split('/')
             try:
                 self.fields(*path)
             except:
@@ -89,13 +94,19 @@ class XMu(object):
 
 
     def container(self, *args):
+        """Wraps dict in custom containter with attributes needed for export"""
         container = self._container(*args)
         container.fields = self.fields
         container.module = self.module
         return container
 
 
-    def fast_iter(self, func, report=0, stop=0, callback=None):
+    def iterate(self, element):
+        raise Exception('No xmu.iterate() function is defined'
+                        ' for this subclass')
+
+
+    def fast_iter(self, func=None, report=0, stop=0, callback=None, **kwargs):
         """Use callback to iterate through an EMu export file
 
         Args:
@@ -109,9 +120,13 @@ class XMu(object):
             Boolean indicating whether the entire file was processed
             successfully.
         """
+        if func is None:
+            func = self.iterate
         if report:
             starttime = datetime.now()
+        go = True
         n = 0
+        m = 0
         for fp in self._files:
             if report:
                 cprint('Reading {}...'.format(fp))
@@ -120,27 +135,51 @@ class XMu(object):
                 # Process children of module table only
                 parent = element.getparent().get('name')
                 if parent is not None and parent.startswith('e'):
-                    result = func(element)
+                    n += 1
+                    result = func(element, **kwargs)
                     if result is False:
-                        del context
-                        return False
+                        go = False
+                        break
+                    elif result is not True:
+                        m += 1
                     element.clear()
                     while element.getprevious() is not None:
                         del element.getparent()[0]
-                    n += 1
                     if report and not n % report:
                         now = datetime.now()
                         dt = now - starttime
                         starttime = now
-                        print '{:,} records processed! (t={}s)'.format(n, dt)
+                        print ('{:,} records processed! ({:,}'
+                               ' successful, t={}s)').format(n, m, dt)
                     if stop and not n % stop:
-                        del context
-                        return False
+                        go = False
+                        break
             del context
-        print '{:,} records processed!'.format(n)
+            if not go:
+                break
+        print '{:,} records processed! ({:,} successful)'.format(n, m)
         if callback is not None:
             callback()
         return True
+
+
+    def save(self):
+        """Save attributes listed in the self.keep as json"""
+        fp = os.path.splitext(self.path)[0] + '.json'
+        data = {key: getattr(self, key) for key in self.keep}
+        json.dump(data, open(fp, 'wb'))
+
+
+    def load(self):
+        """Load data from json file created by self.save"""
+        fp = os.path.splitext(self.path)[0] + '.json'
+        data = json.load(open(fp, 'rb'))
+        [setattr(self, key, data[key]) for key in data]
+        self.from_json = True
+
+
+    def set_keep(self, fields):
+        self.keep = fields
 
 
     def read(self, root, keys=None, result=None, counter=None):
@@ -176,7 +215,7 @@ class XMu(object):
                 name = counter[path]
             keys.append(name)
             if not len(child):
-                # lxml always returns ascii-encoded strings in Python2, so
+                # lxml always returns ascii-encoded strings in Python 2, so
                 # so convert to unicode here
                 val = unicode(child.text) if child.text is not None else u''
                 # Handle gaps in tables where the fields are also references
@@ -192,11 +231,11 @@ class XMu(object):
         return result
 
 
-    def find(self, record, *args):
+    def find(self, rec, *args):
         """Return value(s) for a given path in the EMu XML export
 
         Args:
-            record (lxml.etree.ElementTree): EMu-formated XML
+            rec (lxml.etree.ElementTree): XML formatted for EMu
             *args (str): strings comprising the path to a field
 
         Returns:
@@ -206,7 +245,7 @@ class XMu(object):
         """
         xpath = self.fields('.'.join(args), self.module)['xpath']
         results = []
-        for child in self.record.xpath(xpath):
+        for child in self.rec.xpath(xpath):
             if child.text:
                 text = unicode(child.text)
                 results.append(text)
@@ -223,188 +262,6 @@ class XMu(object):
             except IndexError:
                 results = u''
         return results
-
-
-    # TODO: Deprecated in favor of below, but need to integrate the handler
-    # and validation functions.
-    '''
-    def write(self, fp, records, module='ecatalogue', handlers=None):
-        """Write EMu import file based on records
-
-        Writes both new and update import files; including an irn triggers
-        an update. Recordsets can mix and match create and update.
-
-        Args:
-            fp (str): path to which to write the import
-            records (dict): records to Write
-            module (str): module to import to
-            handlers (dict): field-keyed dictionary with instructions for
-                special handling. Key is the name of the table.
-        """
-        if handlers is not None:
-            orig_handlers = {}
-            for key in handlers:
-                if handlers[key] == 'append':
-                    orig_handlers[key] = {'row': '+'}
-                elif handlers[key] == 'overwrite':
-                    orig_handlers[key] = {'row': None}
-                elif handlers[key] == 'prepend':
-                    orig_handlers[key] = {'row': '-'}
-                else:
-                    rprint('Inavlid handler: {}'.format(key))
-        else:
-            orig_handlers = {}
-        root = etree.Element('table')
-        root.set('name', module)
-        root.addprevious(etree.Comment('Data'))
-
-        row_num = 1
-        for rid in sorted(records.keys(), key=lambda s:str(s).zfill(1024)):
-            # Check for irn. If populated, treat as an update, in which the
-            # default behavior for fields is overwrite and for tables is
-            # group append. This can be overridden using the handlers dict.
-            irn_fields = ['{}.irn'.format(module)]
-            try:
-                irn_fields.append(self.fields(irn_fields[0])['alias'])
-            except KeyError:
-                pass
-            for key in irn_fields:
-                try:
-                    irn = records[rid][key]
-                except KeyError:
-                    pass
-                else:
-                    if bool(irn):
-                        update = True
-                        break
-            else:
-                update = False
-            # Set up handlers
-            handlers = copy(orig_handlers)
-            # Rekey to full paths
-            row = DeepDict()
-            tables = {}
-            #print rid
-            #cprint(records[rid].keys())
-            #print '-' * 60
-            for alias in records[rid].keys():
-                update_field = update
-                # Incude values if populated
-                val = records[rid][alias]
-                try:
-                    orig_path = self.fields(alias)['path']
-                except KeyError:
-                    # These two prefixes have no exactly corresponding
-                    # EMu field and can safely be ignored. Any data
-                    # they contain should be mapped as part of validation.
-                    if not alias.startswith(('NoEMu', 'RowNumber')):
-                        print 'Error: {}'.format(alias)
-                        path = '.'.join('.'.split(alias)[:-1])
-                        raise
-                    continue
-                # FIXME: Generalize to all ref tables
-                if (orig_path.startswith('ecatalogue.BioEventSiteRef')
-                    and orig_path != 'ecatalogue.BioEventSiteRef.ecollectionevents.irn'):
-                    update_field = True
-                # Check for special handling for tables
-                if update_field:
-                    keys = [cmp for cmp in orig_path.split('.')  if cmp.endswith(
-                            ('0', '_nesttab', '_nesttab_inner', '_tab'))]
-                    for key in keys:
-                        try:
-                            handlers[key]['row']
-                        except KeyError:
-                            # Exclude inner part of nested tables
-                            if not key.endswith('_inner'):
-                                handlers.setdefault(key, {})['row'] = '+'
-                        except TypeError:
-                            # FIXME: This is hacky
-                            pass
-                try:
-                    populated = any(val)
-                except TypeError:
-                    populated = any(str(val))
-                if populated or update_field:
-                    # Exclude paths that start with the wrong module
-                    if not orig_path.startswith(module):
-                        continue
-                    path = self.fields.bracketize_path(orig_path)
-                    if '{0}' in path:
-                        for i in xrange(len(val)):
-                            row.push(path.format(i), val[i])
-                        if not len(val) and update_field:
-                            row.push(path.format(0), '')
-                    else:
-                        row.push(path, val)
-                    # Identify fields that are part of the same table
-                    try:
-                        table = self.fields(orig_path)['table_fields']
-                    except KeyError:
-                        pass
-                    else:
-                        tables.setdefault(hash(table), []).append(orig_path)
-            # Get length of longest table
-            row_paths = row.pathfinder()
-            lengths = []
-            for path in row_paths:
-                try:
-                    lengths.append(max([int(cmp) for cmp in path.split('.')
-                                        if cmp.isnumeric()]))
-                except ValueError:
-                    pass
-            try:
-                i_max = max(lengths)
-            except ValueError:
-                i_max = 0
-            # Clean up tables
-            for key in tables:
-                table = tables[key]
-                bracketized = [self.fields.bracketize_path(path)
-                               for path in table]
-                # Fill table based on data from this row
-                temp = []
-                for path in bracketized:
-                    i = 0
-                    while i <= i_max:
-                        ipath = path.format(i)
-                        if ipath in row_paths:
-                            temp.append(ipath)
-                        i += 1
-                table = sorted(list(set(temp)))
-                rmpaths = []  # list of paths to delete
-                # Check for irn. Delete other reference fields if irn found.
-                # This should handle tables automatically.
-                irns = [fld for fld in table if fld.endswith('.irn')]
-                for irn in irns:
-                    prefix = '.'.join(irn.split('.')[:-1]) + '.'
-                    rmpaths.extend([path for path in table if not path == irn
-                                    and not '.' in path.replace(prefix, '')])
-                # Delete completely empty references
-                n = len([path for path in table if len(path.split('.')) > 2
-                         and 'Ref' in path.split('.')[-3]])
-                if n:
-                    for path in table:
-                        val = row.pull(path)
-                        if bool(val):
-                            break
-                    else:
-                        rmpaths.extend(table)
-                # Delete everything in rmpaths
-                for path in set(rmpaths):
-                    row.pluck(path)
-            root.append(etree.Comment('Row {}'.format(row_num)))
-            record = etree.SubElement(root, u'tuple')
-            try:
-                self._write(row.keys()[0], row, record, module, handlers)
-            except KeyError:
-                raise
-            row_num += 1
-            if not row_num % 100:
-                print '{:,} records written!'.format(row_num)
-        print '{:,} records written!'.format(row_num)
-        root.getroottree().write(fp, pretty_print=True,
-                                 xml_declaration=True, encoding='utf-8')
-    '''
 
 
     def harmonize(self, new_val, old_val, path, action='fill'):
@@ -438,26 +295,8 @@ class XMu(object):
             return new_val, False
 
 
-class XMuString(unicode):
-
-    def __init__(self, *args, **kwargs):
-        super(XMuString, self).__init__(*args, **kwargs)
-        self._dict = {}
-
-
-    def get(self, key):
-        return self._dict[key]
-
-
-    def set(self, key, val):
-        self._dict[key] = val
-
-
-    def delete(self, key):
-        del self._dict[key]
-
-
 def check_table(rec, *args):
+    """Check that the columns in a table are all the same length"""
     try:
         return check_columns(*[rec.smart_pull(arg) for arg in args])
     except TypeError:
@@ -475,12 +314,12 @@ def check_columns(*args):
         raise RowMismatch(args)
 
 
-def _emuize(record, root=None, path=None, handlers=None,
+def _emuize(rec, root=None, path=None, handlers=None,
             module=None, fields=None, group=None):
     """Formats record in XML suitable for EMu
 
     Args:
-        record (minsci.xmu.XMuRecord): contains data to be written
+        rec (minsci.xmu.XMuRecord): contains data to be written
         root (lxml.etree.ElementTree): XML document updated as the
             record is written
         path (str):
@@ -489,7 +328,7 @@ def _emuize(record, root=None, path=None, handlers=None,
         EMu-formatted XML
     """
     if root is None:
-        module = record.keys()[0]
+        module = rec.keys()[0]
         root = etree.Element('table')
         root.set('name', module)
         root.addprevious(etree.Comment('Data'))
@@ -499,8 +338,8 @@ def _emuize(record, root=None, path=None, handlers=None,
     if handlers is None:
         handlers = {}
     if fields is None:
-        fields = record.fields
-    record = record[path]
+        fields = rec.fields
+    rec = rec[path]
     # Check if for append, prepend, and replacement operators. If found,
     # determines the necessary attributes and passes it to any immediate
     # children.
@@ -516,18 +355,18 @@ def _emuize(record, root=None, path=None, handlers=None,
             pass
         else:
             group = '|'.join(['|'.join(field) for field in sorted(table)])
-    if isinstance(record, (int, str, unicode)):
+    if isinstance(rec, (int, str, unicode)):
         atom = etree.SubElement(root, 'atom')
         atom.set('name', path.rstrip('_'))
         try:
-            atom.text = str(record)  # FIXME
+            atom.text = str(rec)  # FIXME
         except UnicodeEncodeError:
-            atom.text = record
+            atom.text = rec
     else:
         try:
-            paths = record.keys()
+            paths = rec.keys()
         except AttributeError:
-            paths = [i for i in xrange(len(record))]
+            paths = [i for i in xrange(len(rec))]
         if isinstance(path, (int, long)):
             root = etree.SubElement(root, 'tuple')
             # Add append attributes if required
@@ -543,7 +382,7 @@ def _emuize(record, root=None, path=None, handlers=None,
             root = etree.SubElement(root, 'tuple')
             root.set('name', path)
         for path in _sort(paths):
-            _emuize(record, root, path, handlers, module, fields, group)
+            _emuize(rec, root, path, handlers, module, fields, group)
         # Get parent returns None when you hit the outermost container
         parent = root.getparent()
         if parent is not None:
@@ -552,17 +391,40 @@ def _emuize(record, root=None, path=None, handlers=None,
 
 
 def _sort(paths):
+    """Forces fields in an export to print in a certain order
+
+    Args:
+        path (list): list of paths in the current record set
+
+    Returns:
+        Sorted list of paths
+    """
     paths.sort()
-    if 'OpeDateToRun' in paths:
-        group = ('OpeExecutionTime', 'OpeDateToRun', 'OpeTimeToRun')
-        for path in group:
-            paths.remove(path)
-        paths.extend(group)
+    rules = {
+        'NamOrganisation': ['NamPartyType', 'NamInstitution', 'NamOrganisation'],
+        'OpeDateToRun': ['OpeExecutionTime', 'OpeDateToRun', 'OpeTimeToRun']
+    }
+    for key, group in rules.iteritems():
+        if key in paths:
+            for path in group:
+                try:
+                    paths.remove(path)
+                except ValueError:
+                    pass
+            paths.extend(group)
     return paths
 
 
-
 def _check(rec, module=None):
+    """Validate the data in a record, including tables
+
+    Args:
+        rec (xmu.DeepDict): object data
+        module (str): the backend name of an EMu module
+
+    Returns:
+        Clean version of the original record
+    """
     # Check for irn, formatting the record to update if present
     if module is None:
         module = rec.module
@@ -600,7 +462,7 @@ def _check(rec, module=None):
 
 
 def emuize(records, module=None):
-    """
+    """Checks record set and formats as EMu XML
 
     Args:
         records (list): list of records
@@ -644,3 +506,21 @@ def _writer(fp, root):
         n += 1
     root.getroottree().write(fp, pretty_print=True,
                              xml_declaration=True, encoding='utf-8')
+
+
+'''FIXME: What is this?
+from collections import namedtuple
+def parse_log(fp):
+    ErrorMessage = ('ErrorMessage', 'row, message')
+    results = {}
+    with open(fp, 'rb') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith('error:'):
+                kind, rec, msg = [s.strip() for s in line.split(':', 3)]
+                row = int(rec.rsplit(' ', 1)[1])
+                results.setdefault('errors', []).append(ErrorMessage(row, msg))
+            elif line.startswith('Records Processed:'):
+                results['n'] = int(line.split(':')[1].strip())
+    return results
+'''
