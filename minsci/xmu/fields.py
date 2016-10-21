@@ -14,7 +14,7 @@ class XMuFields(object):
 
     def __init__(self, schema_path=None, whitelist=None, blacklist=None,
                  source_path=None, cache=False, verbose=False):
-        """Creates dict-like object containing metadata about fields in EMu
+        """Reads and stores metadata about fields in EMu
 
         Args:
             schema_path (str): path to EMu schema file. If None, looks for
@@ -30,10 +30,10 @@ class XMuFields(object):
             verbose (bool): triggers verbose output
 
         Attributes:
-            self.schema (dict): path-keyed dicts of field data
-            self.tables (dict): module-keyed lists of paths to tables
-            self.map_tables (dict): path-keyed lists of paths to tables
-            self.verbose (bool): triggers verbose output
+            schema (dict): path-keyed dicts of field data
+            tables (dict): module-keyed lists of paths to tables
+            map_tables (dict): path-keyed lists of paths to tables
+            verbose (bool): triggers verbose output
         """
         self.verbose = verbose
         self._fpath = os.path.join(os.path.dirname(__file__), 'files')
@@ -67,14 +67,12 @@ class XMuFields(object):
             # tries to assure that any paths in the source file are included
             # in the resulting XMuFields object.
             self.schema = self._read_schema(schema_path, whitelist, blacklist)
-
             # Tables are stored as tuples
             self.tables = {}              # maps tables to modules
             self.map_tables = {}          # maps container paths to fields
             self.hashed_tables = {}       # maps hash of tables to tables
             self.tables = self._read_tables()
             self._map_fields_to_tables()  # adds table fields to schema dict
-
         # Dump fields object as json
         if cache is None:
             cprint('Caching XMuFields object...')
@@ -114,7 +112,11 @@ class XMuFields(object):
             try:
                 d = d[args[i]]
             except KeyError:
-                d = self.schema[d['schema']['RefTable']]
+                try:
+                    d = self.schema[d['schema']['RefTable']]
+                except:
+                    print args
+                    raise
             else:
                 i += 1
         return d
@@ -123,7 +125,7 @@ class XMuFields(object):
     def _read_schema(self, fp, whitelist=None, blacklist=None):
         """Reads EMu schema file to dictionary
 
-        See the class for details about the argument used by this function.
+        See the class for details about the arguments used by this function.
 
         The EMu schema file includes (but is not limted to) the following:
             ColumnName: Name of field, table, or reference in current module
@@ -191,7 +193,7 @@ class XMuFields(object):
 
 
     def _derive_path(self, schema_data):
-        """Derive full path to field
+        """Derive full path to field based on EMu schema
 
         Args:
             schema_data (dict): field-specific data from the EMu schema file
@@ -371,6 +373,7 @@ class XMuFields(object):
         return paths
 
 
+    '''DEPRECATED
     def bracketize_path(self, path, simple=True):
         """Mark tuples in given path with {}
 
@@ -394,6 +397,7 @@ class XMuFields(object):
                     n += 1
             path.append(this)
         return '/'.join(path)
+    '''
 
 
     def set_alias(self, alias, path):
