@@ -8,9 +8,6 @@ You can install the MinSci Toolkit from the command line using pip:
 pip install minsci
 ```
 
-**Note:** The mosaic module has been moved to a separate repository,
-[Stitch2D](https://github.com/adamancer/stitch2d).
-
 GeoTaxa
 -------
 
