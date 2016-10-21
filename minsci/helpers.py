@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-# Standard imports
 import collections
 import os
 import re
@@ -12,10 +11,10 @@ from operator import itemgetter
 from pprint import pprint
 from textwrap import fill
 
-# Third-party imports
 import inflect
 import pyodbc
 from nameparser import HumanName
+#from unidecode import unidecode
 
 
 
@@ -32,13 +31,25 @@ def __init__(self):
     debug = False
 
 
-
-
 def base2int(x, base):
     """Converts integer in specified base to base 10"""
     return int(x, base)
 
 
+def int2base(x, base):
+    """Converts base 10 integer to specified base"""
+    if x < 0: sign = -1
+    elif x==0: return '0'
+    else: sign = 1
+    x *= sign
+    digits = []
+    while x:
+        digits.append(digs[x % base])
+        x /= base
+    if sign < 0:
+        digits.append('-')
+    digits.reverse()
+    return ''.join(digits).upper()
 
 
 def init_odbc(fn):
@@ -71,11 +82,9 @@ def init_odbc(fn):
     return pyodbc.connect(dsn, autocommit=autocommit)
 
 
-
-
 def dict_from_odbc(cursor, tbl, row_id=None, cols=None, where=None,
                    encoding='cp1252'):
-    """
+    """Creates a
     Args:
         cursor (pyodbc.Cursor)
         tbl (str): name of table to query. For Excel, table name must be
@@ -142,31 +151,9 @@ def dict_from_odbc(cursor, tbl, row_id=None, cols=None, where=None,
     return records
 
 
-
-
-def int2base(x, base):
-    """Converts base 10 integer to specified base"""
-    if x < 0: sign = -1
-    elif x==0: return '0'
-    else: sign = 1
-    x *= sign
-    digits = []
-    while x:
-        digits.append(digs[x % base])
-        x /= base
-    if sign < 0:
-        digits.append('-')
-    digits.reverse()
-    return ''.join(digits).upper()
-
-
-
-
 def sort_by_reference(lst, order):
-    """Reorder list to match order of reference list"""
+    """Reorder list to match order of another list"""
     return sorted(sorted(lst), key=lambda x: _sorter(x, order))
-
-
 
 
 def _sorter(key, order):
@@ -175,22 +162,23 @@ def _sorter(key, order):
     Returns -1 if key not found.
     """
     try:
-        x = [x for x in xrange(0, len(order))
-             if key.startswith(order[x])][0]
+        return [x for x in xrange(0, len(order))
+                if key.startswith(order[x])][0]
     except:
         print 'Ordering error: ' + key + ' does not exist in order list'
-        x = -1
-    return x
-
-
+        return -1
 
 
 def oxford_comma(lst, lowercase=True):
     """Formats list as comma-delimited string
 
-    @param list
-    @param boolean
-    @return string
+    Args:
+        lst (list): list of strings
+        lowercase (bool): if true, convert the first letter in each value
+            in the list to lowercase
+
+    Returns:
+        Comma-delimited string
     """
     lst = copy(lst)
     if lowercase:
@@ -204,9 +192,15 @@ def oxford_comma(lst, lowercase=True):
         return ', '.join(lst) + ', and ' + last
 
 
-
-
 def singular(s):
+    """Converts string to singular
+
+    Args:
+        s (str): a string
+
+    Returns:
+        The singular form of the original string
+    """
     inflected = inflect.engine().singular_noun(s)
     if inflected:
         return inflected
@@ -216,24 +210,37 @@ def singular(s):
 
 
 def plural(s):
+    """Converts string to plural
+
+    Args:
+        s (str): a string
+
+    Returns:
+        The plural form of the original string
+    """
     return inflect.engine().plural(singular(s))
 
 
 
 
 def dedupe(lst, lower=True):
-    """Dedupes list while maintaining order and case"""
-    orig = copy(lst)
+    """Dedupes a list while maintaining order and case
+
+    Args:
+        list (list): a list of strings
+
+    Returns:
+        Deduplicated copy of the original list
+    """
     if lower:
         lst = [val.lower() for val in lst]
-    keep = [i for i in xrange(len(lst)) if not lst[i] in lst[:i]]
-    return [orig[i] for i in keep]
+    return [val for i, val in enumerate(lst) if not val in lst[:i]]
 
 
 
 
 def parse_names(name_string, last_name_first=False):
-    """Parses name stirngs into components using nameparser"""
+    """Parses name strings into components using nameparser"""
     # Normalize periods
     name_string = name_string\
                   .replace('. ','.')\
@@ -297,13 +304,18 @@ def parse_names(name_string, last_name_first=False):
 
 def prompt(prompt, validator, confirm=False,
            helptext='No help text provided', errortext='Invalid response!'):
-    """Prompts user and validates response based on validator
+    """Prompts for and validates user input
 
-    @param string
-    @param regex, list, or dict
-    @param boolean
-    @param string
-    @param string
+    Args:
+        prompt (str): the prompt to present to the user
+        validator (mixed): the dict, list, or string used to validate the
+            repsonse
+        confirm (bool): if true, user will be prompted to confirm value
+        helptext (str): text to show if user response is "?"
+        errortext (str): text to return if user response does not validate
+
+    Return:
+        Validated response to prompt
     """
     # Prepare string
     prompt = u'{} '.format(prompt.rstrip())
@@ -346,9 +358,8 @@ def prompt(prompt, validator, confirm=False,
             loop = False
         elif isinstance(validator, list):
             try:
-                i = int(a) - 1
-                result = validator[i]
-            except:
+                result = validator[int(a) - 1]
+            except IndexError:
                 pass
             else:
                 if i >= 0:
@@ -356,14 +367,14 @@ def prompt(prompt, validator, confirm=False,
         elif isinstance(validator, dict):
             try:
                 result = validator[a]
-            except:
+            except KeyError:
                 pass
             else:
                 loop = False
         else:
             try:
                 validator.search(a).group()
-            except:
+            except AttributeError:
                 pass
             else:
                 result = a
@@ -382,10 +393,13 @@ def prompt(prompt, validator, confirm=False,
     return result
 
 
-
-
 def utflatten(s):
-    """Converts diacritcs in string to their to an ascii equivalents"""
+    """Converts diacritcs in string to their to an ascii equivalents
+
+    Modified to use unidecode module. Left alias so older scripts still work.
+    """
+    return unidecode(s)
+    '''
     d = {
         u'\xe0' : 'a',    # à
         u'\xc0' : 'A',    # À
@@ -474,28 +488,20 @@ def utflatten(s):
         raw_input()
     # Return flattened string
     return s
+    '''
 
 
-
-
-def utfmap(s):
-    out = []
-    for c in s.lower(): out.append(repr(c) + " : '',  # " + s.lower())
-    if s.lower() != s.upper():
-        for c in s.upper(): out.append(repr(c) + " : '',  # " + s.upper())
-    return out
-
-
-
-
-def parse_catnum(s, attrs={}, default_suffix=False, strip_suffix=False):
+def parse_catnum(s, attrs={}, default_suffix=False, strip_suffix=False,
+                 prefixed_only=False):
     """Find and parse catalog numbers in a string
 
     Args:
-        s (str): string containingcatalog number(s) or range
+        s (str): string containing catalog numbers or range
         attrs (dict): additional parameters keyed to EMu field
         default_suffix (bool): add suffix -00 for minerals if True
         strip_suffx (bool): strip leading zeroes from suffix if True
+        prefixed_only (bool): find only those catalog numbers that are
+            prefixed by a valid museum code (NMNH or USNM)
 
     Returns:
         List of dicts containing catalog numbers parsed into prefix, number,
@@ -505,9 +511,11 @@ def parse_catnum(s, attrs={}, default_suffix=False, strip_suffix=False):
 
     # Regular expressions for use with catalog number functions
     p_acr = '((USNM|NMNH)\s)?'
-    p_pre = '([A-Z]{3,4} ?|[BCGMR]-?)?'
+    p_pre = '([A-Z]{3,4} ?|[BCGMRS]-?)?'
     p_num = '([0-9]{1,6})'  # this will pick up ANY number
     p_suf = '\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,][0-9]{1,2}|\.[0-9]+)?'
+    if prefixed_only:
+        p_acr = p_acr.rstrip('?')
     regex = re.compile('\\b(' + p_acr + p_pre + p_num + p_suf + ')\\b')
 
     results = []
@@ -574,14 +582,15 @@ def parse_catnum(s, attrs={}, default_suffix=False, strip_suffix=False):
                 and s.count('-') and s.count('-') != 2
                 and cps[0]['CatPrefix'] == cps[1]['CatPrefix']
                 and cps[1]['CatNumber'] > cps[0]['CatNumber']
+                and int(cps[0]['CatNumber']) > 10
             )
-        except:
+        except (IndexError, KeyError):
             pass
             #print cps
             #raise
         if is_range:
             # Fill range
-            print '{} appears to contain a range'.format(s)
+            #print '{} appears to contain a range'.format(s)
             cps = [{'CatPrefix' : cps[0]['CatPrefix'], 'CatNumber' : x}
                    for x in xrange(cps[0]['CatNumber'],
                                    cps[1]['CatNumber'] + 1)]
@@ -650,64 +659,70 @@ def parse_catnum(s, attrs={}, default_suffix=False, strip_suffix=False):
 
 
 
-def parse_catnums(catnums, attrs={}, default_suffix=False):
-    """Parse list of catalog numbers."""
+def parse_catnums(strings, *args, **kwargs):
+    """Parse a list of strings containing catalog numbers
+
+    See parse_catnums() for a description of the available arguments.
+
+    Returns:
+        A list of parsed catnums
+    """
     # Return list of parsed catalog numbers
     arr = []
-    for catnum in catnums:
-        arr += parse_catnum(catnum)
+    for s in catstringsnums:
+        arr += parse_catnum(s, **kwargs)
     return arr
 
 
 
 
-def format_catnum(d, code=True, div=False):
+def format_catnum(parsed, code=True, div=False):
     """Formats parsed catalog number to a string
 
     Args:
-        d (dict): parsed catalog number
+        parsed (dict): parsed catalog number
         code (bool): include museum code in catnum if True
         div (bool): include div abbreviation in catnum if True
 
     Returns:
-        Catalog number formatted as a string: 'G3551-00'. Use
+        Catalog number formatted as a string, like 'G3551-00'. Use
         format_catnums to process a list of parsed catalog numbers.
     """
     try:
-        return d['MetMeteoriteName']
+        return parsed['MetMeteoriteName']
     except KeyError:
         pass
     try:
-        d['CatNumber']
+        parsed['CatNumber']
     except KeyError:
         return ''
     keys = ('CatMuseumAcronym', 'CatDivision', 'CatPrefix', 'CatSuffix')
     for key in keys:
         try:
-            if not d[key]:
-                d[key] = ''
+            if not parsed[key]:
+                parsed[key] = ''
         except:
-            d[key] = ''
+            parsed[key] = ''
         else:
-            d[key] = d[key].strip('-')
+            parsed[key] = parsed[key].strip('-')
     # Set museum code
     if code:
-        d['CatMuseumAcronym'] = 'NMNH'
-        if d['CatDivision'] == 'Meteorites':
-            d['CatMuseumAcronym'] = 'USNM'
-    if not d['CatPrefix']:
-        d['CatPrefix'] = ''
-    d['CatPrefix'] = d['CatPrefix'].upper()
+        parsed['CatMuseumAcronym'] = 'NMNH'
+        if parsed['CatDivision'] == 'Meteorites':
+            parsed['CatMuseumAcronym'] = 'USNM'
+    if not parsed['CatPrefix']:
+        parsed['CatPrefix'] = ''
+    parsed['CatPrefix'] = parsed['CatPrefix'].upper()
     # Format catalog number
     catnum = (
         '{CatMuseumAcronym} {CatPrefix}{CatNumber}-{CatSuffix}'
-        .format(**d)
+        .format(**parsed)
         .rstrip('-')
         .strip()
         )
     # Add division if necessary
     if bool(catnum) and div:
-        catnum += u' ({})'.format(d['CatDivision'][:3].upper())
+        catnum += u' ({})'.format(parsed['CatDivision'][:3].upper())
         #catnum = u'{} {}'.format(d['CatDivision'][:3].upper(), catnum)
     return catnum
 
@@ -733,73 +748,85 @@ def format_catnums(parsed, code=True, div=False):
     return catnums
 
 
-
-
 def sort_catnums(catnums):
-    """Sort a list of catalog numbers"""
-    catnums = handle_catnums(catnums)
-    arr = []
-    for d in catnums:
-        sort = []
-        for key in ('CatPrefix','CatNumber','CatSuffix'):
-            if not key in d or not d[key] or not bool(d[key]):
-                val = '-'
-            else:
-                val = d[key]
-            if len(val) > 20:
-                raw_input('Error: Length ' + str(len(val)))
-            sort.append('0' * (20 - len(val)) + val)
-        arr.append((d, '|'.join(sort)))
-    return combine_catnums([cn[0] for cn
-                                 in sorted(arr, key=lambda cn:cn[1])])
+    """Sort a list of catalog numbers
 
+    Args:
+        catnums (list): list of catalog numbers, either as strings or parsed
+            into dicts
 
-
-
-def handle_catnums(val):
-    """Return list of parsed catalog numbers"""
-    if isinstance(val, str) or isinstance(val, unicode):
-        return parse_catnum(find_catnums(val))
-    elif isinstance(val, list):
-        if len(val) and isinstance(val[0], dict) and 'CatNumber' in val[0]:
-            return val
-        elif len(val):
-            arr = []
-            for s in val:
-                arr += parse_catnum(s)
-            return arr
-        else:
-            return val
-    elif isinstance(val, dict):
-        return [val]
+    Return:
+        Sorted list of catalog numebrs. Catalog numbers are formatted in
+        the same way as they were in the original list.
+    """
+    try:
+        catnums = self.parse_catnums(catnums)
+    except IndexError:
+        # Catalog numbers were given as dicts, so return them that way
+        return sorted(catnums, key=_catnum_keyer)
     else:
-        print 'Error: Could not handle ' + val
+        # Catalog numbers are strings, so format them before returning them
+        return self.format_catnums(sorted(catnums, key=_catnum_keyer))
 
 
+def _catnum_keyer(catnum):
+    """Create sortable key for a catalog number by zero-padding each component
+
+    Args:
+        catnum (str or dict): the catalog number to key
+
+    Returns:
+        Sortable catalog number
+    """
+    if isinstance(catnum, basestring):
+        try:
+            catnum = parse_catnum(catnum)[0]
+        except IndexError:
+            print 'Sort error: ' + catnum
+            return 'Z' * 63
+    keys = ('CatPrefix', 'CatNumber', 'CatSuffix')
+    return '|'.join([catnum.get(key, '').zfill(20) for key in keys])
 
 
 def fxrange(start, stop, step):
-    """xrange for floats. From http://stackoverflow.com/questions/477486/"""
+    """Mimics functionality of xrange for floats
+
+    From http://stackoverflow.com/questions/477486/
+
+    Args:
+        start (int or float): first value in range (inclusive)
+        stop (int or float): last value in range (exclusive)
+        step (float): value by which to increment start
+    """
     r = start
     while r < stop:
         yield r
         r += step
 
 
+def cprint(obj, show=True):
+    """Conditionally pretty print an object
+
+    Args:
+        obj (mixed): the object to print
+        show (bool): print the object if true
+    """
+    if not isinstance(obj, basestring) and show:
+        pprint(obj)
+    elif obj and show:
+        print fill(obj, subsequent_indent='  ')
 
 
-def cprint(s, show=True, encoding='cp1252'):
-    """Conditional print"""
-    if not isinstance(s, basestring) and show:
-        pprint(s)
-    elif bool(s) and show:
-        print fill(s, subsequent_indent='  ')
+def rprint(obj, show=True):
+    """Pretty print object, then pause execution
 
-
-
-def rprint(s):
-    cprint(s)
-    raw_input('Paused. Press any key to continue.')
+    Args:
+        obj (mixed): the object to print
+        show (bool): print the object if true
+    """
+    if show:
+        cprint(obj)
+        raw_input('Paused. Press any key to continue.')
 
 
 def read_file(path, success, error=None):
@@ -811,3 +838,29 @@ def read_file(path, success, error=None):
             raise
         else:
             return error(path)
+
+
+def ucfirst(s):
+    """Capitalize first letter of string while leaving the rest alone
+
+    Args:
+        s (str): string to capitalize
+
+    Returns:
+        Capitalized string
+    """
+    return s[0].upper() + s[1:]
+
+
+def add_article(s):
+    """Prepend the appropriate indefinite article to a string
+
+    Args:
+        s (str): string to which to add a/an
+
+    Returns:
+        String with indefinite article prepended
+    """
+    if s.startswith('a','e','i','o','u'):
+        return u'an {}'.format(s)
+    return u'an {}'.format(s)
