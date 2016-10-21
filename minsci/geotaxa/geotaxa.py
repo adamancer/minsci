@@ -1,6 +1,6 @@
 """Analyzes and formats classifications for rocks, minerals, and meteorites.
 Identifies deprecated terms, official terms, preferred synonyms,
-and varieities. :code:`pip install bloop`"""
+and varieities."""
 
 import json as serialize
 import os
@@ -11,28 +11,28 @@ from ..exceptions import TaxonNotFound
 from ..helpers import oxford_comma, plural, cprint, rprint
 
 
+# TODO: Integrate general migratax functions
+# TODO: Integrate schema from Taxonomy module
+# TODO: Add function to test/assign parent. Parent is/parent should be.
+
+
 class GeoTaxa(object):
 
     def __init__(self, fp=None, force_format=False):
-        # TODO: Fix so that the EMu function is calle manually
+        # TODO: Fix so that the EMu function is called manually
         """Read data from EMu export file"""
         self.hints = {}
         self._fpath = os.path.join(os.path.dirname(__file__), 'files')
         if fp is None:
             fp = os.path.join(self._fpath, 'xmldata.xml')
-
         # Load captilization exceptions
-        try:
-            with open(os.path.join(self._fpath, 'exceptions.txt'), 'rb') as f:
-                exceptions = [line for line in f.read().splitlines()
-                              if bool(line.strip())
-                              and not line.startswith('#')]
-                self.exceptions = dict([(val.lower(), val)
-                                        for val in exceptions
-                                        if not val in ('In', 'S')])
-        except IOError:
-            raise
-
+        with open(os.path.join(self._fpath, 'exceptions.txt'), 'rb') as f:
+            exceptions = [line for line in f.read().splitlines()
+                          if bool(line.strip())
+                          and not line.startswith('#')]
+            self.exceptions = dict([(val.lower(), val)
+                                    for val in exceptions
+                                    if not val in ('In', 'S')])
         # Check for serialized data
         serialized = os.path.join(self._fpath, 'geotaxa.json')
         if force_format:
@@ -126,6 +126,7 @@ class GeoTaxa(object):
         """
         taxon = self.clean_taxon(taxon)
         try:
+            # Taxon is given as an irn
             int(taxon)
         except ValueError:
             # Taxon is given as name
@@ -277,7 +278,7 @@ class GeoTaxa(object):
                     except KeyError:
                         temp.append(w)
         s = ''.join(temp)
-        # Clean up string
+        # Clean up formatting text found in some strings
         replacements = {
             '  ': ' ',
             ' /': '/',
@@ -351,7 +352,7 @@ class GeoTaxa(object):
 
 
     def clean_taxa(self, taxa, dedupe=False):
-        """Removes duplicate taxa while retaining order
+        """Removes repeated or child taxa while retaining order
 
         Args:
             taxa (list): one or more types of rock, mineral, or meteorite
@@ -410,6 +411,7 @@ class GeoTaxa(object):
         highest_common_taxon = self.highest_common_taxon(taxa)
         # Special handling
         if len(taxa) > 1:
+            # FIXME: Change to module constant
             prepend = ['Catseye', 'Star']
             append = ['Jade', 'Moonstone', 'Sunstone']
             for i in xrange(len(taxa)):
@@ -505,10 +507,11 @@ class GeoTaxa(object):
         # Some rock names include the primary mineral. Sometimes
         # that mineral will be listed separately as well. We typically
         # don't want to include that information twice, so we'll
-        # try to remove them here.
+        # try to remove those here.
         try:
             primary = formatted[0].lower()
         except IndexError:
+            # FIXME: Create custom exception
             print 'FATAL ERROR'
             print 'ORIGINAL:', orig
             print 'MODIFIED:', taxa
@@ -559,7 +562,7 @@ class GeoTaxa(object):
 
 
     def preferred_synonym(self, taxon):
-        """Recursively find the preferred synonym for this taxon
+        """Recursively search for the preferred synonym for this taxon
 
         Args:
             taxon (str): a type of rock, mineral, or meteorite
@@ -614,7 +617,7 @@ class GeoTaxa(object):
         """Identify the most specific common taxonomic element
 
         Args:
-            taxas: lists of taxa for each object being compared
+            taxas (list): lists of taxa for each object being compared
 
         Returns:
             Highest common taxon as string
