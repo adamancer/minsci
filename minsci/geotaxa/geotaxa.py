@@ -1,116 +1,93 @@
-"""Analyzes and formats classifications for rocks, minerals, and meteorites.
-Identifies deprecated terms, official terms, preferred synonyms,
-and varieities."""
+"""Analyzes and formats classifications for rocks, minerals, and meteorites"""
 
-import json as serialize
+
+import json
+import logging
 import os
 import re
+import pprint as pp
 from copy import copy
 
+from unidecode import unidecode
+
 from ..exceptions import TaxonNotFound
-from ..helpers import oxford_comma, plural, cprint, rprint
+from ..helpers import oxford_comma, dedupe, ucfirst, lcfirst
 
 
 # TODO: Integrate general migratax functions
 # TODO: Integrate schema from Taxonomy module
 # TODO: Add function to test/assign parent. Parent is/parent should be.
 
+logging.basicConfig(filename='example.log', level=None)
+
+PATH = os.path.join(os.path.dirname(__file__), 'files')
+REPLACEMENTS = {
+    '  ': ' ',
+    ' /': '/',
+    ' ?': '?',
+    ' )': ')',
+    '( ': '(',
+    '<sup>': '',
+    '</sup>': '',
+    '<sub>': '',
+    '</sub>': '',
+    'et Al': 'et al'
+}
+
+
+class GeoTaxon(dict):
+    """Customized container for geological taxa"""
+
+    def __init__(self, *args, **kwargs):
+        super(GeoTaxon, self).__init__(*args, **kwargs)
+
+
+    def is_official(self):
+        """Assesses whether a taxon is officially recognized"""
+        return is_official(self)
+
+
+    def pprint(self):
+        """Pretty prints the taxon data"""
+        pp.pprint(self)
+
 
 class GeoTaxa(object):
+    """Contains methods to organize and analyze geological taxa"""
 
-    def __init__(self, fp=None, force_format=False):
-        # TODO: Fix so that the EMu function is called manually
-        """Read data from EMu export file"""
+    def __init__(self):
+        """Read taxonomic information from JSON file"""
+        self.taxa = {}
+        self.tax_map = {}
+        self.nar_map = {}
         self.hints = {}
-        self._fpath = os.path.join(os.path.dirname(__file__), 'files')
-        if fp is None:
-            fp = os.path.join(self._fpath, 'xmldata.xml')
-        # Load captilization exceptions
-        with open(os.path.join(self._fpath, 'exceptions.txt'), 'rb') as f:
-            exceptions = [line for line in f.read().splitlines()
-                          if bool(line.strip())
-                          and not line.startswith('#')]
-            self.exceptions = dict([(val.lower(), val)
-                                    for val in exceptions
-                                    if not val in ('In', 'S')])
-        # Check for serialized data
-        serialized = os.path.join(self._fpath, 'geotaxa.json')
-        if force_format:
-            try:
-                os.remove(serialized)
-            except OSError:
-                pass
+        # Load exceptions to general capitalization rules
+        with open(os.path.join(PATH, 'exceptions.txt'), 'rb') as f:
+            exceptions = []
+            for line in f.read().splitlines():
+                exception = line.strip()
+                if exception and not exception.startswith('#'):
+                    exceptions.append(exception)
+            self.exceptions = {s.lower(): s for s in exceptions
+                               if not s in ('In', 'S')}
+        # Read data from JSON file created from an EMu export
+        fp = os.path.join(PATH, 'geotaxa.json')
         try:
-            tds = serialize.load(open(serialized, 'rb'))
+            data = json.load(open(fp, 'rb'))
         except IOError:
-            self.update_taxonomy(fp, serialized)
+            raise Exception('GeoTaxa source file not found. Run'
+                            ' update_geotaxa to fix.')
         else:
-            # Use serialized data. This is much faster.
-            print u'Reading saved taxonomic data...'
-            self.taxa = tds['taxa']
-            self.map_narratives = tds['map_narratives']
-            self.map_emu_taxa = tds['map_emu_taxa']
+            for key in data:
+                setattr(self, key, data[key])
+            # JSON strips the GeoTaxon subclass, so add it back
+            for taxon, taxadict in self.taxa.iteritems():
+                self.taxa[taxon] = GeoTaxon(taxadict)
 
 
     def __call__(self, taxon, classify_unknown=True):
-        """Shorthand for GeoTaxa.find()"""
+        """Alias for self.find()"""
         return self.find(taxon, classify_unknown)
-
-
-    def update_taxonomy(self, source_path, json_path):
-        """Writes JSON file summarizing the data in the EMu export
-
-        Args:
-            source_path (str): path to EMu export containing taxonomic data
-            json_path (str): path to JSON file to which to write
-        """
-        print u'Updating taxonomic data...'
-        self.taxa = {}
-        self.map_narratives = {}  # maps taxon to narrative irn
-        self.map_emu_taxa = {}    # maps taxon irn to narrative irn
-
-        whitelist = [
-            'emultimedia',
-            'enarratives',
-            'etaxonomy'
-        ]
-        fields = xmu.XMuFields(whitelist=whitelist, source_path=source_path)
-        tax = XMu(source_path, fields)
-        tax.geotaxa = self
-        tax.fast_iter(tax.itertax)
-        print u'{:,} records read'.format(len(self.taxa))
-
-        # Map tree for each taxon
-        print 'Mapping trees...'
-        n = 0
-        for irn in self.taxa:
-            tree = self._recurse_tree(self.taxa[irn]['name'], [])
-            self.taxa[irn]['tree'] = tree
-            n += 1
-            if not n % 1000:
-                print '{:,} tress mapped!'.format(n)
-        print '{:,} tress mapped!'.format(n)
-
-        # Serialize the taxanomic dictionaries for later use
-        taxadicts = {
-            'taxa' : self.taxa,
-            'map_narratives' : self.map_narratives,
-            'map_emu_taxa' : self.map_emu_taxa,
-             }
-        with open(json_path, 'wb') as f:
-            serialize.dump(taxadicts, f)
-
-
-    def format_key(self, key):
-        """Standardize formatting of keys in taxa dictionary
-
-        Args:
-            key (str): a taxon or irn
-
-        Returns:
-            Properly formatted key as string
-        """
-        return key.lower().replace(' ', '-')
 
 
     def find(self, taxon, classify_unknown=True):
@@ -124,28 +101,30 @@ class GeoTaxa(object):
         Returns:
             Dict containing taxonomic data for the given taxon
         """
-        taxon = self.clean_taxon(taxon)
-        try:
-            # Taxon is given as an irn
-            int(taxon)
-        except ValueError:
-            # Taxon is given as name
+        taxadict = self.taxa.get(format_key(taxon))
+        if (taxadict is None
+                and classify_unknown
+                and isinstance(taxon, basestring)):
+            logging.info(u'Classifying unknown taxa %s', taxon)
+            return self.classify_unknown_taxon(taxon)
+        elif taxadict is None:
+            raise TaxonNotFound
+        return taxadict
+
+
+    def faceted_find(self, taxon, include_synonyms=True):
+        """Return preferred taxon using a faceted search
+
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+        """
+        faceted = self.facet(taxon, include_synonyms)
+        for term in dedupe([format_key(s) for s in faceted]):
             try:
-                return self.taxa[self.map_narratives[self.format_key(taxon)]]
+                return self.taxa[term]
             except KeyError:
-                if classify_unknown:
-                    return self.classify_taxon(taxon)
-                else:
-                    raise TaxonNotFound
-        else:
-            # Taxon given as irn
-            try:
-                return self.taxa[taxon]
-            except KeyError:
-                if classify_unknown:
-                    return self.classify_taxon(taxon)
-                else:
-                    raise TaxonNotFound
+                pass
+        return self.classify_unknown_taxon(taxon)
 
 
     def find_emu_taxon(self, irn):
@@ -159,152 +138,32 @@ class GeoTaxa(object):
         Returns:
             Dict containing taxonomic data for the taxon at the given irn
         """
-        return self.taxa[self.map_emu_taxa(irn)]
+        return self.tax_map.get(format_key(irn))
 
 
-    def classify_taxon(self, taxon):
-        """Classify unknown taxon
-
-        Args:
-            taxon (str): an unrecognized type of rock, mineral, or meteorite
-
-        Returns:
-            Taxonomic data for where the unknown taxon was placed into the
-            existing hierarchy
-        """
-        taxon = self.clean_taxon(taxon)
-        # Confirm tha taxon does not exist
-        try:
-            return self(taxon)
-        except:
-            pass
-        key = self.format_key(taxon).split('-')
-        keys = []
-        if len(key) > 2:
-            keys.append('-'.join([key[0], key[len(key)-1]]))
-        keys.append(key[len(key)-1])
-        for key in keys:
-            try:
-                parent = self(key, False)
-            except TaxonNotFound:
-                pass
-            else:
-                break
-        else:
-            parent = self('uncertain')
-        key = self.format_key(taxon)
-        return {
-            'irn' : None,
-            'name' : self.cap_taxa(taxon),
-            'parent' : parent['name'],
-            'synonyms' : [],
-            'tags' : parent['tags'],
-            'schemes' : {},
-            'taxa_ids' : [],
-            'tree' : parent['tree'] + [parent['name']],
-            'synonyms' : []
-        }
+    def facet(self, taxon, include_synonyms=True):
+        """Facet a taxon for matching"""
+        endings = (u' series', u' group', u' (general term)')
+        # Get different variants to consider
+        preferred = self.get_preferred_name(taxon)
+        official = self.get_official(taxon)
+        variants = [taxon, preferred, official]
+        if include_synonyms:
+            synonyms = self.find(preferred)['synonyms']
+            variants.extend(synonyms)
+        # Add common endings for groups, series, etc.
+        faceted = []
+        for term in dedupe([s.lower() for s in variants]):
+            term = term.lower()
+            if term.endswith(endings):
+                term = term.rsplit(' ', 1)[0]
+            for val in (term, unidecode(term)):
+                faceted.append(val)
+                faceted.extend([val + ending for ending in endings])
+        return dedupe(faceted)
 
 
-    def _recurse_tree(self, taxon, tree):
-        """Trace classification hierarchy for a given taxon
-
-        Args:
-            taxon (str): a type of rock, mineral, or meteorite
-            tree (list): the taxonomic hierarchy for the taxon compiled so far.
-                This list is modified as the function proceeds.
-
-        Returns:
-            A list containing the taxonomic hierarchy for the given taxon
-        """
-        try:
-            parent = self(taxon)['parent']
-        except KeyboardInterrupt:
-            raise
-        except KeyError:
-            pass
-        except IndexError:
-            pass
-        except RuntimeError:
-            raise
-        else:
-            if parent is not None:
-                taxon = self(parent)['name']
-                tree.append(taxon)
-                self._recurse_tree(taxon, tree)
-        return tree[::-1]
-
-
-    def clean_taxon(self, taxon):
-        """Reformat NMNH index taxa
-
-        Changes taxa of the form "Gneiss, Garnet" to "Garnet Gneiss."
-
-        Args:
-            taxon (str): a type of rock, mineral, or meteorite
-
-        Returns:
-            Reformatted taxon as a string
-        """
-        if taxon.count(',') == 1:
-            taxon = ' '.join([s.strip() for s in taxon.split(',')][::-1])
-        return taxon
-
-
-    def cap_taxa(self, taxon, ucfirst=True):
-        """Capitalizes taxon while maintaining proper case for elements, etc.
-
-        Args:
-            taxon (str): a type of rock, mineral, or meteorite
-
-        Return:
-            Capitalized taxon as a string
-        """
-        # Reorder terms and force lower case
-        orig = copy(taxon)
-        s = taxon.lower()
-        # Split into words
-        p = re.compile('(\W)', re.U)
-        try:
-            words = re.split('(\W)', s)
-        except:
-            raise
-        else:
-            temp = []
-            for word in words:
-                for w in re.split('([A-z]+)', word):
-                    try:
-                        temp.append(self.exceptions[w])
-                    except KeyError:
-                        temp.append(w)
-        s = ''.join(temp)
-        # Clean up formatting text found in some strings
-        replacements = {
-            '  ': ' ',
-            ' /': '/',
-            ' ?': '?',
-            ' )': ')',
-            '( ': '(',
-            '<sup>': '',
-            '</sup>': '',
-            '<sub>': '',
-            '</sub>': '',
-            'et Al': 'et al'
-        }
-        for key in replacements:
-            while key in s:
-                s = s.replace(key, replacements[key])
-        while s.count('(') > s.count(')'):
-            s += ')'
-        if ucfirst:
-            try:
-                s = s[0].upper() + s[1:]
-            except IndexError:
-                s = s.upper()
-        return s
-
-
-    def get_official_taxon(self, taxon):
+    def get_official(self, taxon):
         """Find the most specific officially recognized taxon for a given tree
 
         Args:
@@ -314,44 +173,120 @@ class GeoTaxa(object):
             The name of the closest official taxon, if found, as a string.
             If no official taxon can be found, returns the original taxon.
         """
-        tdata = self(self.preferred_synonym(taxon))
-        if self.is_official(tdata):
+        taxadict = self.get_preferred(taxon)
+        if taxadict.is_official():
             return taxon
         else:
-            for t in reversed(self(taxon)['tree']):
-                if self.is_official(self(t)):
-                    return t
+            for taxon in reversed(taxadict['tree']):
+                if self.find(taxon).is_official():
+                    return taxon
         return taxon
 
 
-    def is_official(self, tdata):
-        """Check a taxon is recognized by an authority
+    def get_preferred(self, taxon):
+        """Recursively searches for the preferred synonym for this taxon
 
         Args:
-            tdata (dict): data about a type of rock, mineral, or meteorite
+            taxon (str): a type of rock, mineral, or meteorite
 
         Returns:
-            Boolean. True if the given taxon is official, False if not.
+            Dict of taxon data for preferred taxon
         """
-        authorities = {
-            'BGS-MAIN': None,
-            'BGS-TAS': None,
-            'IMA Status': ['Approved', 'Grandfathered'],
-            'IUGS': None
-        }
-        for key in authorities:
+        taxadict = self.find(taxon)
+        while taxadict['preferred']:
+            taxadict = self.find(taxadict['preferred'][-1])
+        preferred = taxadict['name']
+        if preferred.lower() == taxon.lower():
+            logging.info(u'%s is the preferred term', taxon)
+        else:
+            logging.info(u'%s is preferred to %s', preferred, taxon)
+        return taxadict
+
+
+    def get_preferred_name(self, taxon):
+        """Recursively searches for the preferred name for this taxon
+
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+
+        Returns:
+            Name of preferred taxon as string
+        """
+        return self.get_preferred(taxon)['name']
+
+
+    def cap_taxa(self, taxon, capitalize_first=True):
+        """Capitalizes taxon while maintaining proper case for elements, etc.
+
+        Args:
+            taxon (str): a type of rock, mineral, or meteorite
+            capitalize_first (str): if True, capitalize the first letter
+
+        Return:
+            Capitalized taxon as a string
+        """
+        # Reorder terms and force lower case
+        taxon = taxon.lower()
+        # Split into words
+        temp = []
+        for word in re.split(r'(\W)', taxon):
+            for part in re.split('([A-z]+)', word):
+                temp.append(self.exceptions.get(part, part))
+        taxon = u''.join(temp)
+        # Clean up formatting text found in some strings
+        for key, val in REPLACEMENTS.iteritems():
+            taxon = taxon.replace(key, val)
+        # Clean up parentheses
+        taxon += ')' * (taxon.count('(') - taxon.count(')'))
+        if capitalize_first:
+            taxon = ucfirst(taxon)
+        return taxon
+
+
+    def classify_unknown_taxon(self, taxon):
+        """Classify unknown taxon
+
+        Args:
+            taxon (str): an unrecognized type of rock, mineral, or meteorite
+
+        Returns:
+            Taxonomic data for where the unknown taxon was placed into the
+            existing hierarchy
+        """
+        taxon = clean_taxon(taxon)
+        # Confirm the taxon does not exist
+        try:
+            return self.find(taxon, classify_unknown=False)
+        except TaxonNotFound:
+            pass
+        key = format_key(taxon).split('-')
+        keys = []
+        if len(key) > 2:
+            keys.append('-'.join([key[0], key[len(key)-1]]))
+        keys.append(key[len(key)-1])
+        for key in keys:
             try:
-                status = tdata['schemes'][key]
-            except KeyError:
+                parent = self.find(key, False)
+            except TaxonNotFound:
                 pass
             else:
-                if (authorities[key] is None or status[0] in authorities[key]):
-                    return True
+                break
         else:
-            return False
+            parent = self.find('uncertain')
+        key = format_key(taxon)
+        return GeoTaxon({
+            'irn' : None,
+            'name' : self.cap_taxa(taxon),
+            'parent' : parent['name'],
+            'preferred': [],
+            'synonyms' : [],
+            'schema' : {},
+            'taxa_ids' : [],
+            'tree' : parent['tree'] + [parent['name']],
+        })
 
 
-    def clean_taxa(self, taxa, dedupe=False):
+    def clean_taxa(self, taxa, remove_dupes=False):
         """Removes repeated or child taxa while retaining order
 
         Args:
@@ -362,19 +297,13 @@ class GeoTaxa(object):
             List of the preferred synonyms for each taxon in the original
             list, standardized for word order and, if stipulated, deduped
         """
-        taxa = [self.preferred_synonym(self.clean_taxon(taxon))
-                for taxon in taxa if bool(taxon)]
-        if dedupe:
-            temp = []
-            while len(taxa):
-                taxon = taxa.pop()
-                if not taxon in taxa:
-                    temp.insert(0, taxon)
-            taxa = temp
-        return taxa
+        cleaned = [self.get_preferred_name(clean_taxon(t)) for t in taxa if t]
+        if remove_dupes:
+            return dedupe(cleaned)
+        return cleaned
 
 
-    def item_name(self, taxa=[], setting=None, name=None):
+    def item_name(self, taxa=None, setting=None, keep_group=False):
         """Format display name for a specimen based on taxa and other info
 
         This function is intended for single specimens. To format a
@@ -383,162 +312,82 @@ class GeoTaxa(object):
         Args:
             taxa (list): one or more types of rock, mineral, or meteorite
             setting (str): kind of object. Necklace, bowl, etc.
-            name (str): proper name of object, if exists
 
         Returns:
             Display name as string
         """
-        if bool(name):
-            return name
+        if taxa is None:
+            taxa = []
         # Check hints
-        key = '|'.join([s.lower().strip() for s
-                        in taxa + [setting] if s is not None])
-        try:
-            return self.hints[key]
-        except KeyError:
-            pass
+        key = format_hint(taxa, setting)
+        name = self.hints.get(key)
+        if name is not None:
+            return name
         # Taxa is required if name is not specified
-        orig = copy(taxa)
-        taxa = [s for s in taxa if bool(s)]
+        if not isinstance(taxa, list):
+            taxa = [taxa]
+        taxa = self.clean_taxa(taxa, True)
         if not any(taxa):
             name = 'Unidentified object'
             self.hints[key] = name
             return name
-        if not isinstance(taxa, list):
-            taxa = [taxa]
-        taxa = self.clean_taxa(taxa, True)
-        taxa = self.group_taxa(taxa)
-        highest_common_taxon = self.highest_common_taxon(taxa)
+        taxa = self.group_related_taxa(taxa)
+        highest_common = self.highest_common_taxon([taxa])
         # Special handling
-        if len(taxa) > 1:
-            # FIXME: Change to module constant
-            prepend = ['Catseye', 'Star']
-            append = ['Jade', 'Moonstone', 'Sunstone']
-            for i in xrange(len(taxa)):
-                try:
-                    taxon = taxa[i]
-                except IndexError:
-                    continue
-                if taxon in prepend:
-                    try:
-                        taxa[i-1] = u'{} {}'.format(
-                            taxon, taxa[i-1][0].lower() + taxa[i-1][1:])
-                    except IndexError:
-                        pass
-                    else:
-                        del taxa[i]
-                if taxon in append:
-                    try:
-                        taxa[i-1] = u'{} {}'.format(taxa[i-1], taxon.lower())
-                    except IndexError:
-                        pass
-                    else:
-                        del taxa[i]
-        if 'Elbaite' in taxa and 'Schorl' in taxa:
-            taxa.remove('Schorl')
-        # Remove parents
-        taxa = [self.preferred_synonym(taxon) for taxon in taxa]
-        for i in xrange(len(taxa)):
-            try:
-                taxon = self(taxa[i])
-            except IndexError:
-                continue
-            for parent in taxon['tree']:
-                try:
-                    j = taxa.index(parent)
-                except ValueError:
-                    pass
-                else:
-                    taxa[j] = taxa[i]
-        # Dedupe while maintaining list order
-        taxa = [taxa[i] for i in xrange(len(taxa)) if not taxa[i] in taxa[:i]]
+        taxa = _prepend_taxon(taxa)
+        taxa = _append_taxon(taxa)
+        taxa = _remove_exclusive(taxa)
+        # Remove parents accounted for elsewhere in the taxa list (e.g.,
+        # remove corundum if sapphire also exists)
+        taxadicts = [self.get_preferred(taxon) for taxon in taxa]
+        taxa = _remove_parents(taxadicts)
+        taxa = dedupe(taxa)
         # Special handling for jewelry
-        if bool(setting) and any(taxa):
-            taxa = [taxon.replace(' Group', '') for taxon in taxa]
-            setting = setting.lower()
-            taxa = oxford_comma(taxa)
-            if setting == 'carved':
-                formatted = 'Carved {}'.format(taxa[0].lower() + taxa[1:])
-            else:
-                formatted = taxa + ' ' + setting.lower()
-            name = self.cap_taxa(formatted)
+        if setting and any(taxa):
+            name = self._name_jewelry(taxa, setting)
             self.hints[key] = name
-            return self.cap_taxa(formatted)
+            return name
+        # Format each taxon in the taxa list using the taxa dict
         formatted = []
-        for i in xrange(len(taxa)):
+        for taxon in taxa:
             try:
-                taxon = self(taxa[i])
+                taxadict = self.find(taxon)
             except IndexError:
                 continue
-            name = taxon['name']
-            # Handle minerals and varieties. Valid mineral species will
-            # have an IMA status populated; a variety is anything defined
-            # below an approved mineral in the taxonomic hierarchy. We
-            # only keep the lowest, most specific variety for display.
-            try:
-                taxon['schemes']['IMA Status']
-            except KeyError:
-                for parent in taxon['tree']:
-                    parent = self(parent)
-                    try:
-                        parent['schemes']['IMA Status']
-                    except KeyError:
-                        pass
-                    else:
-                        variety = taxon['name'][0].lower() + taxon['name'][1:]
-                        name = (u'{} (var. {})'.format(parent['name'], variety))
-                        break
-            # Handle unnamed meteorites. Meteorites use a short,
-            # not especially descriptive nomenclature, so we'll
-            # add a bit of context to supplement.
-            if 'Iron achondrite' in taxon['tree']:
-                name = u'{} (Iron achondrite)'.format(name)
-            elif 'Meteorites' in taxon['tree']:
-                try:
-                    name = u'{} ({})'.format(name, taxon['tree'][2].lower())
-                except IndexError:
-                    pass
+            if 'Minerals' in taxadict['tree']:
+                name = self._name_mineral(taxadict)
+            elif 'Meteorites' in taxadict['tree']:
+                name = self._name_meteorite(taxadict)
+            else:
+                name = self._name_rock(taxadict)
             formatted.append(name)
         # Some commonly used named for minerals are actually groups
         # (e.g., pyroxene). The hierarchy stores them as such, but
         # that looks a little odd, so we strip them for display.
-        formatted = [name.rsplit(' ', 1)[0] if name.lower().endswith('group')
-                     else name for name in formatted]
+        if not keep_group:
+            formatted = [name.rsplit(' ', 1)[0]
+                         if name.lower().endswith(' group')
+                         else name for name in formatted]
         # Some rock names include the primary mineral. Sometimes
         # that mineral will be listed separately as well. We typically
         # don't want to include that information twice, so we'll
-        # try to remove those here.
-        try:
-            primary = formatted[0].lower()
-        except IndexError:
-            # FIXME: Create custom exception
-            print 'FATAL ERROR'
-            print 'ORIGINAL:', orig
-            print 'MODIFIED:', taxa
-            raw_input()
-            raise
-        for taxon in copy(formatted[1:]):
+        # try to remove the duplicate info here.
+        primary = formatted[0].lower()
+        for taxon in formatted[1:]:
             if taxon.lower() in primary:
                 formatted.remove(taxon)
-        # Long lists of associated taxa look terrible, so we'll
-        # ditch everything after the third taxon.
+        # Long lists of associated taxa look terrible, so ditch everything
+        # after the third taxon
         if len(formatted) > 4:
             formatted = formatted[:3]
             formatted.append('others')
         # Group varieties if everything is the same mineral
-        siblings = [taxon for taxon in formatted
-                    if 'var.' in taxon and taxon.startswith(highest_common_taxon)]
-        if len(siblings) == len(taxa) and len(taxa) > 1:
-            varieties = [taxon.split('var.', 1).pop().strip(' )')
-                         for taxon in formatted]
-            formatted = [(highest_common_taxon +
-                          u' (vars. {})').format(oxford_comma(varieties))]
+        formatted = _group_varieties(formatted, highest_common)
         # We're done! Format the list as a string.
         if len(formatted) > 1:
-            primary = formatted.pop(0)
-            name = primary + ' with ' + oxford_comma(formatted)
+            name = formatted.pop(0) + ' with ' + oxford_comma(formatted, True)
         else:
-            name = ''.join(formatted)
+            name = u''.join(formatted)
         self.hints[key] = name
         return name
 
@@ -561,23 +410,7 @@ class GeoTaxa(object):
         return highest_common_taxon
 
 
-    def preferred_synonym(self, taxon):
-        """Recursively search for the preferred synonym for this taxon
-
-        Args:
-            taxon (str): a type of rock, mineral, or meteorite
-
-        Returns:
-            Preferred synonym as a string, if found. If not, returns the
-            original taxon string.
-        """
-        taxon = self(taxon)
-        while len(taxon['synonyms']):
-            taxon = self(copy(taxon['synonyms']).pop())
-        return taxon['name']
-
-
-    def group_taxa(self, taxa):
+    def group_related_taxa(self, taxa):
         """Group synonyms and varieties for a single specimen
 
         Args:
@@ -586,17 +419,18 @@ class GeoTaxa(object):
         Returns:
             List of grouped taxa
         """
+        if not taxa:
+            return []
         if not isinstance(taxa, list):
             taxa = [taxa]
-        if not len(taxa):
-            return []
-        taxa = [self.clean_taxon(taxon) for taxon in taxa]
-        if len(taxa) == 1:
-            return [self(self.preferred_synonym(taxa[0]))['name']]
+        taxa = [clean_taxon(taxon) for taxon in taxa]
+        if len(set(taxa)) == 1:
+            return [self.get_preferred_name(taxa[0])]
         else:
-            taxa = [self.preferred_synonym(taxon) for taxon in taxa]
-            trees = [self(taxon)['tree'] + [self(taxon)['name']]
-                     for taxon in taxa]
+            taxa = [self.get_preferred(taxon) for taxon in taxa]
+            #names = [td['name'] for td in taxa]
+            trees = [td['tree'] + [td['name']] for td in taxa]
+
             sets = [set(tree) for tree in trees]
             _sets = copy(sets)
             _set = sets.pop(0)
@@ -622,16 +456,17 @@ class GeoTaxa(object):
         Returns:
             Highest common taxon as string
         """
+        logging.info('SEEKING HIGHEST COMMON TAXON')
         grouped = []
         for taxa in taxas:
             # Check for rocks
-            if 'Rocks and Sediments' in self(taxa[0])['tree']:
+            if 'Rocks and Sediments' in self.find(taxa[0])['tree']:
                 taxa = [taxa[0]]
-            grouped.extend(self.group_taxa(taxa))
-        # Because this function uses self.group_taxa, we already have the
+            grouped.extend(self.group_related_taxa(taxa))
+        # Because this function uses self.group_related_taxa, we already have the
         # preferred synonym.
-        trees = [self(taxon)['tree'] + [self(taxon)['name']]
-                 for taxon in grouped]
+        grouped = [self.find(taxon) for taxon in grouped]
+        trees = [td['tree'] + [td['name']] for td in grouped]
         sets = [set(tree) for tree in trees]
         _sets = copy(sets)
         _set = sets.pop(0)
@@ -643,3 +478,183 @@ class GeoTaxa(object):
         while highest_common_taxon in exclude:
             highest_common_taxon = trees[0][len(common)-2]
         return highest_common_taxon
+
+
+    def _name_jewelry(self, taxa, setting):
+        """Formats the name of a piece of jewelry"""
+        taxa = [taxon.replace(' Group', '') for taxon in taxa]
+        setting = setting.lower()
+        taxa_string = oxford_comma(taxa, True)
+        if setting == 'carved':
+            name = u'Carved {}'.format(lcfirst(taxa_string))
+        else:
+            name = taxa_string + ' ' + setting
+        return self.cap_taxa(name)
+
+
+    @staticmethod
+    def _name_meteorite(taxadict):
+        """Format the name of a Meteorites
+
+        Handle unnamed meteorites. Meteorites use a short, not especially
+        descriptive nomenclature, so this adds a bit of context to supplement.
+        """
+        name = taxadict['name']
+        if 'Iron achondrite' in taxadict['tree']:
+            name = u'{} (Iron achondrite)'.format(name)
+        elif 'Meteorites' in taxadict['tree']:
+            try:
+                name = u'{} ({})'.format(name, taxadict['tree'][2].lower())
+            except IndexError:
+                pass
+        return name
+
+
+    def _name_mineral(self, taxadict):
+        """Format the name of a mineral
+
+        Handle minerals and varieties. Valid mineral species will have an IMA
+        status populated; a variety is anything defined below an approved mineral
+        in the taxonomic hierarchy. We only keep the lowest, most specific variety
+        for display.
+        """
+        name = taxadict['name']
+        if 'Minerals' in taxadict['tree'] and not taxadict.is_official():
+            for parent in taxadict['tree'][::-1]:
+                parent = self.find(parent)
+                if (parent.is_official()
+                        and not parent['name'].endswith(' Group')):
+                    variety = taxadict['name'].lower()
+                    name = u'{} (var. {})'.format(parent['name'], variety)
+                    break
+        return name
+
+
+    @staticmethod
+    def _name_rock(taxadict):
+        """Format the name of a rock"""
+        return taxadict['name']
+
+
+    def pprint(self, taxon):
+        """Print basic and derived data for a taxon"""
+        print 'TAXADICT:'
+        self(taxon).pprint()
+        print 'PREFERRED:', self.get_preferred_name(taxon)
+        print 'OFFICIAL: ', self.get_official(taxon)
+        print 'ITEM NAME:', self.item_name([taxon])
+
+
+def format_hint(taxa, setting=None):
+    """Serializes taxa and setting information as a hint"""
+    keywords = taxa + [setting]
+    return '|'.join([s.lower().strip() for s in keywords if s is not None])
+
+
+def format_key(key):
+    """Standardize formatting of keys in taxa dictionary
+
+    Args:
+        key (str): a taxon or irn
+
+    Returns:
+        Properly formatted key as string
+    """
+    try:
+        return int(key)
+    except ValueError:
+        return clean_taxon(key).lower().replace(' ', '-')
+
+
+def clean_taxon(taxon):
+    """Reformat NMNH index taxa
+
+    Changes taxa of the form "Gneiss, Garnet" to "Garnet Gneiss."
+
+    Args:
+        taxon (str): a type of rock, mineral, or meteorite
+
+    Returns:
+        Reformatted taxon as a string
+    """
+    if taxon.count(',') == 1:
+        taxon = ' '.join([s.strip() for s in taxon.split(',')][::-1])
+    return taxon
+
+
+def is_official(taxadict):
+    """Assesses whether a taxon is reconigzed by an authority
+
+    Args:
+        taxadict (GeoTaxon): taxonomic information
+
+    Returns:
+        Boolean
+    """
+    if 'Minerals' in taxadict['tree']:
+        names = ['IMA Status', 'RRuff']
+        values = ['Approved', 'Grandfathered', 'Structural Group']
+    else:
+        names = ['BGS-MAIN', 'BGS-TAS', 'IUGS']
+        values = None
+    for scheme in taxadict['schema']:
+        if (scheme['scheme'] in names
+                and (values is None or scheme['value'] in values)):
+            return True
+    return False
+
+
+def _prepend_taxon(taxa):
+    """Find varieties that should be prepended to previous taxon"""
+    if len(taxa) > 1:
+        prepend_these = ['Catseye', 'Star']
+        for i, taxon in enumerate(taxa):
+            if i and taxon in prepend_these:
+                taxa[i-1] = u'{} {}'.format(taxon, lcfirst(taxa[i-1]))
+                taxa[i] = None
+    return [taxon for taxon in taxa if taxon is not None]
+
+
+def _append_taxon(taxa):
+    """Find varieties that should be appended to previous taxon"""
+    if len(taxa) > 1:
+        append_these = ['Jade', 'Moonstone', 'Sunstone']
+        for i, taxon in enumerate(taxa):
+            if i and taxon in append_these:
+                taxa[i-1] = u'{} {}'.format(taxa[i-1], taxon.lower())
+                taxa[i] = None
+    return [taxon for taxon in taxa if taxon is not None]
+
+
+def _remove_exclusive(taxa):
+    """Removes non-preferred term of mutally exclusive pairs if both occur"""
+    exclusives = [('Elbaite', 'Schorl')]
+    for keep, ditch in exclusives:
+        if keep in taxa and ditch in taxa:
+            taxa.remove(ditch)
+    return taxa
+
+
+def _remove_parents(taxadicts):
+    """Replace parents with most specific child"""
+    taxa = [taxon['name'] for taxon in taxadicts]
+    for taxadict in taxadicts:
+        for parent in taxadict['tree']:
+            try:
+                i = taxa.index(parent)
+            except ValueError:
+                pass
+            else:
+                taxa[i] = taxadict['name']
+    return taxa
+
+
+def _group_varieties(taxa, highest_common):
+    """Group varieties if everything is a variety of the same mineral"""
+    siblings = [taxon for taxon in taxa
+                if 'var.' in taxon and taxon.startswith(highest_common)]
+    if len(siblings) == len(taxa) and len(taxa) > 1:
+        varieties = oxford_comma([taxon.split('var.', 1).pop().strip(' )')
+                                  for taxon in taxa], True)
+        taxa = [highest_common + u' (vars. {})'.format(varieties)]
+    return taxa
