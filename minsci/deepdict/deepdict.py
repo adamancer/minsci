@@ -1,15 +1,15 @@
 """Subclass of dictionary designed to read/store at depth"""
-import copy
-from collections import Iterable, Mapping
+from collections import Mapping
 
-from ...exceptions import PathError
-from ...helpers import cprint, rprint
+from ..exceptions import PathError
+from ..helpers import cprint, rprint
 
 
 ENDPOINTS = basestring, int, long, float
 
 
 class DeepDict(dict):
+    """Read and retrieve keys from a dict of arbitary depth"""
 
     def __init__(self, *args):
         super(DeepDict, self).__init__(*args)
@@ -18,6 +18,11 @@ class DeepDict(dict):
     def __call__(self, *args):
         """Shorthand for DeepDict.pull(*args)"""
         return self.pull(*args)
+
+
+    def container(self, *args):
+        """Creates a new object using the current DeepDict subclass"""
+        return self.__class__(*args)
 
 
     def pull(self, *args):
@@ -55,6 +60,7 @@ class DeepDict(dict):
         return self.pull(*path.split(delimiter))
 
 
+    '''
     def push(self, val, *args):
         """Add data to the path stipulated by *args
 
@@ -65,7 +71,7 @@ class DeepDict(dict):
                 per arg. If the last arg is None, the value is not added.
         """
         if isinstance(val, Mapping) and not isinstance(val, DeepDict):
-            val = self.__class__(val)
+            val = self.container(val)
         d = self
         i = 0
         while i < (len(args) - 1):
@@ -73,12 +79,12 @@ class DeepDict(dict):
                 d = d.setdefault(args[i], [])
                 try:
                     d = d[args[i+1]]
-                except IndexError, KeyError:
-                    d.append(self.__class__())
+                except (IndexError, KeyError):
+                    d.append(self.container())
                     d = d[args[i+1]]
                 i += 1
             else:
-                d = d.setdefault(args[i], self.__class__())
+                d = d.setdefault(args[i], self.container())
             i += 1
         if args[-1] is not None:
             d[args[-1]] = val
@@ -101,7 +107,7 @@ class DeepDict(dict):
             if first:
                 # The first value is always deleted. After that, empty
                 # containers are deleted until a populated one is found.
-                val = d.pop(last)
+                d.pop(last)
                 first = False
             elif isinstance(last, (int, long)) and any(d):
                 # Lists with any true-like values are left intact
@@ -110,46 +116,7 @@ class DeepDict(dict):
                 del d[last]
             else:
                 break
-        #self.pprint()
-
-
-    def prune(self, d=None, path=None):
-        if path is None:
-            d = self
-            path = []
-        if isinstance(d, basestring):
-            # Any non-empty string is considered true
-            if not d.strip():
-                self.pluck(*path)
-            else:
-                return True
-        elif isinstance(d, (int, long, float)):
-            # Any number-like value is considered true
-            return True
-        elif not d:
-            self.pluck(*path)
-        else:
-            try:
-                keys = d.keys()
-                is_list = False
-            except AttributeError:
-                keys = range(len(d))[::-1]  # reverse order, see below
-                is_list = True
-            for key in keys:
-                # DeepDict.pluck() is aggressive, so keys can disappear
-                # before they are reached in this loop
-                path.append(key)
-                try:
-                    result = self.prune(d[key], path)
-                except KeyError:
-                    pass
-                path.pop()
-                # Stop processing a list if a value is found. This
-                # is based on table structure in EMu, where values higher
-                # in a column may be blank if values lower in the same
-                # column are populated.
-                if is_list and result is True:
-                    break
+    '''
 
 
     def pprint(self, pause=False):
@@ -205,18 +172,3 @@ def _all_mappings(iterable):
     """
     return all([True if isinstance(val, Mapping) else False
                 for val in iterable])
-
-
-def _any_value(obj, results=None):
-    if results is None:
-        results = []
-    if isinstance(obj, ENDPOINTS):
-        results.append(_any(obj))
-        return results
-    elif isinstance(obj, Mapping):
-        keys = obj.keys()
-    elif isinstance(obj, Iterable):
-        keys = xrange(len(obj))
-    for key in keys:
-        results = _any_value(obj[key], results)
-    return results
