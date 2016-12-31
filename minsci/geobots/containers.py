@@ -65,7 +65,7 @@ def score_match(loc, ref_loc):
 
     Args:
         loc (str): a locality name
-        ref_loc (str): a locality name to match against s1
+        ref_loc (str): a locality name to match against loc
 
     Returns:
         Score corresponding to quality of match
@@ -74,22 +74,23 @@ def score_match(loc, ref_loc):
     if not all((loc, ref_loc)):
         return 0
     # Format strings
-    s1, s2 = [format_string(s) for s in (loc, ref_loc)]
-    # Compare for identical values
-    if s1 == s2 or ABBR_TO_NAME.get(s1, s1) == ABBR_TO_NAME.get(s2, s2):
+    loc, ref_loc = [format_string(s) for s in (loc, ref_loc)]
+    # Check for identical values
+    abbr_loc = ABBR_TO_NAME.get(loc, loc)
+    abbr_ref_loc = ABBR_TO_NAME.get(ref_loc, ref_loc)
+    if (loc == ref_loc or abbr_loc == abbr_ref_loc):
         return 2
     # Strip endings for each string and compare
     for term in TERMS:
-        n = len(term)
-        if s1.startswith(term):
-            s1 = s1[n:].strip()
-        if s1.endswith(term):
-            s1 = s1[:-n].strip()
-        if s2.startswith(term):
-            s2 = s2[n:].strip()
-        if s2.endswith(term):
-            s2 = s2[:-n].strip()
-    if s1 and s2 and s1 == s2:
+        if loc.startswith(term):
+            loc = loc[len(term):].strip()
+        if loc.endswith(term):
+            loc = loc[:-len(term)].strip()
+        if ref_loc.startswith(term):
+            ref_loc = ref_loc[len(term):].strip()
+        if ref_loc.endswith(term):
+            ref_loc = ref_loc[:-len(term)].strip()
+    if loc and ref_loc and loc == ref_loc:
         return 1
     # No match could be made. The penalty here should be much larger than
     # the value returned for a good match because we want to exclude any
@@ -97,16 +98,16 @@ def score_match(loc, ref_loc):
     return -10
 
 
-def format_string(s):
+def format_string(val):
     """Standardizes the format of a string to improve comparisons
 
     Args:
-        s (str): a string or string-like object to be formatted
+        val (str): a string or string-like object to be formatted
 
     Returns:
         Formatted string
     """
-    return unidecode(s).lower().strip('.')
+    return unidecode(val).lower().strip('.')
 
 
 def _read_abbreviations(fn):

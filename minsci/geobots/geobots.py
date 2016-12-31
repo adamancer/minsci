@@ -145,7 +145,7 @@ class GeoNamesBot(requests_cache.CachedSession):
         return self._query_geonames(url, **params)
 
 
-def distance_on_unit_sphere(self, lat1, long1, lat2, long2):
+def distance_on_unit_sphere(lat1, long1, lat2, long2):
     """Calculates the distance between two points on a sphere
 
     From http://www.johndcook.com/blog/python_longitude_latitude/
