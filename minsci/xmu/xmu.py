@@ -1,50 +1,51 @@
-"""Read and write XML for Axiell EMu"""
+"""Reads and writes XML formatted for Axiell EMu"""
 
-import collections
 import glob
 import hashlib
 import json
 import os
-from copy import copy
+from collections import namedtuple
 from datetime import datetime
 
 from lxml import etree
 
-from .deepdict import XMuRecord
+from .containers import XMuRecord
 from .fields import XMuFields, is_table, is_reference
-from ..exceptions import PathError, RowMismatch
-from ..helpers import cprint, rprint
+from ..exceptions import RowMismatch
+from ..helpers import cprint
 
 
 FIELDS = XMuFields()
+Grid = namedtuple('Grid', ['fields', 'operator'])
 
 
 class XMu(object):
+    """Read and search XML export files from EMu
+
+    Attributes:
+        fields (XMuFields): based on fields kwarg
+        module (str): name of base module
+        record (dict): the currently active record
+        schema (dict): XMuFields.schema
+        tables (dict): XMuFields.tables
+        verbose (bool): triggers verbose output
+        xpaths (list): paths from source file
+
+    Args:
+        path (str): path to EMu XML report or directory containing
+            multiple reports. If multiple reports are found, they
+            are handled from newest to oldest.
+        fields (XMuFields): contains data about field
+        container (DeepDict): class to use to store EMu data
+    """
 
     def __init__(self, path, fields=None, container=None, module=None):
-        """Read and search XML export files from EMu
-
-        Attributes:
-            fields (XMuFields): based on fields kwarg
-            module (str): name of base module
-            record (dict): the currently active record
-            schema (dict): XMuFields.schema
-            tables (dict): XMuFields.tables
-            verbose (bool): triggers verbose output
-            xpaths (list): paths from source file
-
-        Args:
-            path (str): path to EMu XML report or directory containing
-                multiple reports. If multiple reports are found, they
-                are handled from newest to oldest.
-            fields (XMuFields): contains data about field
-            container (DeepDict): class to use to store EMu data
-        """
         # Class-wide switches
         self.path = path
         self.keep = []
         self.verbose = False
         self.module = module
+        self.from_json = False
 
         # Create a fields object based on the path if none provided
         if fields is None:
@@ -65,8 +66,8 @@ class XMu(object):
         if path is None:
             xpaths = []
         elif os.path.isdir(path):
-            self._files = [fp for fp in glob.glob(os.path.join(path,'*.xml'))]
-            self._files.sort(key=lambda fp: os.path.getmtime(fp), reverse=True)
+            self._files = [fp for fp in glob.glob(os.path.join(path, '*.xml'))]
+            self._files.sort(os.path.getmtime, reverse=True)
             xpaths = []
             for fp in self._files:
                 xpaths.extend(self.fields.read_fields(fp))
@@ -75,14 +76,14 @@ class XMu(object):
             xpaths = self.fields.read_fields(path)
             self._files = [path]
         else:
-            raise
+            raise Exception('Invalid path')
         # Check that all xpaths are valid according to schema
         remove = []
         for xpath in xpaths:
             path = xpath.split('/')
             try:
                 self.fields(*path)
-            except:
+            except NameError:
                 cprint('Removed invalid path: {}'.format('/'.join(path)))
                 remove.append(path)
         self.xpaths = [xpath for xpath in xpaths if not xpath in remove]
@@ -93,8 +94,13 @@ class XMu(object):
         self._paths_found = {}
 
 
+    def parse(self, element):
+        """Converts XML record to XMu dictionary"""
+        return self.read(element).unwrap()
+
+
     def container(self, *args):
-        """Wraps dict in custom containter with attributes needed for export"""
+        """Wraps dict in custom container with attributes needed for export"""
         container = self._container(*args)
         container.fields = self.fields
         container.module = self.module
@@ -102,8 +108,8 @@ class XMu(object):
 
 
     def iterate(self, element):
-        raise Exception('No xmu.iterate() function is defined'
-                        ' for this subclass')
+        """Placeholder for iteration method"""
+        raise Exception('No iterate method is defined for this subclass')
 
 
     def fast_iter(self, func=None, report=0, stop=0, callback=None, **kwargs):
@@ -124,61 +130,70 @@ class XMu(object):
             func = self.iterate
         if report:
             starttime = datetime.now()
-        go = True
-        n = 0
-        m = 0
+        keep_going = True
+        n_total = 0
+        n_success = 0
         for fp in self._files:
             if report:
                 cprint('Reading {}...'.format(fp))
             context = etree.iterparse(fp, events=['end'], tag='tuple')
-            for event, element in context:
+            for _, element in context:
                 # Process children of module table only
                 parent = element.getparent().get('name')
                 if parent is not None and parent.startswith('e'):
-                    n += 1
+                    n_total += 1
                     result = func(element, **kwargs)
                     if result is False:
-                        go = False
+                        keep_going = False
                         break
                     elif result is not True:
-                        m += 1
+                        n_success += 1
                     element.clear()
                     while element.getprevious() is not None:
                         del element.getparent()[0]
-                    if report and not n % report:
+                    if report and not n_total % report:
                         now = datetime.now()
-                        dt = now - starttime
+                        elapsed = now - starttime
                         starttime = now
                         print ('{:,} records processed! ({:,}'
-                               ' successful, t={}s)').format(n, m, dt)
-                    if stop and not n % stop:
-                        go = False
+                               ' successful, t={}s)').format(n_total,
+                                                             n_success,
+                                                             elapsed)
+                    if stop and not n_total % stop:
+                        keep_going = False
                         break
             del context
-            if not go:
+            if not keep_going:
                 break
-        print '{:,} records processed! ({:,} successful)'.format(n, m)
+        print '{:,} records processed! ({:,} successful)'.format(n_total,
+                                                                 n_success)
         if callback is not None:
             callback()
         return True
 
 
-    def save(self):
+    def save(self, fp=None):
         """Save attributes listed in the self.keep as json"""
-        fp = os.path.splitext(self.path)[0] + '.json'
+        if fp is None:
+            fp = os.path.splitext(self.path)[0] + '.json'
+        print 'Saving data to {}...'.format(fp)
         data = {key: getattr(self, key) for key in self.keep}
         json.dump(data, open(fp, 'wb'))
 
 
-    def load(self):
+    def load(self, fp=None):
         """Load data from json file created by self.save"""
-        fp = os.path.splitext(self.path)[0] + '.json'
+        if fp is None:
+            fp = os.path.splitext(self.path)[0] + '.json'
+        print 'Reading data from {}...'.format(fp)
         data = json.load(open(fp, 'rb'))
-        [setattr(self, key, data[key]) for key in data]
+        for attr, val in data.iteritems():
+            setattr(self, attr, val)
         self.from_json = True
 
 
     def set_keep(self, fields):
+        """Sets the attributes to load/save when using JSON functions"""
         self.keep = fields
 
 
@@ -245,16 +260,13 @@ class XMu(object):
         """
         xpath = self.fields('.'.join(args), self.module)['xpath']
         results = []
-        for child in self.rec.xpath(xpath):
+        for child in rec.xpath(xpath):
             if child.text:
                 text = unicode(child.text)
                 results.append(text)
             else:
                 results.append(u'')
-        try:
-            self._paths_found[xpath].append(len(results))
-        except:
-            self._paths_found[xpath]  = [len(results)]
+        self._paths_found.setdefault(xpath, []).append(len(results))
         # Convert atoms to unicode
         if not 'table' in xpath:
             try:
@@ -279,11 +291,11 @@ class XMu(object):
             Tuple containing (revised value, update boolean)
         """
         action = action.lower()
-        if not action in ['append', 'fill', 'replace']:
-            raise
+        if action not in ['append', 'fill', 'replace']:
+            raise Exception('Invalid action: {}'.format(action))
         if new_val == old_val:
             return None, True
-        elif action == 'fill' and not bool(old):
+        elif action == 'fill' and not old_val:
             return new_val, False
         elif action == 'append':
             table = self.fields(path)['table']
@@ -344,7 +356,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
     # determines the necessary attributes and passes it to any immediate
     # children.
     if hasattr(path, 'endswith') and path.endswith(')'):
-        path = path.rstrip('(+)')
+        path, operator = path.rstrip(')').rsplit('(', 1)
         try:
             table = fields.map_tables[(module, path)]
         except KeyError:
@@ -354,10 +366,16 @@ def _emuize(rec, root=None, path=None, handlers=None,
         except AttributeError:
             pass
         else:
-            group = '|'.join(['|'.join(field) for field in sorted(table)])
-    if isinstance(rec, (int, str, unicode)):
+            grid_flds = '|'.join(['|'.join(field) for field in sorted(table)])
+            group = Grid(grid_flds, operator)
+    if isinstance(rec, (int, long, float, basestring)):
         atom = etree.SubElement(root, 'atom')
-        atom.set('name', path.rstrip('_'))
+        try:
+            atom.set('name', path.rstrip('_'))
+        except AttributeError:
+            parent = etree.tostring(root.getparent())
+            raise ValueError('Path must be string. Got {} instead. Parent'
+                             ' is {}'.format(path, parent))
         try:
             atom.text = str(rec)  # FIXME
         except UnicodeEncodeError:
@@ -371,9 +389,11 @@ def _emuize(rec, root=None, path=None, handlers=None,
             root = etree.SubElement(root, 'tuple')
             # Add append attributes if required
             if group is not None:
-                group = hashlib.md5(group + '|{}'.format(path)).hexdigest()
-                root.set('row', '+')
-                root.set('group', group)
+                hashed = (hashlib.md5(group.fields +\
+                          '|{}'.format(path)).hexdigest())
+                root.set('row', group.operator)
+                if group.operator == '+':
+                    root.set('group', hashed)
                 group = None
         elif is_table(path):
             root = etree.SubElement(root, 'table')
@@ -402,7 +422,8 @@ def _sort(paths):
     paths.sort()
     rules = {
         'NamOrganisation': ['NamPartyType', 'NamInstitution', 'NamOrganisation'],
-        'OpeDateToRun': ['OpeExecutionTime', 'OpeDateToRun', 'OpeTimeToRun']
+        'OpeDateToRun': ['OpeExecutionTime', 'OpeDateToRun', 'OpeTimeToRun'],
+        'ClaScientificName': ['ClaScientificNameAuto', 'ClaScientificName']
     }
     for key, group in rules.iteritems():
         if key in paths:
@@ -489,7 +510,10 @@ def write(fp, records, module=None):
         records (list): list of XMuRecord() objects
         module (str): name of module
     """
-    _writer(fp, emuize(records, module))
+    if records:
+        _writer(fp, emuize(records, module))
+    else:
+        print 'xmu.write: No records found'
 
 
 def _writer(fp, root):
@@ -500,27 +524,9 @@ def _writer(fp, root):
             generated using XMu.format().
         fp (str): path to file
     """
-    n = 1
+    n_records = 1
     for rec in list(root):
-        rec.addprevious(etree.Comment('Row {}'.format(int(n))))
-        n += 1
+        rec.addprevious(etree.Comment('Row {}'.format(int(n_records))))
+        n_records += 1
     root.getroottree().write(fp, pretty_print=True,
                              xml_declaration=True, encoding='utf-8')
-
-
-'''FIXME: What is this?
-from collections import namedtuple
-def parse_log(fp):
-    ErrorMessage = ('ErrorMessage', 'row, message')
-    results = {}
-    with open(fp, 'rb') as f:
-        for line in f:
-            line = line.strip()
-            if line.startswith('error:'):
-                kind, rec, msg = [s.strip() for s in line.split(':', 3)]
-                row = int(rec.rsplit(' ', 1)[1])
-                results.setdefault('errors', []).append(ErrorMessage(row, msg))
-            elif line.startswith('Records Processed:'):
-                results['n'] = int(line.split(':')[1].strip())
-    return results
-'''
