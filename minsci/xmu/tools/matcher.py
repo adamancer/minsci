@@ -1,20 +1,12 @@
+"""Tools to match EMu records for making attachments"""
+
 import copy
 import json
 import os
-import pprint as pp
 
-#from unidecode import unidecode
+from unidecode import unidecode
 
-from ..deepdict import MinSciRecord
-from ..xmu import XMu, is_table, is_reference
-
-
-def standardize_taxon(species):
-    """Standardize formatting of taxa to simplify matching"""
-    species = unidecode(species).replace('-', ' ')
-    if species.count(',') == 1:
-        species = ' '.join([s.strip() for s in species.split(',')[::-1]])
-    return species
+from ...xmu import XMu, MinSciRecord, is_table, is_reference
 
 
 # List of fields to include for the attachment search. All other fields will
@@ -22,7 +14,7 @@ def standardize_taxon(species):
 INCLUDE = {
     'ebibliography': ['ArtTitle', 'ArtParentRef', 'ArtVolume', 'ArtIssue'],
     'ecatalogue': ['CatPrefix', 'CatNumber', 'CatSuffix', 'CatDivision'],
-    'elocations': ['LocLevel{}'.format(i) for i in xrange(1,9)],
+    'elocations': ['LocLevel{}'.format(x) for x in xrange(1, 9)],
     'eparties': ['NamFirst', 'NamMiddle', 'NamLast', 'NamOrganisation'],
     'etaxonomy': ['ClaSpecies']
 }
@@ -159,7 +151,7 @@ class Matcher(XMu):
         rec.prune()
         for key in rec.keys():
             if ((self.include and not key in self.include)
-                or key in self.exclude):
+                    or key in self.exclude):
                 del rec[key]
             elif self.transformations:
                 try:
@@ -238,7 +230,7 @@ class Matcher(XMu):
                 attach_field = 'irn'
             if isinstance(match_data, list):
                 attachment = [self.match(row, root)
-                               for row in match_data if row]
+                              for row in match_data if row]
             else:
                 attachment = self.match(match_data, root)
             if any(attachment) and not all(attachment):
@@ -268,9 +260,9 @@ class Matcher(XMu):
                 if is_table(key):
                     rec[key] = []
                 else:
-                    rec[key] = ''
+                    rec[key] = u''
             if ((self.include and not key in self.include)
-                or key in self.exclude):
+                    or key in self.exclude):
                 del rec[key]
         # Expand into a full EMu record
         rec = self.container(rec).expand()
@@ -293,7 +285,7 @@ class Matcher(XMu):
         # because it's unlikely that the import will include more than one,
         # so we check for those here.
         for sources in self.derived:
-            keep = ''
+            keep = u''
             for src in sources:
                 try:
                     if rec[src]:
@@ -309,6 +301,14 @@ class Matcher(XMu):
                     except KeyError:
                         pass
         return rec
+
+
+def standardize_taxon(species):
+    """Standardize formatting of classification to improve matching"""
+    species = unidecode(species).replace('-', ' ')
+    if species.count(',') == 1:
+        species = ' '.join([s.strip() for s in species.split(',')[::-1]])
+    return species
 
 
 def rower(rec, cols):
