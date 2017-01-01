@@ -60,7 +60,6 @@ class DeepDict(dict):
         return self.pull(*path.split(delimiter))
 
 
-    '''
     def push(self, val, *args):
         """Add data to the path stipulated by *args
 
@@ -88,6 +87,7 @@ class DeepDict(dict):
             i += 1
         if args[-1] is not None:
             d[args[-1]] = val
+    '''
 
 
     def pluck(self, *args):
