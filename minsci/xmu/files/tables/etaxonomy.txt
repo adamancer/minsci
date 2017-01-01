@@ -4,3 +4,6 @@ Citations,CitPrimary_tab
 Citations,CitRemarks_tab
 Rank,ClaOtherRank_tab
 Rank,ClaOtherValue_tab
+Validity,TaxValidityBiblioRef_tab
+Validity,TaxValidityComment_tab
+Validity,TaxValidityReason_tab
