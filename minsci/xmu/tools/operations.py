@@ -1,15 +1,14 @@
+"""Schedules operations using the EMu Operations module"""
+
 from datetime import timedelta
 
 from dateparser import parse
 
-from .groups import group
-from ..deepdict import MinSciRecord
-from ..xmu import XMu, write
-
-
+from ...xmu import XMu, MinSciRecord, write
 
 
 class Operation(XMu):
+    """Contains methods to construct an Operations import file"""
 
     def __init__(self, *args, **kwargs):
         super(Operation, self).__init__(*args, **kwargs)
@@ -18,22 +17,33 @@ class Operation(XMu):
         self.records = {}
 
 
-    def iterrec(self, element):
+    def read_notes(self, element):
+        """Read notes from EMu record"""
         rec = self.read(element).unwrap()
         self.records[rec('irn')] = rec('NotNotes').rstrip('. ')
 
 
-    def itermerged(self, element, lookup):
+    def retired_merged(self, element, lookup):
+        """Writes import to retire merged records
+
+        Args:
+            element (etree.XML): an EMu record as XML
+            lookup (dict): contains existing notes keyed to irn
+        """
         rec = self.read(element).unwrap()
         module = rec('OpeModule')
         if self.module is None:
             self.module = module
         elif module != self.module:
             raise Exception('Multiple modules in record set')
+        # Check if all records have been processed
         if rec('NumberToProcess') == rec('NumberProcessed'):
             for irn in rec('IrnsToBeProcessedRef_tab', 'IrnsToBeProcessedRef'):
-                notice = 'Retired: Duplicate of irn {}'.format(rec('MerTargetRef'))
+                notice = ('Retired: Duplicate of'
+                          ' irn {}').format(rec('MerTargetRef'))
                 try:
+                    # Construct a new note from the existing note and the
+                    # retirement notice
                     note = '\n\n'.join([s for s in [lookup[irn], notice]])
                 except KeyError:
                     # IRN doesn't exist, so nothing to do
@@ -48,12 +58,11 @@ class Operation(XMu):
             return True
 
 
-
-
 OPERATIONS = Operation(path=None, module='eoperations')
 
 
-def operate(func, module, username, records, date, outpath='operations.xml'):
+def write_operation(func, module, username, records, date,
+                    outpath='operations.xml'):
     """Writes an EMu import file containing a set of operations
 
     Args:
@@ -72,12 +81,12 @@ def operate(func, module, username, records, date, outpath='operations.xml'):
         pass
     operations = [func(module, username, date=date, delay=60*i, **rec)
                   for i, rec in enumerate(records)]
-    write(fp, operations, 'eoperations')
+    write(outpath, operations, 'eoperations')
 
 
 def merge(module, username, primary, duplicates,
           name_key=None, date=None, delay=0):
-    """Create an operation to merge a set of duplicates
+    """Creates an operation to merge a set of duplicates
 
     Args:
         module (str): the backend name for an EMu module
@@ -93,7 +102,7 @@ def merge(module, username, primary, duplicates,
     Returns:
         xmu.DeepDict object containing the merge operation
     """
-    op = OPERATIONS.container({
+    operation = OPERATIONS.container({
         'MerTargetRef_': primary('irn'),
         'OpeName': primary(name_key) if name_key is not None else 'Merge',
         'OpeType': 'Merge',
@@ -104,14 +113,14 @@ def merge(module, username, primary, duplicates,
             OPERATIONS.container({'AddEmuUserId' : username})
             ]
         })
-    _set_operation_time(op, date, delay)
+    _set_operation_time(operation, date, delay)
     for rec in duplicates:
-        op.setdefault('IrnsToBeProcessedRef_tab', []).append(rec('irn'))
-    return op.expand()
+        operation.setdefault('IrnsToBeProcessedRef_tab', []).append(rec('irn'))
+    return operation.expand()
 
 
-def delete(module, username, irns_to_delete, name_key=None, date=None, delay=0):
-    """Create an operation to delete a set of records
+def delete(module, username, irns_to_delete, name='Delete', date=None, delay=0):
+    """Creates an operation to delete a set of records
 
     Args:
         module (str): the backend name for an EMu module
@@ -125,8 +134,8 @@ def delete(module, username, irns_to_delete, name_key=None, date=None, delay=0):
     Returns:
         xmu.DeepDict object containing the delete operation
     """
-    op = OPERATIONS.container({
-        'OpeName': primary(name_key) if name_key is not None else 'Delete',
+    operation = OPERATIONS.container({
+        'OpeName': name,
         'OpeType': 'Delete',
         'OpeModule': module,
         'OpeExecutionTime': 'Yes',
@@ -135,10 +144,10 @@ def delete(module, username, irns_to_delete, name_key=None, date=None, delay=0):
             OPERATIONS.container({'AddEmuUserId' : username})
             ]
         })
-    _set_operation_time(op, date, delay)
-    for rec in duplicates:
-        op.setdefault('IrnsToBeProcessedRef_tab', []).append(rec('irn'))
-    return op.expand()
+    _set_operation_time(operation, date, delay)
+    for rec in irns_to_delete:
+        operation.setdefault('IrnsToBeProcessedRef_tab', []).append(rec('irn'))
+    return operation.expand()
 
 
 def retire_merged(merged_path, record_path, output='retire.xml'):
@@ -149,26 +158,24 @@ def retire_merged(merged_path, record_path, output='retire.xml'):
         record_path (str): path to records(?)
         output (str): path to EMu import file containing the retired records
     """
-    # Get data from report at record_path
-    records = XMu(record_path, container=MinSciRecord)
-    records.fast_iter(records.iterrec, report=10000)
+    # Check for existing notes in the records slated for retirement
+    records = Operation(record_path, container=MinSciRecord)
+    records.fast_iter(records.read_notes, report=10000)
     # Prepare the update file
-    merged = XMu(merged_path, container=MinSciRecord)
-    merged.fast_iter(merged.itermerged, report=1000, lookup=records.records)
+    merged = Operation(merged_path, container=MinSciRecord)
+    merged.fast_iter(merged.retired_merged, report=1000, lookup=records.records)
     if merged.group:
         write(output, merged.group, merged.module)
 
 
-
-
-def _set_operation_time(op, date=None, delay=None):
+def _set_operation_time(operation, date=None, delay=None):
     """Calculates start time for the current operation
 
-    Used to stagger operations throughout the delay. Modifies the passed op
-    in place.
+    Used to stagger operations throughout the delay. The passed operation is
+    modified in place.
 
     Args:
-        op (xmu.DeepDict): data about the current operation
+        operation (xmu.DeepDict): data about the current operation
         date (datetime.datetime): the base date/time for a set of operations
         delay (int): the number of seconds between operations
 
@@ -178,11 +185,11 @@ def _set_operation_time(op, date=None, delay=None):
     if delay is not None:
         date = date.replace(hour=6, minute=31, second=0, microsecond=0)
         date += timedelta(seconds=delay)
-        op['OpeExecutionTime'] = 'No'
-        op['OpeDateToRun'] = date.strftime('%Y-%m-%d')
-        op['OpeTimeToRun'] = date.strftime('%H:%M:%S')
+        operation['OpeExecutionTime'] = 'No'
+        operation['OpeDateToRun'] = date.strftime('%Y-%m-%d')
+        operation['OpeTimeToRun'] = date.strftime('%H:%M:%S')
     elif date is not None:
-        op['OpeExecutionTime'] = 'No'
-        op['OpeDateToRun'] = date.strftime('%Y-%m-%d')
-        op['OpeTimeToRun'] = date.strftime('00:00:00')
-    return op
+        operation['OpeExecutionTime'] = 'No'
+        operation['OpeDateToRun'] = date.strftime('%Y-%m-%d')
+        operation['OpeTimeToRun'] = date.strftime('00:00:00')
+    return operation
