@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+"""Creates ebibliography records based on BibTex records pulled using DOI"""
 
 import csv
 import io
@@ -11,8 +12,7 @@ import requests
 from dateparser import parse
 from nameparser import HumanName
 
-from ..deepdict import MinSciRecord
-from ..xmu import XMu, write, FIELDS
+from ...xmu import XMu, MinSciRecord, write, FIELDS
 
 
 MODULE = 'ebibliography'
@@ -36,7 +36,7 @@ ENTITIES = {
 
 
 class Biblio(XMu):
-    '''Fill out skeleton bibliography records that have DOIs'''
+    """Fill out skeleton bibliography records that have DOIs"""
 
     def __init__(self, *args, **kwargs):
         super(Biblio, self).__init__(*args, **kwargs)
@@ -44,6 +44,7 @@ class Biblio(XMu):
 
 
     def iterate(self, element):
+        """Pulls reference information from BibTex based on DOI in EMu record"""
         rec = self.read(element).unwrap()
         doi = rec.get_guid('DOI')
         if doi:
@@ -60,7 +61,7 @@ class Biblio(XMu):
 
 
 def doi2bib(doi):
-    '''Returns a bibTeX string of metadata for a given DOI.
+    """Returns a bibTeX string of metadata for a given DOI.
 
     Source: https://gist.github.com/jrsmith3/5513926
 
@@ -69,7 +70,7 @@ def doi2bib(doi):
 
     Returns:
         BibTex record as a string
-    '''
+    """
     url = 'http://dx.doi.org/' + doi
     headers = {'accept': 'application/x-bibtex'}
     r = requests.get(url, headers=headers)
@@ -79,14 +80,14 @@ def doi2bib(doi):
 
 
 def parse_bibtex(bib):
-    '''Parses the BibTex returned by the DOI resolver
+    """Parses the BibTex returned by the DOI resolver
 
     Args:
         bib (str): a BibTex record
 
     Returns:
         Dict containing reference data
-    '''
+    """
     for entity, repl in ENTITIES.iteritems():
         bib = bib.replace(entity, repl)
     # Parse BibTex using the handy dandy bibtexparser module
@@ -110,8 +111,8 @@ def parse_bibtex(bib):
     return parsed
 
 
-def parse_authors(author_string, parse=True):
-    '''Parse a list of authors into components used by EMu
+def parse_authors(author_string, parse_names=True):
+    """Parse a list of authors into components used by EMu
 
     Args:
         author_string (str): a string with one or more authors
@@ -119,14 +120,14 @@ def parse_authors(author_string, parse=True):
 
     Returns:
         A list of the parsed authors
-    '''
+    """
     authors = re.split(',| & | and ', author_string)
     parsed = []
     for author in authors:
         author = author.replace('.', '. ').replace('  ', ' ')
-        if parse:
+        if parse_names:
             fn = HumanName(author)
-            parsed.append(container({
+            parsed.append(clone({
                 'NamTitle': fn.title,
                 'NamFirst': fn.first,
                 'NamMiddle': fn.middle,
@@ -139,15 +140,15 @@ def parse_authors(author_string, parse=True):
 
 
 def emuize(data):
-    '''Convert a BibText record into an EMu record
+    """Convert a BibText record into an EMu record
 
     Args:
         data (dict): a parsed BibText record
 
     Returns:
         A DeepDict object formatted for EMu
-    '''
-    rec = container()
+    """
+    rec = clone()
     kind = data.pop('ENTRYTYPE')
     try:
         prefix = PREFIXES[kind]
@@ -156,9 +157,7 @@ def emuize(data):
         raise Exception('Unrecognized publication type: {}'.format(kind))
     # Authors
     try:
-        authors = data.pop('author')
-        fullnames = parse_authors(authors, False)
-        authors = parse_authors(authors)
+        authors = parse_authors(data.pop('author'))
     except KeyError:
         pass
     else:
@@ -177,7 +176,6 @@ def emuize(data):
         rec[prefix + 'Title'] = data.pop('title')
     except KeyError:
         rec[prefix + 'Title'] = '[MISSING TITLE]'
-        pass
     # Periodical information
     try:
         rec[prefix + 'Volume'] = data.pop('volume')
@@ -200,7 +198,7 @@ def emuize(data):
     try:
         year = data.pop('year')
     except KeyError:
-        year = ''
+        year = u''
     else:
         # HACK: Part 1 of fix for dates before 1900
         if int(year[:2]) < 19:
@@ -209,7 +207,7 @@ def emuize(data):
     try:
         month = data.pop('month')
     except KeyError:
-        month = ''
+        month = u''
     date = parse(' '.join([month, year]))
     if date is not None:
         if month:
@@ -231,7 +229,7 @@ def emuize(data):
     else:
         rec['AdmGUIDType_tab'] = ['DOI']
     # Source
-    parent = container()
+    parent = clone()
     for source in ('Book', 'Journal'):
         try:
             source_title = data.pop(SOURCES[source])
@@ -246,7 +244,7 @@ def emuize(data):
             except KeyError:
                 pass
             else:
-                parent[source_kind + 'PublishedByRef'] = container({
+                parent[source_kind + 'PublishedByRef'] = clone({
                     'NamPartyType' : 'Organization',
                     'NamInstitution': '',
                     'NamOrganisation' : publisher
@@ -273,7 +271,7 @@ def emuize(data):
     except IOError:
         pass
     else:
-        mm = container({
+        multimedia = clone({
             'Multimedia': fp,
             'MulTitle': rec[prefix + 'Title'],
             'MulCreator_tab': ['Adam Mansur'],#fullnames,
@@ -285,7 +283,7 @@ def emuize(data):
             'AdmGUIDType_tab': rec['AdmGUIDType_tab'],
             'AdmGUIDValue_tab': rec['AdmGUIDValue_tab']
         })
-        rec['MulMultiMediaRef_tab'] = [mm.expand()]
+        rec['MulMultiMediaRef_tab'] = [multimedia.expand()]
     rec.expand()
     # Look for keys that haven't been cross-walked to EMu schema
     if data:
@@ -295,7 +293,8 @@ def emuize(data):
     return rec
 
 
-def container(*args):
+def clone(*args):
+    """Creates new MinSciRecord with key attributes copied from global scope"""
     container = MinSciRecord(*args)
     container.fields = FIELDS
     container.module = MODULE
@@ -303,43 +302,34 @@ def container(*args):
 
 
 def process_file(fp):
-    '''Create an EMu import from a list of DOIs
+    """Create an EMu import file from a list of DOIs
 
     Args:
         fp (str): the path to the list of DOIs
-    '''
+    """
     records = []
     updated = []
     rename = []
-    with io.open('doi.txt', 'r', encoding='utf16') as f:
-        rows = csv.reader(f, delimiter=',', quotechar='"')
-        for row in rows:
-            try:
-                ref = dict(zip(keys, row))
-            except NameError:
-                keys = row
-            else:
-                bib = parse_bibtex(doi2bib(ref['DOI']))
-                rec = emuize(bib.copy())
-                if rec is not None:
-                    records.append(rec)
-                    # Update filename to match the id from the BibText record
-                    fn = ref['Filename']
-                    if fn:
-                        ext = os.path.splitext(fn)[1]
-                        ref['Filename'] = bib['ID'] + ext
-                        src = os.path.join('files', fn)
-                        dst = os.path.join('files', ref['Filename'])
-                        if src != dst:
-                            rename.append((src, dst))
-                updated.append(ref)
-
-
+    with io.open(fp, 'r', encoding='utf16') as f:
+        rows = csv.DictReader(f, delimiter=',', quotechar='"')
+        for ref in rows:
+            bib = parse_bibtex(doi2bib(ref['DOI']))
+            rec = emuize(bib.copy())
+            if rec is not None:
+                records.append(rec)
+                # Update filename to match the id from the BibText record
+                fn = ref['Filename']
+                if fn:
+                    ext = os.path.splitext(fn)[1]
+                    ref['Filename'] = bib['ID'] + ext
+                    src = os.path.join('files', fn)
+                    dst = os.path.join('files', ref['Filename'])
+                    if src != dst:
+                        rename.append((src, dst))
+            updated.append(ref)
     for src, dst in rename:
         os.rename(src, dst)
-
     write('import.xml', records, 'ebibliography')
-
     # Update the DOI file
     keys = ['DOI', 'Filename', 'IRN']
     with open('doi.txt', 'wb') as f:
@@ -347,8 +337,7 @@ def process_file(fp):
         writer.writerow([s.encode('utf-8') for s in keys])
         for ref in updated:
             writer.writerow([ref[key].encode('utf-8') for key in keys])
-
-    # Re-encode file to UTF-16-LE
+    # Re-encode the DOI file to UTF-16-LE
     with open('doi.txt', 'rb') as f:
         data = f.read().decode('utf-8')
     with io.open('doi.txt', 'w', encoding='utf-16', newline='\n') as f:
