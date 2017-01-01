@@ -1,10 +1,11 @@
+"""Writes import for egroups based on a list of irns"""
 from ..xmu import XMu, write
 
 
 GROUPS = XMu(path=None, module='egroups')
 
 
-def write_group(module, irns_to_group, fp='groups.xml', irn=None, name=None):
+def write_group(module, irns_to_group, fp='group.xml', irn=None, name=None):
     """Create EMu import for egroups based on a list of irns
 
     Args:
@@ -28,8 +29,3 @@ def write_group(module, irns_to_group, fp='groups.xml', irn=None, name=None):
     if irn is not None:
         group['irn'] = irn
     write(fp, [group.expand()], 'egroups')
-
-
-def group(*args, **kwargs):
-    '''Convenience function to maintain functionality of older code'''
-    return write_group(*args, **kwargs)
