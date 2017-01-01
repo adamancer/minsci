@@ -1,21 +1,55 @@
 """Subclass of DeepDict with methods specific to XMu"""
 
-from .deepdict import DeepDict
+import re
+from datetime import datetime
+from itertools import izip_longest
+
+from dateparser import parse
+
+from ...deepdict import DeepDict
 from ...exceptions import PathError
 
+
 class XMuRecord(DeepDict):
+    """Contains methods for reading data from EMu XML exports"""
 
     def __init__(self, *args):
         super(XMuRecord, self).__init__(*args)
         self.tabends = ('0', '_nesttab', '_nesttab_inner', '_tab')
+        self.refends = ('Ref', 'Ref_tab')
         self.fields = None
         self.module = None
-        self.found = []
 
 
     def __call__(self, *args, **kwargs):
         """Shorthand for XMuRecord.smart_pull(*args)"""
         return self.smart_pull(*args)
+
+
+    def clone(self, obj=None):
+        """Creates new object of subclass with key attributes copied over"""
+        if obj is not None:
+            clone = self.__class__(obj)
+        else:
+            clone = self.__class__()
+        clone.fields = self.fields
+        clone.module = self.module
+        return clone
+
+
+    def simple_pull(self, path):
+        """Returns data from path in DeepDict
+
+        Args:
+            path (mixed): the path to an EMu field as a string or list
+
+        Returns:
+            Value for the given path
+        """
+        if isinstance(path, basestring):
+            return self(path)
+        else:
+            return self(*path)
 
 
     def smart_pull(self, *args, **kwargs):
@@ -32,11 +66,32 @@ class XMuRecord(DeepDict):
                 A simple table returns a list of values
                 A reference table that specifies a field returns a list
                 A reference table returns a list of XMuRecord objects
+                A nested table returns a list of lists
         """
+        # Nested tables need to be handled very carefully
+        nested = [arg for arg in args if arg.endswith('_nesttab')]
+        if nested:
+            args = list(args)
+            nesttab = nested[0]
+            nesttab_inner = nesttab + '_inner'
+            if not nesttab_inner in args:
+                args.insert(args.index(nesttab) + 1, nesttab_inner)
+            # Split into inner and outer tables
+            outer_table = args[:args.index(nesttab_inner)]
+            inner_table = args[args.index(nesttab_inner):]
+            if not inner_table:
+                inner_table = [nesttab.split('_')[0]]
+            try:
+                retval = [row.get_rows(*inner_table, **kwargs)
+                          for row in self.pull(*outer_table)]
+            except PathError:
+                retval = [[]]
         # Reference tables return a list of dictionaries, unless a field
         # is specified, in which case they return a list of values
-        if [arg for arg in args if arg.endswith('Ref_tab')]:
+        elif [arg for arg in args if arg.endswith('Ref_tab')]:
             retval = self.get_reference(*args, **kwargs)
+            if retval is None:
+                retval = []
         # One-dimensional tables return a list of values
         elif [arg for arg in args if arg.endswith(self.tabends)]:
             retval = self.get_rows(*args, **kwargs)
@@ -46,20 +101,34 @@ class XMuRecord(DeepDict):
             try:
                 val = self.pull(*args, **kwargs)
             except PathError:
-                retval = ''
+                retval = u''
             else:
-                retval = val if val is not None else ''
+                retval = val if val is not None else u''
+        # Update module attribute for references/attachments
+        if args[-1].endswith(self.refends):
+            path = [self.module] + list(args)
+            field_data = self.fields.get(*path)
+            if isinstance(retval, list):
+                for val in retval:
+                    val.module = field_data['schema']['RefTable']
+            else:
+                retval.module = field_data['schema']['RefTable']
         # Verify path against the schema if no value is returned. A failed
         # call does not itself return an error because not all fields will
         # be present in all records.
         if not retval:
             path = [self.module] + list(args)
             try:
-                self.fields.schema(*path)
+                self.fields.get(*path)
             except AttributeError:
                 pass
+            except PathError:
+                raise
             except KeyError:
                 raise PathError('/'.join(args))
+        # Last check
+        if retval is None:
+            raise TypeError
         return retval
 
 
@@ -112,7 +181,7 @@ class XMuRecord(DeepDict):
     '''
 
 
-    def get_rows(self, *args, **kwargs):
+    def get_rows(self, *args):
         """Returns a list of values corresponding to the table rows
 
         Args:
@@ -125,12 +194,12 @@ class XMuRecord(DeepDict):
         # Clean up tables
         for i in xrange(len(args)):
             if args[-(i+1)].endswith(self.tabends):
+                if i:
+                    args = args[:-i]
                 break
-        if i:
-            args = args[:-i]
         try:
             table = self.pull(*args)
-        except:
+        except (KeyError, PathError):
             return []
         else:
             rows = []
@@ -144,7 +213,7 @@ class XMuRecord(DeepDict):
             return rows
 
 
-    def get_reference(self, *args, **kwargs):
+    def get_reference(self, *args):
         """Returns a list of values corresponding to the table rows
 
         Args:
@@ -171,11 +240,101 @@ class XMuRecord(DeepDict):
             elif ref:
                 rows = []
                 for row in ref:
-                    try:
-                        rows.append(row[key])
-                    except KeyError:
-                        rows.append([])
+                    rows.append(row.get(key, []))
                 return rows
+
+
+    def get_matching_rows(self, match, label_field, value_field):
+        """Helper function to find rows in any table matching a kind/label
+
+        Args:
+            match (str): the name of the label to match
+            label_field (str): field in a table containing the label
+            value_field (str): field in a table containing the value
+
+        Returns:
+            List of values matching the match string
+        """
+        labels = self.simple_pull(label_field)
+        values = self.simple_pull(value_field)
+        rows = izip_longest(labels, values)
+        match = standardize(match)
+        return [val for label, val in rows if standardize(label) == match]
+
+
+    def get_date(self, date_from, date_to=None, date_format='%Y-%m-%d'):
+        """Returns dates and date ranges
+
+        Args:
+            date_from (mixed): path to date from field
+            date_to (mixed): path to date to field
+            date_format (str): formatting mask for date
+
+        Returns:
+            Date or date range as a string
+        """
+        dates = [self.simple_pull(date_from)]
+        if date_to is not None:
+            dates.append(self.simple_pull(date_to))
+        date_range = []
+        for date in [dt for dt in dates if dt]:
+            parsed = parse(date).strftime(date_format)
+            if not parsed in date_range:
+                date_range.append(parsed)
+        return ' to '.join(date_range)
+
+
+    def get_note(self, kind):
+        """Return the note matching the given kind"""
+        #FIXME: Add publication check
+        return self.get_matching_rows(kind,
+                                      'NotNmnhType_tab',
+                                      'NotNmnhText0')
+
+
+    def get_mod_time(self, timezone='US/Eastern'):
+        """Gets the modification time for a record"""
+        mod_date = self('AdmDateModified')
+        mod_time = self('AdmTimeModified')
+        mod_datetime = '1970-01-01T00:00:00+00:00'  # start of unix epoch
+        if mod_date and mod_time:
+            mod_datetime = '{}T{}'.format(mod_date, mod_time)
+        else:
+            raise ValueError('Both modification date and time are required')
+        timestamp = datetime.strptime(mod_datetime, '%Y-%m-%dT%H:%M:%S')
+        return timezone(timezone).localize(timestamp)
+
+
+    def get_guid(self, kind='EZID', allow_multiple=False):
+        """Get value from the GUID table for a given key
+
+        Args:
+            kind (str): name of GUID
+            allow_multiple (bool): if False, raises error if multiple
+                values with same type are found
+
+        Returns:
+            First match from the GUID table for the key (if allow_multiple
+            is False) or the full set of matches (if allow_multiple is True)
+        """
+        args = (kind, 'AdmGUIDType_tab', 'AdmGUIDValue_tab')
+        matches = self.get_matching_rows(*args)
+        if len(matches) > 1 and not allow_multiple:
+            raise Exception('Multiple values found for {}'.format(kind))
+        if allow_multiple:
+            return matches
+        else:
+            try:
+                return matches[0]
+            except IndexError:
+                return None
+
+
+    def get_href(self):
+        """Get ark link to this record"""
+        ezid = self.get_guid('EZID')
+        if ezid:
+            return 'http://n2t.net/{}'.format(ezid)
 
 
     def wrap(self, module):
@@ -236,29 +395,48 @@ class XMuRecord(DeepDict):
                 # for a corresponding _nesttab_inner key
                 try:
                     expanded = k + '_inner' in val[0].keys()
+                    #expanded = k + '_inner' in val.keys()
                 except (AttributeError, IndexError):
                     expanded = False
                 if not expanded and any(val):
                     if 'Ref_' in k:
                         base = 'irn'
-                    self[key] = [self.__class__({
-                            k + '_inner': [self.__class__({base: s})
-                                           for s in val]
+                    self[key] = [self.clone({
+                        k + '_inner': [self.clone({base: s}) for s in val]
                         })]
-            elif k.endswith('Ref') and isinstance(val, (int, str, unicode)):
-                self[key] = self.__class__({'irn': val});
+            elif (k.endswith('Ref')
+                  and isinstance(val, (int, str, unicode))
+                  and val):
+                self[key] = self.clone({'irn': val})
+            elif k.endswith('Ref'):
+                try:
+                    self[key].expand()
+                except AttributeError:
+                    self[key] = self.clone(self[key]).expand()
             elif (k.endswith('Ref_tab')
                   and isinstance(val, list)
                   and any(val)
                   and isinstance(val[0], (int, str, unicode))):
-                self[key] = [self.__class__({'irn': s}) for s in val];
+                self[key] = [self.clone({'irn': s}) if s
+                             else self.clone() for s in val]
+            elif (k.endswith('Ref_tab')
+                  and isinstance(val, list)
+                  and any(val)):
+                self[key] = [self.clone(d).expand() for d in val]
             elif (k.endswith(self.tabends)
                   and isinstance(val, list)
                   and any(val)
                   and isinstance(val[0], (int, str, unicode))):
-                self[key] = [self.__class__({base: s}) for s in self[key]]
+                self[key] = [self.clone({base: s}) for s in self[key]]
+            elif (k.endswith(self.tabends)
+                  and isinstance(val, list)
+                  and not any(val)):
+                self[key] = []
         return self
 
 
-    def flatten(self):
-        pass
+
+
+def standardize(val):
+    """Standardize the format of a value"""
+    return re.sub(r'[\W]', u'', val.upper()).upper()
