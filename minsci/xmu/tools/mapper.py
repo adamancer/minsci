@@ -1,8 +1,8 @@
-import copy
+"""Alias handling for processing EMu data that doesn't use full paths"""
+
 import os
 
-from ..deepdict import MinSciRecord
-from ..xmu import XMu, is_table, is_reference
+from ...xmu import XMu, MinSciRecord, is_table, is_reference
 
 
 class FieldMapper(object):
@@ -15,6 +15,8 @@ class FieldMapper(object):
         schema (dict): the EMu schema
         tables (dict): maps columns to table fields
 
+    Args:
+        module (str): the name of the module being matched against
     """
 
     def __init__(self, module):
@@ -86,11 +88,11 @@ class FieldMapper(object):
                 paths.append(schema_path[:-1])
         # Set aliases
         self.aliases[alias] = path
-        for p in paths:
+        for path in paths:
             try:
-                self.paths[p]
+                self.paths[path]
             except KeyError:
-                self.paths[p] = alias
+                self.paths[path] = alias
 
 
     def get_path(self, alias, schema_path=False):
@@ -229,7 +231,7 @@ class FieldMapper(object):
                         # index applies to the reference table, and the
                         # internal reference is atomic.
                         if ((is_reference(segment) or '_nesttab' in path)
-                            and not is_table(segment)):
+                                and not is_table(segment)):
                             if len(rec[field]) > 1:
                                 raise Exception('Reference length error')
                             d[last] = rec[field][0]
