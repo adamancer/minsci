@@ -1,41 +1,38 @@
+"""Reads and returns information about EMu's schema"""
+
 import json as serialize
-import datetime
 import glob
 import os
 import re
-import collections
-from copy import copy
 
-from .deepdict import DeepDict
+from ..deepdict import DeepDict
 from ..exceptions import PathError
-from ..helpers import cprint, dedupe, rprint
+from ..helpers import cprint
 
 
 class XMuFields(object):
+    """Reads and stores metadata about fields in EMu
+
+    Args:
+        schema_path (str): path to EMu schema file. If None, looks for
+            a copy of the schema stored in files.
+        whitelist (list): list of EMu modules to include. If None,
+            anything not on the blacklist is included.
+        blacklist (list): list of EMu modules to exclude. If None,
+            no modules are excluded.
+        cache (str): path to cache file. If specified, script will
+            check there for a cache file and create one if it isn't found.
+        verbose (bool): triggers verbose output
+
+    Attributes:
+        schema (dict): path-keyed dicts of field data
+        tables (dict): module-keyed lists of paths to tables
+        map_tables (dict): path-keyed lists of paths to tables
+        verbose (bool): triggers verbose output
+    """
 
     def __init__(self, schema_path=None, whitelist=None, blacklist=None,
-                 source_path=None, cache=False, verbose=False):
-        """Reads and stores metadata about fields in EMu
-
-        Args:
-            schema_path (str): path to EMu schema file. If None, looks for
-                a copy of the schema stored in files.
-            whitelist (list): list of EMu modules to include. If None,
-                anything not on the blacklist is included.
-            blacklist (list): list of EMu modules to exclude. If None,
-                no modules are excluded.
-            source_path (str): path to EMu export file. Can be used in lieu
-                of white/blacklist to refine the fields object.
-            cache (str): path to cache file. If specified, script will
-                check there for a cache file and create one if it isn't found.
-            verbose (bool): triggers verbose output
-
-        Attributes:
-            schema (dict): path-keyed dicts of field data
-            tables (dict): module-keyed lists of paths to tables
-            map_tables (dict): path-keyed lists of paths to tables
-            verbose (bool): triggers verbose output
-        """
+                 cache=False, verbose=False):
         self.verbose = verbose
         self._fpath = os.path.join(os.path.dirname(__file__), 'files')
         if cache:
@@ -47,7 +44,7 @@ class XMuFields(object):
             except IOError:
                 cprint('No cache found!')
                 cache = None  # None is different than False
-            except:
+            except KeyError:
                 cprint('Cache is not JSON!')
                 cache = None
             else:
@@ -59,7 +56,6 @@ class XMuFields(object):
                     #self.aliases = fields['aliases']
                 except KeyError:
                     print 'Could not read cache!'
-                    serialize = None
         if not cache:
             if schema_path is None:
                 schema_path = os.path.join(self._fpath, 'NMNH-schema.pl')
@@ -143,9 +139,9 @@ class XMuFields(object):
             Dictionary with information about the XML schema
         """
         # Regexes are used to split the .pl file into modules and fields
-        re_module = re.compile('\te[a-z]+ =>.*?\{.*?\n\t\}', re.DOTALL)
-        re_field = re.compile("'[A-z].*?\},", re.DOTALL)
-        re_lines = re.compile('[A-z].*,', re.DOTALL)
+        re_module = re.compile(r'\te[a-z]+ =>.*?\{.*?\n\t\}', re.DOTALL)
+        re_field = re.compile(r"'[A-z].*?\},", re.DOTALL)
+        #re_lines = re.compile(r'[A-z].*,', re.DOTALL)
         try:
             with open(fp, 'rb') as f:
                 modules = re_module.findall(f.read())
@@ -156,7 +152,7 @@ class XMuFields(object):
             module_name = module.split('\n')[0].strip().split(' ')[0]
             # Check module name against whitelist and blacklist
             if (blacklist is not None and module_name in blacklist
-                or whitelist is not None and not module_name in whitelist):
+                    or whitelist is not None and not module_name in whitelist):
                 continue
             schema[module_name] = {}
             fields = re_field.findall(module)
@@ -164,7 +160,7 @@ class XMuFields(object):
                 schema_data = {}
                 lines = [s.strip() for s in field.split('\n')
                          if bool(s.strip())]
-                field_name = lines[0].split(' ')[0].strip('"\'')
+                #field_name = lines[0].split(' ')[0].strip('"\'')
                 lines = lines[2:len(lines)-1]
                 for line in lines:
                     try:
@@ -192,7 +188,8 @@ class XMuFields(object):
         return schema
 
 
-    def _derive_path(self, schema_data):
+    @staticmethod
+    def _derive_path(schema_data):
         """Derive full path to field based on EMu schema
 
         Args:
@@ -216,7 +213,7 @@ class XMuFields(object):
                 # Skip ItemName for references. This allows their
                 # paths to match the EMu import/export schema.
                 elif not (val.endswith('Ref') and key == 'ItemName'):
-                        path.append(val)
+                    path.append(val)
         # Reworked dedupe function to check against preceding value
         keep = [i for i in xrange(len(path)) if not i or path[i] != path[i-1]]
         return tuple([path[i] for i in keep])
@@ -245,6 +242,7 @@ class XMuFields(object):
         return tables
 
 
+    '''
     def _map_tables(self):
         """Update path-keyed table map"""
         cprint('Mapping tables...')
@@ -262,6 +260,7 @@ class XMuFields(object):
                             data['related'] = table
                             self.schema.push(path, data)
                             self.map_tables[path] = table
+    '''
 
 
     def _map_fields_to_tables(self):
@@ -311,7 +310,7 @@ class XMuFields(object):
                     self.schema.push(alias, d)
                     aliases[alias] = True
                     try:
-                        table = self(path)['columns']
+                        self(path)['columns']
                     except KeyError:
                         if is_table(path):
                             cprint((' Alias error: Related table not'
@@ -322,7 +321,8 @@ class XMuFields(object):
         return aliases
 
 
-    def get_xpath(self, *args):
+    @staticmethod
+    def get_xpath(*args):
         """Reformat plain-text path to xpath
 
         Args:
@@ -333,17 +333,18 @@ class XMuFields(object):
         """
         xpath = []
         for arg in args:
-            if is_table(name):
-                xpath.append("table[@name='{}']".format(name))
+            if is_table(arg):
+                xpath.append("table[@name='{}']".format(arg))
                 xpath.append('tuple')
-            elif is_reference(name):
-                xpath.append("tuple[@name='{}']".format(name))
+            elif is_reference(arg):
+                xpath.append("tuple[@name='{}']".format(arg))
             else:
-                xpath.append("atom[@name='{}']".format(name))
+                xpath.append("atom[@name='{}']".format(arg))
         return '/'.join(xpath)
 
 
-    def read_fields(self, fp):
+    @staticmethod
+    def read_fields(fp):
         """Reads paths from the schema in an EMu XML export
 
         Args:
@@ -373,33 +374,6 @@ class XMuFields(object):
         return paths
 
 
-    '''DEPRECATED
-    def bracketize_path(self, path, simple=True):
-        """Mark tuples in given path with {}
-
-        Args:
-            path (str): path to be modified
-            simple (bool): if True, all brackets are {0}
-
-        Returns:
-            Path modified to include {} where each tuple occurs
-        """
-        # TODO: Assess whether still required
-        cmps = path.split('.')
-        path = [cmps[0]]
-        n = 0
-        for i in xrange(1, len(cmps)):
-            this = cmps[i]
-            last = cmps[i-1]
-            if last.endswith(('0', '_nesttab', '_nesttab_inner', '_tab')):
-                path.append('{' + str(n) + '}')
-                if not simple:
-                    n += 1
-            path.append(this)
-        return '/'.join(path)
-    '''
-
-
     def set_alias(self, alias, path):
         """Add alias: path to self.schema
 
@@ -411,9 +385,11 @@ class XMuFields(object):
         self.schema.push(alias, self.schema(path))
 
 
+    '''
     def reset_aliases(self):
         """Update schema to remove all aliases set using set_aliases()"""
         self.schema = copy(self.master)
+    '''
 
 
     def add_table(self, columns):
@@ -423,7 +399,7 @@ class XMuFields(object):
             columns (list): columns in the table being added
         """
         module = columns[0][0]
-        columns.sort
+        columns.sort()
         columns = tuple(columns)
         hkey = hash(columns)
         try:
