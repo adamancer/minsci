@@ -1,0 +1,3 @@
+# Tables (as Nickname, Field)
+Help,ColGroup_nesttab
+Help,DesEnglishDescription_tab
