@@ -1,4 +1,5 @@
 """Writes import for egroups based on a list of irns"""
+
 from ..xmu import XMu, write
 
 

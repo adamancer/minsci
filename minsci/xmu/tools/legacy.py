@@ -305,7 +305,7 @@ class Legacy(XMu):
 
     def iterlegacy(self, element):
         """Compares current and legacy """
-        rec = self.read(element).unwrap()
+        rec = self.parse(element)
         irn = rec('irn')
         legacy = rec('AdmOriginalDataRef', 'AdmOriginalData')
         lines = [re.split('[=:]', line, 1) for line in legacy.splitlines()]

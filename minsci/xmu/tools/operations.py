@@ -19,7 +19,7 @@ class Operation(XMu):
 
     def read_notes(self, element):
         """Read notes from EMu record"""
-        rec = self.read(element).unwrap()
+        rec = self.parse(element)
         self.records[rec('irn')] = rec('NotNotes').rstrip('. ')
 
 
@@ -30,7 +30,7 @@ class Operation(XMu):
             element (etree.XML): an EMu record as XML
             lookup (dict): contains existing notes keyed to irn
         """
-        rec = self.read(element).unwrap()
+        rec = self.parse(element)
         module = rec('OpeModule')
         if self.module is None:
             self.module = module

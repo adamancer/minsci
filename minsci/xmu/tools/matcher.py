@@ -125,7 +125,7 @@ class Matcher(XMu):
 
     def iterate(self, element):
         """Populate dict used for matching"""
-        rec = self.read(element).unwrap()
+        rec = self.parse(element)
         irn = rec.pop('irn')  # IRN will never be included in the match set
         key = self.keyer(rec)
         self._fields.extend(rec.keys())

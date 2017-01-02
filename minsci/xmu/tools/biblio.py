@@ -45,7 +45,7 @@ class Biblio(XMu):
 
     def iterate(self, element):
         """Pulls reference information from BibTex based on DOI in EMu record"""
-        rec = self.read(element).unwrap()
+        rec = self.parse(element)
         doi = rec.get_guid('DOI')
         if doi:
             bibtex = doi2bib(doi)
