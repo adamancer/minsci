@@ -210,6 +210,11 @@ class XMungo(MongoBot):
         raise Exception('No iterate method is defined for this subclass')
 
 
+    def finalize(self):
+        """Placeholder for finalize method run at end of iteration"""
+        pass
+
+
     def _fast_iter(self, query=None, func=None, report=0, stop=0,
                    callback=None, **kwargs):
         if func is None:
@@ -250,6 +255,7 @@ class XMungo(MongoBot):
                                                                  n_success)
         if callback is not None:
             callback()
+        self.finalize()
         return True
 
 

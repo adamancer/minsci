@@ -112,6 +112,11 @@ class XMu(object):
         raise Exception('No iterate method is defined for this subclass')
 
 
+    def finalize(self):
+        """Placeholder for finalize method run at end of iteration"""
+        pass
+
+
     def fast_iter(self, func=None, report=0, stop=0, callback=None, **kwargs):
         """Use callback to iterate through an EMu export file
 
@@ -169,6 +174,7 @@ class XMu(object):
                                                                  n_success)
         if callback is not None:
             callback()
+        self.finalize()
         return True
 
 
