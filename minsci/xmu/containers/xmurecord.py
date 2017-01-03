@@ -292,17 +292,32 @@ class XMuRecord(DeepDict):
                                       'NotNmnhText0')
 
 
-    def get_mod_time(self, timezone='US/Eastern'):
-        """Gets the modification time for a record"""
-        mod_date = self('AdmDateModified')
-        mod_time = self('AdmTimeModified')
-        mod_datetime = '1970-01-01T00:00:00+00:00'  # start of unix epoch
-        if mod_date and mod_time:
-            mod_datetime = '{}T{}'.format(mod_date, mod_time)
-        else:
-            raise ValueError('Both modification date and time are required')
-        timestamp = datetime.strptime(mod_datetime, '%Y-%m-%dT%H:%M:%S')
-        return timezone(timezone).localize(timestamp)
+    def get_created_time(self, timezone='US/Eastern', mask=None):
+        """Gets datetime of record creation"""
+        return self._localize_datetime(self('AdmDateInserted'),
+                                       self('AdmTimeInserted'),
+                                       timezone,
+                                       mask)
+
+
+    def get_modified_time(self, timezone='US/Eastern', mask=None):
+        """Gets datetime of last modification"""
+        return self._localize_datetime(self('AdmDateModified'),
+                                       self('AdmTimeModified'),
+                                       timezone,
+                                       mask)
+
+
+    @staticmethod
+    def _localize_datetime(date, time, timezone, mask):
+        if not (date and time):
+            raise ValueError('Both date and time are required')
+        iso_datetime = '{}T{}'.format(date, time)
+        timestamp = datetime.strptime(iso_datetime, '%Y-%m-%dT%H:%M:%S')
+        localized = timezone(timezone).localize(timestamp)
+        if mask is not None:
+            return localized.strftime(mask)
+        return localized
 
 
     def get_guid(self, kind='EZID', allow_multiple=False):
