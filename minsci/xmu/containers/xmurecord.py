@@ -3,11 +3,11 @@
 import re
 from datetime import datetime
 from itertools import izip_longest
+from pytz import timezone
 
 from dateparser import parse
 
 from ...deepdict import DeepDict
-from ...exceptions import PathError
 
 
 class XMuRecord(DeepDict):
@@ -17,24 +17,12 @@ class XMuRecord(DeepDict):
         super(XMuRecord, self).__init__(*args)
         self.tabends = ('0', '_nesttab', '_nesttab_inner', '_tab')
         self.refends = ('Ref', 'Ref_tab')
-        self.fields = None
-        self.module = None
+        self._attributes = ['fields', 'module']
 
 
     def __call__(self, *args, **kwargs):
         """Shorthand for XMuRecord.smart_pull(*args)"""
         return self.smart_pull(*args)
-
-
-    def clone(self, obj=None):
-        """Creates new object of subclass with key attributes copied over"""
-        if obj is not None:
-            clone = self.__class__(obj)
-        else:
-            clone = self.__class__()
-        clone.fields = self.fields
-        clone.module = self.module
-        return clone
 
 
     def simple_pull(self, path):
@@ -84,7 +72,7 @@ class XMuRecord(DeepDict):
             try:
                 retval = [row.get_rows(*inner_table, **kwargs)
                           for row in self.pull(*outer_table)]
-            except PathError:
+            except KeyError:
                 retval = [[]]
         # Reference tables return a list of dictionaries, unless a field
         # is specified, in which case they return a list of values
@@ -100,7 +88,7 @@ class XMuRecord(DeepDict):
         else:
             try:
                 val = self.pull(*args, **kwargs)
-            except PathError:
+            except KeyError:
                 retval = u''
             else:
                 retval = val if val is not None else u''
@@ -122,10 +110,10 @@ class XMuRecord(DeepDict):
                 self.fields.get(*path)
             except AttributeError:
                 pass
-            except PathError:
+            except KeyError:
                 raise
             except KeyError:
-                raise PathError('/'.join(args))
+                raise KeyError('/'.join(args))
         # Last check
         if retval is None:
             raise TypeError
@@ -199,7 +187,7 @@ class XMuRecord(DeepDict):
                 break
         try:
             table = self.pull(*args)
-        except (KeyError, PathError):
+        except (KeyError, KeyError):
             return []
         else:
             rows = []
@@ -207,9 +195,8 @@ class XMuRecord(DeepDict):
                 try:
                     rows.extend(row.values())
                 except AttributeError:
-                    print args
-                    self.pprint()
-                    raise
+                    raise AttributeError('No values attribute found for {}. Try'
+                                         ' expanding the record.'.format(args))
             return rows
 
 
@@ -232,7 +219,7 @@ class XMuRecord(DeepDict):
             args = args[:-1]
         try:
             ref = self.pull(*args)
-        except PathError:
+        except KeyError:
             return []
         else:
             if ref and key is None:
@@ -292,29 +279,29 @@ class XMuRecord(DeepDict):
                                       'NotNmnhText0')
 
 
-    def get_created_time(self, timezone='US/Eastern', mask=None):
+    def get_created_time(self, timezone_id='US/Eastern', mask=None):
         """Gets datetime of record creation"""
         return self._localize_datetime(self('AdmDateInserted'),
                                        self('AdmTimeInserted'),
-                                       timezone,
+                                       timezone_id,
                                        mask)
 
 
-    def get_modified_time(self, timezone='US/Eastern', mask=None):
+    def get_modified_time(self, timezone_id='US/Eastern', mask=None):
         """Gets datetime of last modification"""
         return self._localize_datetime(self('AdmDateModified'),
                                        self('AdmTimeModified'),
-                                       timezone,
+                                       timezone_id,
                                        mask)
 
 
     @staticmethod
-    def _localize_datetime(date, time, timezone, mask):
+    def _localize_datetime(date, time, timezone_id, mask):
         if not (date and time):
             raise ValueError('Both date and time are required')
         iso_datetime = '{}T{}'.format(date, time)
         timestamp = datetime.strptime(iso_datetime, '%Y-%m-%dT%H:%M:%S')
-        localized = timezone(timezone).localize(timestamp)
+        localized = timezone(timezone_id).localize(timestamp)
         if mask is not None:
             return localized.strftime(mask)
         return localized
@@ -345,7 +332,7 @@ class XMuRecord(DeepDict):
                 return None
 
 
-    def get_href(self):
+    def get_url(self):
         """Get ark link to this record"""
         ezid = self.get_guid('EZID')
         if ezid:
@@ -362,7 +349,7 @@ class XMuRecord(DeepDict):
             Wrapped XMuRecord. In a typical use case, this means the paths
             used to retrieve data need to include the module name.
         """
-        return self.__class__({module: self})
+        return self.clone({module: self})
 
 
     def unwrap(self):
@@ -387,7 +374,7 @@ class XMuRecord(DeepDict):
             update = False
         else:
             update = True
-        # Empty keys should be excluded from appends; they show up as empty
+        # Empty atoms should be excluded from appends; they show up as empty
         # tags and will therefore erase any value currently in the table.
         # Also strips append markers from records that do not include an irn.
         for key in self.keys():
@@ -435,9 +422,13 @@ class XMuRecord(DeepDict):
                 self[key] = [self.clone({'irn': s}) if s
                              else self.clone() for s in val]
             elif (k.endswith('Ref_tab')
-                  and isinstance(val, list)
-                  and any(val)):
-                self[key] = [self.clone(d).expand() for d in val]
+                      and isinstance(val, list)
+                      and any(val)):
+                try:
+                    self[key] = [self.clone(d).expand() for d in val]
+                except TypeError:
+                    print val
+                    raise
             elif (k.endswith(self.tabends)
                   and isinstance(val, list)
                   and any(val)

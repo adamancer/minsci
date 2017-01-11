@@ -2,5 +2,9 @@
 Creator,MulCreator_tab
 Collection,DetCollectionName_tab
 Subjects,DetSubject_tab
+Related,DetRelation_tab
 Supplementary,Supplementary_tab
+Supplementary,SupIdentifier_tab
 Supplementary,SupUsage_nesttab
+GUIDs,AdmGUIDType_tab
+GUIDs,AdmGUIDValue_tab
