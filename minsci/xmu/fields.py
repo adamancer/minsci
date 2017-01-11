@@ -6,7 +6,6 @@ import os
 import re
 
 from ..deepdict import DeepDict
-from ..exceptions import PathError
 from ..helpers import cprint
 
 
@@ -112,7 +111,7 @@ class XMuFields(object):
                 try:
                     d = self.schema[d['schema']['RefTable']]
                 except KeyError:
-                    raise PathError('/'.join(args))
+                    raise KeyError('/'.join(args))
             else:
                 i += 1
         return d
