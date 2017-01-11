@@ -6,8 +6,10 @@ import re
 import string
 import sys
 from copy import copy, deepcopy
+from datetime import datetime
 from itertools import izip_longest
 from pprint import pprint
+from pytz import timezone
 from textwrap import fill
 
 import inflect
@@ -178,9 +180,9 @@ def oxford_comma(lst, lowercase=False):
     Returns:
         Comma-delimited string
     """
-    lst = copy(lst)
+    lst = [s.strip() for s in lst if s.strip()]
     if lowercase:
-        lst = [s[0].lower() + s[1:] for s in lst]
+        lst = [lcfirst(s) for s in lst]
     if len(lst) <= 1:
         return ''.join(lst)
     elif len(lst) == 2:
@@ -413,7 +415,7 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
     if not isinstance(default_suffix, basestring):
         raise Exception('Default suffix must be a string')
     # Regular expressions for use with catalog number functions
-    p_pre = r'(?:([A-Z]{3} |[A-Z]{4}) ?|(?:(USNM|NMNH)\s)?([BCGMRS])-?)?'
+    p_pre = r'(?:([A-Z]{3} |[A-Z]{3})A?|(?:(USNM|NMNH)\s)?([BCGMRS])-?)?'
     p_num = r'([0-9]{1,6})'  # this will pick up ANY number
     p_suf = r'\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,][0-9]{1,2}|\.[0-9]+)?'
     # Force regex to require a prefix if a USNM/NMNH catalog number
@@ -658,9 +660,13 @@ def add_article(val):
     Returns:
         String with indefinite article prepended
     """
-    if val.startswith('a', 'e', 'i', 'o', 'u'):
+    if val == plural(val) or val.lower().startswith(('a ', 'an ')):
+        return val
+    starts_with = re.compile(r'[aeiou]|[fhlmnrsx]{1,2}(\s|\d)', re.I)
+    not_starts_with = re.compile('eu|i{1,3}[abcd]|iv[abcd]', re.I)
+    if starts_with.match(val) and not not_starts_with.match(val):
         return u'an {}'.format(val)
-    return u'an {}'.format(val)
+    return u'a {}'.format(val)
 
 
 def _parse_matches(matches):
@@ -746,3 +752,17 @@ def _fill_range(id_nums, substring):
                 id_num['CatNumber'] = i
                 id_nums.append(id_num)
     return id_nums
+
+
+
+def localize_datetime(timestamp, timezone_id='US/Eastern',
+                      mask='%Y-%m-%dT%H:%M:%S'):
+    """Loclize timestamp to specified timezone
+
+    Returns:
+        Localize datetime as string formatted according to the mask
+    """
+    localized = timezone(timezone_id).localize(timestamp)
+    if mask is not None:
+        return localized.strftime(mask)
+    return localized
