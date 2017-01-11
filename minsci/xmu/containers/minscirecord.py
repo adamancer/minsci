@@ -4,6 +4,7 @@ import re
 from itertools import izip_longest
 
 from .xmurecord import XMuRecord
+from ..tools.describer import get_caption, summarize
 from ...helpers import oxford_comma
 from ...geotaxa import GeoTaxa
 
@@ -21,14 +22,6 @@ class MinSciRecord(XMuRecord):
         # without being explicitly imported
         self.geotaxa = GEOTAXA
         self.antmet = ANTMET
-
-
-    def container(self, *args):
-        """Creates new instance of class that carries over attributes"""
-        container = self.__class__(*args)
-        container.fields = self.fields
-        container.module = self.module
-        return container
 
 
     def get_identifier(self, include_code=True, include_div=False,
@@ -64,7 +57,7 @@ class MinSciRecord(XMuRecord):
             return catnum
 
 
-    def get_name(self, taxa=None):
+    def get_name(self, taxa=None, force_derived=False):
         """Derives object name based on record
 
         Args:
@@ -73,14 +66,15 @@ class MinSciRecord(XMuRecord):
         Returns:
             String with object name
         """
-        for key in ('MinName', 'MetMeteoriteName'):
+        keys = ['MinName', 'MetMeteoriteName'] if not force_derived else []
+        for key in keys:
             name = self(key)
             if name:
                 break
         else:
             if taxa is None:
                 taxa = self.get_classification(True)
-            setting = self('MinJeweleryType')
+            setting = self('MinJeweleryType') if not force_derived else None
             name = GEOTAXA.item_name(taxa, setting)
         return name
 
@@ -125,10 +119,10 @@ class MinSciRecord(XMuRecord):
                 break
         else:
             taxa = []
-        # Get rid of empty list in empty row
-        taxa = [taxon if taxon else u'' for taxon in taxa]
         if not isinstance(taxa, list):
             taxa = [taxa]
+        # Get rid of empty list in empty row
+        taxa = [taxon if taxon else u'' for taxon in taxa]
         if standardized:
             try:
                 taxa = GEOTAXA.group_related_taxa(taxa)
@@ -175,6 +169,27 @@ class MinSciRecord(XMuRecord):
         return self.get_matching_rows('Collector', role, participant)
 
 
+    def get_political_geography(self):
+        country_path = ['LocCountry']
+        state_path = ['LocProvinceStateTerritory']
+        county_path = ['LocDistrictCountyShire']
+        if self.module == 'ecatalogue':
+            country_path.insert(0, 'BioEventSiteRef')
+            state_path.insert(0, 'BioEventSiteRef')
+            county_path.insert(0, 'BioEventSiteRef')
+        country = self(*country_path)
+        state = self(*state_path)
+        county = self(*county_path)
+        if country == 'United States' and county:
+            county = county.rstrip('. ')
+            if county.lower().endswith('county'):
+                county = county.rsplit(' ')[0].rstrip() + ' Co.'
+            elif not county.lower().rstrip('.').endswith(' co'):
+                county = county.rstrip() + ' Co.'
+            else:
+                county += '.'
+        return [s if s else '' for s in (country, state, county)]
+
 
     def get_field_numbers(self):
         """Gets all the collector's field numbers for a record"""
@@ -183,8 +198,30 @@ class MinSciRecord(XMuRecord):
                                       'CatOtherNumbersValue_tab')
 
 
+    def get_current_weight(self, mask=''):
+        weight = self('MeaCurrentWeight').rstrip('0.')
+        unit = self('MeaCurrentUnit')
+        if weight and unit:
+            if '.' in weight:
+                weight = float(weight)
+                return '{weight:.2f} {unit}'.format(weight=weight, unit=unit)
+            else:
+                weight = int(weight)
+                return '{weight:,} {unit}'.format(weight=weight, unit=unit)
+        return ''
+
+
     def is_antarctic(self, metname=None):
         """Checks if record is an Antarctic meteorite based on regex pattern"""
         if metname is None:
             metname = self('MetMeteoriteName')
         return bool(ANTMET.match(metname))
+
+
+    def describe(self):
+        """Derives a short description of the object suitable for a caption"""
+        return get_caption(self)
+
+    def summarize(self):
+        """Derives and formats basic information about an object"""
+        return summarize(self)
