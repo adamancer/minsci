@@ -55,6 +55,7 @@ class XMu(object):
         # DeepDict or subclass to use as container for EMu data
         if container is None:
             container = XMuRecord
+        self._attributes = ['fields', 'module']
         self._container = container
 
         self.xpaths = []
@@ -102,9 +103,15 @@ class XMu(object):
     def container(self, *args):
         """Wraps dict in custom container with attributes needed for export"""
         container = self._container(*args)
-        container.fields = self.fields
-        container.module = self.module
+        for attr in self._attributes:
+            setattr(container, attr, getattr(self, attr, None))
+        container.finalize()
         return container
+
+
+    def set_carryover(self, *args):
+        """Update the list of carryover attributes"""
+        self._attributes = args
 
 
     def iterate(self, element):
@@ -245,6 +252,9 @@ class XMu(object):
                     result.push(None, *keys)
                     keys.pop()
                 else:
+                    # Strip double spaces
+                    while '  ' in val:
+                        val = val.replace('  ', ' ')
                     result.push(val.strip(), *keys)
             else:
                 result = self.read(child, keys, result)
@@ -376,14 +386,25 @@ def _emuize(rec, root=None, path=None, handlers=None,
             group = Grid(grid_flds, operator)
     if isinstance(rec, (int, long, float, basestring)):
         atom = etree.SubElement(root, 'atom')
+        # Test multimedia
+        path = path.rstrip('_')
+        if rec and path in ('Multimedia', 'Supplementary'):
+            open(rec, 'rb')
+        # Handle empties in the supplementary table. Empties are used as
+        # placekeepers but should not themselves be loaded into EMu.
+        operator = root.get('row')
+        if path == 'Supplementary' and not rec and operator is not None:
+            parent = root.getparent()
+            parent.remove(root)
+            root = parent
         try:
-            atom.set('name', path.rstrip('_'))
+            atom.set('name', path)
         except AttributeError:
             parent = etree.tostring(root.getparent())
             raise ValueError('Path must be string. Got {} instead. Parent'
                              ' is {}'.format(path, parent))
         try:
-            atom.text = str(rec)  # FIXME
+            atom.text = str(rec)
         except UnicodeEncodeError:
             atom.text = rec
     else:
@@ -397,7 +418,8 @@ def _emuize(rec, root=None, path=None, handlers=None,
             if group is not None:
                 hashed = (hashlib.md5(group.fields +\
                           '|{}'.format(path)).hexdigest())
-                root.set('row', group.operator)
+                operator = group.operator.format(path + 1)
+                root.set('row', operator)
                 if group.operator == '+':
                     root.set('group', hashed)
                 group = None
