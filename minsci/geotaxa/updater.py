@@ -24,21 +24,34 @@ class GeoTaxaUpdater(XMu):
         """Adds a taxon to the hierarchy"""
         rec = self.parse(element)
         name = clean_taxon(rec('NarTitle'))
+        definition = rec('NarNarrative')
+        if 'EMu' in definition or definitions.startswith('No additional info'):
+            definition = ''
         parent = clean_taxon(rec('AssMasterNarrativeRef', 'NarTitle'))
         key = format_key(name)
         try:
             self.taxa[key]
         except KeyError:
+            # Find preferred synonym, then confirm that it isn't equivalent
+            preferred = rec.get_synonyms()
+            if key in [format_key(species) for species in preferred]:
+                print key, 'in', preferred
+                return True
+            # Add to taxadict
             taxadict = GeoTaxon({
                 'irn': int(rec('irn')),
                 'name': name,
+                'definition': definition,
                 'parent': parent,
-                'preferred': rec.get_synonyms(),
+                'preferred': preferred,
+                'alternatives': rec('TaxTaxaRef_tab', 'ClaSpecies'),
                 'tax_irns': rec('TaxTaxaRef_tab', 'irn'),
                 'schema': rec.get_schema()
             })
             self.taxa[key] = taxadict
         else:
+            self.taxa[key]['alternatives'].extend(rec('TaxTaxaRef_tab',
+                                                      'ClaSpecies'))
             warning = u'Warning: {} already exists!'
             try:
                 print warning.format(name)
@@ -48,16 +61,18 @@ class GeoTaxaUpdater(XMu):
 
     def finish_and_save(self):
         """Adds taxonomic tree and alternative keys, then saves the tree"""
+        print 'Deriving taxonomic trees...'
         update = {}
         for taxon in self.taxa:
             self._recurse_synonyms(taxon)
+        i = 0
         for taxon, taxadict in self.taxa.iteritems():
             taxadict['tree'] = self._recurse_tree(taxadict['name'])
             taxadict['synonyms'] = sorted(list(set(taxadict.get('synonyms', []))))
             if taxadict['synonyms']:
                 try:
                     print taxon, taxadict['synonyms']
-                except KeyError:
+                except (KeyError, UnicodeEncodeError):
                     pass
             # Create unaccented keys for accented taxa
             try:
@@ -73,6 +88,9 @@ class GeoTaxaUpdater(XMu):
             # Look for unserializable keys
             if taxon != format_key(taxon):
                 raise Exception('Bad key: {}'.format(taxon))
+            i += 1
+            if not i % 25:
+                print '{:,} records processed!'.format(i)
         self.taxa.update(update)
         self.save(os.path.join(PATH, 'geotaxa.json'))
 
@@ -113,15 +131,24 @@ class GeoTaxaUpdater(XMu):
         return tree[::-1]
 
 
-    def _recurse_synonyms(self, taxon, chain=None):
+    def _recurse_synonyms(self, taxon, synonyms=None):
         """Recursively identifies synonyms for the current, preferred taxon"""
-        for synonym in self.taxa[taxon]['preferred']:
-            chain = [taxon]
-            taxadict = self.taxa[format_key(synonym)]
+        if synonyms is None:
+            synonyms = []
+        if len(self.taxa[taxon]['preferred']) > 1:
+            print taxadict
+            raw_input()
+        for preferred in self.taxa[taxon]['preferred']:
+            try:
+                print taxon, '=>', preferred
+            except:
+                pass
+            synonyms.append(taxon)
+            taxadict = self.taxa[format_key(preferred)]
             while taxadict['preferred']:
-                chain.append(taxadict['name'])
+                synonyms.append(taxadict['name'])
                 taxadict = self.taxa[format_key(taxadict['preferred'][-1])]
-            taxadict.setdefault('synonyms', []).extend(chain)
+            taxadict.setdefault('synonyms', []).extend(synonyms)
 
 
 def update_geotaxa(fp):

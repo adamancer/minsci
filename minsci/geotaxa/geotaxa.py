@@ -240,6 +240,8 @@ class GeoTaxa(object):
         taxon += ')' * (taxon.count('(') - taxon.count(')'))
         if capitalize_first:
             taxon = ucfirst(taxon)
+        if taxon == 'Xenolithic':
+            taxon = 'Xenolith'
         return taxon
 
 
@@ -501,7 +503,7 @@ class GeoTaxa(object):
         """
         name = taxadict['name']
         if 'Iron achondrite' in taxadict['tree']:
-            name = u'{} (Iron achondrite)'.format(name)
+            name = u'{} (iron achondrite)'.format(name)
         elif 'Meteorites' in taxadict['tree']:
             try:
                 name = u'{} ({})'.format(name, taxadict['tree'][2].lower())
