@@ -1,7 +1,6 @@
 """Subclass of dictionary designed to read/store at depth"""
 from collections import Mapping
 
-from ..exceptions import PathError
 from ..helpers import cprint, rprint
 
 
@@ -13,6 +12,7 @@ class DeepDict(dict):
 
     def __init__(self, *args):
         super(DeepDict, self).__init__(*args)
+        self._attributes = []
 
 
     def __call__(self, *args):
@@ -20,9 +20,22 @@ class DeepDict(dict):
         return self.pull(*args)
 
 
-    def container(self, *args):
-        """Creates a new object using the current DeepDict subclass"""
-        return self.__class__(*args)
+    def clone(self, obj=None):
+        """Creates new object of subclass with key attributes copied over"""
+        if obj is not None:
+            clone = self.__class__(obj)
+        else:
+            clone = self.__class__()
+        # Add carryover attributes
+        for attr in self._attributes:
+            setattr(clone, attr, getattr(self, attr, None))
+        clone.finalize()
+        return clone
+
+
+    def finalize(self):
+        """Runs any functions that require a carryover attribute"""
+        pass
 
 
     def pull(self, *args):
@@ -40,9 +53,9 @@ class DeepDict(dict):
             try:
                 d = d[arg]
             except KeyError:
-                raise PathError('/'.join(args))
+                raise KeyError('/'.join(args))
             except TypeError:
-                raise PathError('/'.join(args))
+                raise KeyError('/'.join(args))
         return d
 
 
@@ -70,7 +83,7 @@ class DeepDict(dict):
                 per arg. If the last arg is None, the value is not added.
         """
         if isinstance(val, Mapping) and not isinstance(val, DeepDict):
-            val = self.container(val)
+            val = self.clone(val)
         d = self
         i = 0
         while i < (len(args) - 1):
@@ -79,11 +92,11 @@ class DeepDict(dict):
                 try:
                     d = d[args[i+1]]
                 except (IndexError, KeyError):
-                    d.append(self.container())
+                    d.append(self.clone())
                     d = d[args[i+1]]
                 i += 1
             else:
-                d = d.setdefault(args[i], self.container())
+                d = d.setdefault(args[i], self.clone())
             i += 1
         if args[-1] is not None:
             d[args[-1]] = val
