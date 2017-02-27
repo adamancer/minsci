@@ -58,7 +58,7 @@ KW_WHITELIST = [
     'Micrograph, reflected light'
 ]
 
-FORMATS = ('.gif', '.jpg', '.jpeg', '.png', '.tif', '.tiff')
+FORMATS = ('.cr2', '.gif', '.jpg', '.jpeg', '.png', '.tif', '.tiff')
 
 
 MediaFile = namedtuple('MediaFile', ['irn', 'filename', 'path', 'hash',
@@ -85,21 +85,38 @@ class MediaRecord(XMuRecord):
             'DetCollectionName_tab': self.smart_collections,
             'NotNotes': self.smart_note
         }
+        self.defaults = {
+            'DetSubject_tab': []
+        }
+
+
+    def add_embedder(self, embedder, **kwargs):
+        self.embedder = embedder(**kwargs)
+
+
+    def add_cataloger(self, cataloger):
+        self.cataloger = cataloger
 
 
     def get_all_media(self):
+        """Gets the filepaths for all media in this record"""
         return [self.get_primary()] + self.get_supplementary()
 
 
     def get_primary(self):
         """Gets properties for the primary asset"""
-        is_image = self('MulIdentifier').lower().endswith(FORMATS)
+        filename = self('MulIdentifier')
+        if not filename:
+            filename = os.path.basename(self('Multimedia'))
+        is_image = filename.lower().endswith(FORMATS)
+        width = self('ChaImageWidth')
+        height = self('ChaImageHeight')
         return MediaFile(self('irn'),
-                         self('MulIdentifier'),
+                         filename,
                          self('Multimedia'),
                          self('ChaMd5Sum'),
-                         int(self('ChaImageWidth')) if is_image else None,
-                         int(self('ChaImageHeight')) if is_image else None,
+                         int(width) if is_image and width else None,
+                         int(height) if is_image and height else None,
                          is_image,
                          None)
 
@@ -114,21 +131,24 @@ class MediaRecord(XMuRecord):
         supp_files = izip_longest(paths, files, hashes, widths, heights)
         supplementary = []
         for i, supp_file in enumerate(supp_files):
-            path, filename, hexhash, width, height = supp_file
+            path, filename, hexhash, w, h = supp_file
+            if not filename:
+                filename = os.path.basename(path)
             is_image = filename.lower().endswith(FORMATS)
             supplementary.append(MediaFile(self('irn'),
                                            filename,
                                            path,
                                            hexhash,
-                                           int(width) if is_image and width else None,
-                                           int(height) if is_image and height else None,
+                                           int(w) if is_image and w else None,
+                                           int(h) if is_image and h else None,
                                            is_image,
                                            i + 1))
         return supplementary
 
 
-    def get_catalog_numbers(self, field='MulTitle'):
-        return parse_catnum(self(field))
+    def get_catalog_numbers(self, field='MulTitle', **kwargs):
+        """Find catalog numbers in the given field"""
+        return parse_catnum(self(field), **kwargs)
 
 
     def get_photo_numbers(self):
@@ -145,14 +165,17 @@ class MediaRecord(XMuRecord):
             # Embed metadata or add a placeholder for non-image files
             fp = media.path
             if media.is_image:
-                self._verify_master(media)
+                if verify_master:
+                    self._verify_master(media)
                 fp = self.embedder.embed_metadata(media.path, self)
             if fp and media.row is None:
                 rec['Multimedia'] = fp
-            elif media.row:
+            elif media.row and rec('irn'):
                 rec.setdefault('Supplementary_tab({}=)', []).append(fp)
                 if len(rec['Supplementary_tab({}=)']) != media.row:
                     raise ValueError
+            else:
+                rec['Supplementary_tab'][media.row - 1] = fp
         if rec:
             rec['irn'] = media.irn
             return rec.strip_derived().expand()
@@ -168,38 +191,46 @@ class MediaRecord(XMuRecord):
     def match(self):
         """Returns list of catalog objects matching data in MulTitle"""
         parsed = parse_catnum(self('MulTitle'))
-        irns = []
-        for _id in [self.cataloger.container(_id) for _id in parsed if _id]:
-            catnum = _id.get_identifier(include_code=False, force_catnum=True)
-            metnum = _id.get_identifier(include_code=False)
-            indexes = [idx for idx in set([catnum, metnum]) if idx]
-            for index in indexes:
-                irns.extend(self.cataloger.find_catalog_object(index))
+        records = []
+        for identifier in parsed:
+            matches = self.cataloger.get(identifier, [])
+            for match in matches:
+                if not match in records:
+                    records.append(match)
         self.catnums = format_catnums(parsed)
-        return [self.cataloger.reconstitute(irn) for irn in set(irns)]
+        return records
 
 
-    def match_and_update(self):
+    def match_one(self):
+        matches = self.match()
+        if not matches or len(matches) > 1:
+            raise ValueError('No unique match: {}'.format(self.catnums))
+        return matches[0]
+
+
+    def match_and_fill(self, strict=True):
         """Updates record if unique match in catalog found"""
         print 'Matching against {}...'.format(self('MulTitle'))
-        objects = self.match()
-        if len(objects) == 1:
+        try:
+            object = self.match_one()
+        except ValueError:
+            if strict:
+                raise
+        else:
             print 'Unique match found! Updating record...'
             enhanced = self.clone(self)
-            enhanced._object = objects[0]
+            enhanced._object = object
             enhanced.catnums = self.catnums
-            for key in enhanced:
-                func = enhanced._smart_functions.get(key)
+            for key, func in enhanced._smart_functions.iteritems():
                 enhanced[key] = func() if func is not None else enhanced(key)
             # Tweak rights statement for non-collections objects
             non_si_coll = 'Non-collections object (Mineral Sciences)'
-            if non_si_coll in enhanced['DetCollectionName_tab']:
+            if non_si_coll in enhanced.get('DetCollectionName_tab', []):
                 enhanced['DetRights'] = ('One or more objects depicted in this'
                                          ' image are not owned by the'
                                          ' Smithsonian Institution.')
-            enhanced['_Objects'] = objects
+            enhanced['_Objects'] = [object]
             return enhanced
-        return self
 
 
     def strip_derived(self):
@@ -232,7 +263,7 @@ class MediaRecord(XMuRecord):
                 or title.endswith('[AUTO]')):
             # Use the catnum originally parsed from the title, not the one
             # from the linked record
-            xname = self._object.object.xname
+            xname = self._object.object['xname']
             catnum = self.catnums[0]
             title = u'{} ({}) [AUTO]'.format(xname, catnum).replace(' ()', ' ')
         return title
@@ -246,7 +277,7 @@ class MediaRecord(XMuRecord):
         return description
 
 
-    def smart_keywords(self):
+    def smart_keywords(self, whitelist=None):
         """Derive keywords from catalog"""
         keywords = self._object.keywords
         keywords.extend([kw for kw in self('DetSubject_tab')
@@ -284,7 +315,7 @@ class MediaRecord(XMuRecord):
         # collections and restrictions are applied for these photos.
         si_object = 'Collections objects (Mineral Sciences)'
         non_si_object = 'Non-collections object (Mineral Sciences)'
-        if self._object.object.status != 'active':
+        if self._object.object['status'] != 'active':
             rights = ('One or more objects depicted in this image are not'
                       ' owned by the Smithsonian Institution.')
             collections.append(non_si_object)
@@ -346,6 +377,7 @@ class EmbedFromEMu(Embedder):
     def get_objects(rec, field='MulTitle'):
         """Returns list of catalog numbers parsed from MulTitle"""
         catnums = parse_catnum(rec(field), prefixed_only=True)
+        # FIXME: Only handles one catalog number for now
         if catnums:
             catnums = [catnums[0]]
         return format_catnums(catnums)
@@ -421,6 +453,7 @@ class EmbedFromEMu(Embedder):
 
     def get_media_topics(self, rec):
         """Returns relevant media topics"""
+        pass
 
 
     def get_object_name(self, rec):

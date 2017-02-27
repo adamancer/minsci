@@ -24,39 +24,6 @@ class MinSciRecord(XMuRecord):
         self.antmet = ANTMET
 
 
-    def get_identifier(self, include_code=True, include_div=False,
-                       force_catnum=False):
-        """Derives sample identifier based on record
-
-        Args:
-            include_code (bool): specifies whether to include museum code
-            include_div (bool): specifies whetehr to include division
-
-        Returns:
-            String of NMNH catalog number or Antarctic meteorite number
-        """
-        metnum = self('MetMeteoriteName')
-        suffix = self('CatSuffix')
-        if ANTMET.match(metnum) and not force_catnum:
-            if suffix == metnum:
-                return metnum
-            else:
-                return u'{},{}'.format(metnum, suffix).rstrip(',')
-        else:
-            prefix = self('CatPrefix')
-            number = self('CatNumber')
-            division = self('CatDivision')
-            catnum = u'{}{}-{}'.format(prefix, number, suffix).strip('- ')
-            if include_div:
-                catnum = u'{} ({})'.format(catnum, division[:3].upper())
-            if include_code:
-                code = 'NMNH'
-                if division == 'Meteorites':
-                    code = 'USNM'
-                catnum = u'{} {}'.format(code, catnum)
-            return catnum
-
-
     def get_name(self, taxa=None, force_derived=False):
         """Derives object name based on record
 
@@ -77,30 +44,6 @@ class MinSciRecord(XMuRecord):
             setting = self('MinJeweleryType') if not force_derived else None
             name = GEOTAXA.item_name(taxa, setting)
         return name
-
-
-    def get_age(self):
-        """Gets geological age as string"""
-        era = self('AgeGeologicAgeEra_tab')
-        system = self('AgeGeologicAgeSystem_tab')
-        series = self('AgeGeologicAgeSeries_tab')
-        stage = self('AgeGeologicAgeStage_tab')
-        ages = izip_longest(era, system, series, stage)
-        ages = [' > '.join([s for s in period if s]) for period in ages]
-        if len(ages) == 1:
-            return ages[0]
-        elif ages and ages[0] != ages[-1]:
-            return ' to '.join([ages[0], ages[-1]])
-
-
-    def get_stratigraphy(self):
-        """Gets stratigraphy as string"""
-        group = self('AgeStratigraphyGroup_tab')
-        formation = self('AgeStratigraphyFormation_tab')
-        member = self('AgeStratigraphyMember_tab')
-        strat = izip_longest(group, formation, member)
-        strat = [' > '.join([s for s in unit if s]) for unit in strat]
-        return oxford_comma(strat)
 
 
     def get_classification(self, standardized=True):
@@ -130,6 +73,75 @@ class MinSciRecord(XMuRecord):
                 print taxa
                 raise
         return taxa
+
+
+    def get_identifier(self, include_code=True, include_div=False,
+                       force_catnum=False):
+        """Derives sample identifier based on record
+
+        Args:
+            include_code (bool): specifies whether to include museum code
+            include_div (bool): specifies whetehr to include division
+
+        Returns:
+            String of NMNH catalog number or Antarctic meteorite number
+        """
+        metnum = self('MetMeteoriteName')
+        suffix = self('CatSuffix')
+        if ANTMET.match(metnum) and not force_catnum:
+            if suffix == metnum:
+                return metnum
+            else:
+                return u'{},{}'.format(metnum, suffix).rstrip(',')
+        else:
+            prefix = self('CatPrefix')
+            number = self('CatNumber')
+            division = self('CatDivision')
+            if self('MetMeteoriteName') or self('MetMeteoriteType'):
+                division = 'Meteorites'
+            if not number:
+                return u''
+            catnum = u'{}{}-{}'.format(prefix, number, suffix).strip('- ')
+            if include_div:
+                catnum = u'{} ({})'.format(catnum, division[:3].upper())
+            if include_code:
+                code = 'NMNH'
+                if division == 'Meteorites':
+                    code = 'USNM'
+                catnum = u'{} {}'.format(code, catnum)
+            return catnum
+
+
+    def get_catnum(self, include_code=True, include_div=False):
+        return self.get_identifier(include_code, include_div, force_catnum=True)
+
+
+    def get_age(self, pretty_print=True):
+        """Gets geological age as string"""
+        era = self('AgeGeologicAgeEra_tab')
+        system = self('AgeGeologicAgeSystem_tab')
+        series = self('AgeGeologicAgeSeries_tab')
+        stage = self('AgeGeologicAgeStage_tab')
+        ages = izip_longest(era, system, series, stage)
+        if not pretty_print:
+            return ages
+        ages = [' > '.join([s for s in period if s]) for period in ages]
+        if len(ages) == 1:
+            return ages[0]
+        elif ages and ages[0] != ages[-1]:
+            return ' to '.join([ages[0], ages[-1]])
+
+
+    def get_stratigraphy(self, pretty_print=True):
+        """Gets stratigraphy as string"""
+        group = self('AgeStratigraphyGroup_tab')
+        formation = self('AgeStratigraphyFormation_tab')
+        member = self('AgeStratigraphyMember_tab')
+        strat = izip_longest(group, formation, member)
+        if not pretty_print:
+            return strat
+        strat = [' > '.join([s for s in unit if s]) for unit in strat]
+        return oxford_comma(strat)
 
 
     def get_guid(self, kind='EZID', allow_multiple=False):
@@ -196,19 +208,6 @@ class MinSciRecord(XMuRecord):
         return self.get_matching_rows("Collector's field number",
                                       'CatOtherNumbersType_tab',
                                       'CatOtherNumbersValue_tab')
-
-
-    def get_current_weight(self, mask=''):
-        weight = self('MeaCurrentWeight').rstrip('0.')
-        unit = self('MeaCurrentUnit')
-        if weight and unit:
-            if '.' in weight:
-                weight = float(weight)
-                return '{weight:.2f} {unit}'.format(weight=weight, unit=unit)
-            else:
-                weight = int(weight)
-                return '{weight:,} {unit}'.format(weight=weight, unit=unit)
-        return ''
 
 
     def is_antarctic(self, metname=None):

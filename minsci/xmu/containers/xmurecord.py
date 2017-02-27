@@ -1,6 +1,7 @@
 """Subclass of DeepDict with methods specific to XMu"""
 
 import re
+from collections import namedtuple
 from datetime import datetime
 from itertools import izip_longest
 from pytz import timezone
@@ -18,6 +19,9 @@ class XMuRecord(DeepDict):
         self.tabends = ('0', '_nesttab', '_nesttab_inner', '_tab')
         self.refends = ('Ref', 'Ref_tab')
         self._attributes = ['fields', 'module']
+        # Set defaults for carryover attributes
+        for attr in self._attributes:
+            setattr(self, attr, None)
 
 
     def __call__(self, *args, **kwargs):
@@ -98,6 +102,10 @@ class XMuRecord(DeepDict):
             field_data = self.fields.get(*path)
             if isinstance(retval, list):
                 for val in retval:
+                    try:
+                        val.module
+                    except AttributeError:
+                        val = self.clone(val)
                     val.module = field_data['schema']['RefTable']
             else:
                 retval.module = field_data['schema']['RefTable']
@@ -110,8 +118,6 @@ class XMuRecord(DeepDict):
                 self.fields.get(*path)
             except AttributeError:
                 pass
-            except KeyError:
-                raise
             except KeyError:
                 raise KeyError('/'.join(args))
         # Last check
@@ -273,7 +279,6 @@ class XMuRecord(DeepDict):
 
     def get_note(self, kind):
         """Return the note matching the given kind"""
-        #FIXME: Add publication check
         return self.get_matching_rows(kind,
                                       'NotNmnhType_tab',
                                       'NotNmnhText0')
@@ -293,6 +298,19 @@ class XMuRecord(DeepDict):
                                        self('AdmTimeModified'),
                                        timezone_id,
                                        mask)
+
+
+    def get_current_weight(self, mask=''):
+        weight = self('MeaCurrentWeight').rstrip('0.')
+        unit = self('MeaCurrentUnit')
+        if weight and unit:
+            if '.' in weight:
+                weight = float(weight)
+                return '{weight:.2f} {unit}'.format(weight=weight, unit=unit)
+            else:
+                weight = int(weight)
+                return '{weight:,} {unit}'.format(weight=weight, unit=unit)
+        return ''
 
 
     @staticmethod
@@ -392,6 +410,9 @@ class XMuRecord(DeepDict):
             val = self[key]
             k = key.rsplit('(', 1)[0]               # key stripped of row logic
             base = key.split('_', 1)[0].rstrip('(0+)') # key without table info
+            # Confirm that all tables are lists
+            if key.endswith(('0', 'tab', ')')) and not isinstance(val, list):
+                raise ValueError('{} must be a list'.format(key))
             if k.endswith('_nesttab'):
                 # Test if the table has already been expanded by looking
                 # for a corresponding _nesttab_inner key
@@ -422,12 +443,11 @@ class XMuRecord(DeepDict):
                 self[key] = [self.clone({'irn': s}) if s
                              else self.clone() for s in val]
             elif (k.endswith('Ref_tab')
-                      and isinstance(val, list)
-                      and any(val)):
+                  and isinstance(val, list)
+                  and any(val)):
                 try:
                     self[key] = [self.clone(d).expand() for d in val]
                 except TypeError:
-                    print val
                     raise
             elif (k.endswith(self.tabends)
                   and isinstance(val, list)
@@ -439,6 +459,29 @@ class XMuRecord(DeepDict):
                   and not any(val)):
                 self[key] = []
         return self
+
+
+    def to_refine(self):
+        Row = namedtuple('Row', ['irn', 'field', 'row', 'val'])
+        irn = self('irn')
+        rows = []
+        for field in self:
+            vals = self(field)
+            if isinstance(vals, basestring):
+                rows.append(Row(irn, field, None, vals))
+            elif isinstance(vals, list):
+                for i, val in enumerate(vals):
+                    rows.append(Row(irn, field, i + 1, val))
+            elif isinstance(vals, XMuRecord):
+                # Excludes attachments
+                pass
+            else:
+                print key, vals, type(val)
+        return rows
+
+
+    def zip(self, *args):
+        return izip_longest(*[self(arg) for arg in args])
 
 
 
