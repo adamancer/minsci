@@ -124,14 +124,16 @@ class XMu(object):
         pass
 
 
-    def fast_iter(self, func=None, report=0, stop=0, callback=None, **kwargs):
+    def fast_iter(self, func=None, report=0, skip=0, limit=0,
+                  callback=None, **kwargs):
         """Use callback to iterate through an EMu export file
 
         Args:
             func (function): name of iteration function
             report (int): number of records at which to report
                 progress. If 0, no progress report is made.
-            stop (int): number of record at which to stop
+            skip (int): number of records to skip before processing
+            limit (int): number of record at which to stop processing the file
             callback (function): name of function to run upon completion
 
         Returns:
@@ -145,6 +147,7 @@ class XMu(object):
         keep_going = True
         n_total = 0
         n_success = 0
+        limit += skip
         for fp in self._files:
             if report:
                 cprint('Reading {}...'.format(fp))
@@ -154,6 +157,8 @@ class XMu(object):
                 parent = element.getparent().get('name')
                 if parent is not None and parent.startswith('e'):
                     n_total += 1
+                    if skip and n_total < skip:
+                        continue
                     result = func(element, **kwargs)
                     if result is False:
                         keep_going = False
@@ -171,7 +176,7 @@ class XMu(object):
                                ' successful, t={}s)').format(n_total,
                                                              n_success,
                                                              elapsed)
-                    if stop and not n_total % stop:
+                    if limit and not n_total % limit:
                         keep_going = False
                         break
             del context
@@ -198,6 +203,9 @@ class XMu(object):
         """Load data from json file created by self.save"""
         if fp is None:
             fp = os.path.splitext(self.path)[0] + '.json'
+        # Always recreate the JSON if XML is newer
+        if os.path.getmtime(fp) <= os.path.getmtime(self.path):
+            raise IOError
         print 'Reading data from {}...'.format(fp)
         data = json.load(open(fp, 'rb'))
         for attr, val in data.iteritems():
@@ -338,7 +346,7 @@ def check_columns(*args):
     Args:
         *args: Lists of value for each column
     """
-    if len(set([len(arg) for arg in args if arg is not None and len(arg)])) > 1:
+    if len(set([len(arg) for arg in args if arg is not None and any(arg)])) > 1:
         raise RowMismatch(args)
 
 
@@ -386,8 +394,10 @@ def _emuize(rec, root=None, path=None, handlers=None,
             group = Grid(grid_flds, operator)
     if isinstance(rec, (int, long, float, basestring)):
         atom = etree.SubElement(root, 'atom')
+        # Set path to parent if is a row in a table
+        if isinstance(path, int):
+            path = root.getparent().get('name').rsplit('_', 1)[0].rstrip('0')
         # Test multimedia
-        path = path.rstrip('_')
         if rec and path in ('Multimedia', 'Supplementary'):
             open(rec, 'rb')
         # Handle empties in the supplementary table. Empties are used as
@@ -399,7 +409,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
             root = parent
         try:
             atom.set('name', path)
-        except AttributeError:
+        except TypeError:
             parent = etree.tostring(root.getparent())
             raise ValueError('Path must be string. Got {} instead. Parent'
                              ' is {}'.format(path, parent))
@@ -480,12 +490,19 @@ def _check(rec, module=None):
     try:
         rec.fields
     except AttributeError:
+        rec.fields = FIELDS
+    else:
+        if rec.fields is None:
+            rec.fields = FIELDS
+    '''
+    except AttributeError:
         print 'Warning: Could not check tables'
         return rec
     else:
         if rec.fields is None:
             print 'Warning: Could not check tables'
             return rec
+    '''
     # Convert values to XMuStrings and add attributes as needed
     tables = []
     for key in rec.keys():

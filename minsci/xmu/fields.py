@@ -34,6 +34,30 @@ class XMuFields(object):
                  cache=False, verbose=False):
         self.verbose = verbose
         self._fpath = os.path.join(os.path.dirname(__file__), 'files')
+        if blacklist is None:
+            blacklist = [
+                'eaccessionlots',
+                'edocuments',
+                'eevents',
+                'eexhibitobjects',
+                'eexports',
+                'egazetteer',
+                'einternal',
+                'eloans',
+                'eluts',
+                'eregistry',
+                'erights',
+                'eschedule',
+                'esites',
+                'estatistics',
+                'etemplate',
+                'etrapevents',
+                'etraps',
+                'evaluations',
+                'ewebgroups',
+                'ewebusers',
+            ]
+        blacklist = set(blacklist)
         if cache:
             cache_file = cache
             cprint('Checking for cached XMuFields object...')
@@ -111,7 +135,10 @@ class XMuFields(object):
                 try:
                     d = self.schema[d['schema']['RefTable']]
                 except KeyError:
-                    raise KeyError('/'.join(args))
+                    if args[0] is None:
+                        raise KeyError('Unrecognized module: {}'.format(args))
+                    else:
+                        raise KeyError('Illegal path: {}'.format(args))
             else:
                 i += 1
         return d

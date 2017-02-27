@@ -83,7 +83,7 @@ class MongoBot(object):
             database.add_user(username, np1)
 
 
-    def sync(self, sync_from, sync_to, collection, startdate=None):
+    def sync(self, sync_from, sync_to, collection, query=None):
         """Synchronizes development server to production"""
         if sync_to == 'production' and sync_from == 'development':
             raise Exception('Sync is going the wrong way!')
@@ -93,12 +93,14 @@ class MongoBot(object):
         queue = []
         checked = 0
         updated = 0
-        query = {'catdp': 'ms'}
-        if startdate is not None:
-            query['admdm'] = {'$gt' : datetime.strptime(startdate, '%Y-%m-%d')}
+        # Set up query
+        if query is None:
+            query = {}
+        query.update({'catdp': 'ms'})
         # Update records based on changes in production
         cursor = src.find(query)
-        print ' {:,} matching records found!'.format(cursor.count())
+        print (' {:,} records matching {} have'
+               ' been found!').format(cursor.count(), query)
         for sdoc in cursor:
             irn = sdoc['_id']
             try:
@@ -215,7 +217,7 @@ class XMungo(MongoBot):
         pass
 
 
-    def _fast_iter(self, query=None, func=None, report=0, stop=0,
+    def _fast_iter(self, query=None, func=None, report=0, skip=0, limit=0,
                    callback=None, **kwargs):
         if func is None:
             func = self.iterate
@@ -226,6 +228,8 @@ class XMungo(MongoBot):
         if query is None:
             query = {}
         _query.update(query)
+        if skip:
+            self._skip = skip
         if self._skip:
             print 'Skipping first {:,} records...'.format(self._skip)
             cursor = self.collection.find(_query, skip=self._skip)
@@ -249,7 +253,7 @@ class XMungo(MongoBot):
                 print ('{:,} records processed! ({:,}'
                        ' successful, t={}s)').format(self._skip, n_success,
                                                      elapsed)
-            if stop and not self._skip % stop:
+            if limit and not self._skip % limit:
                 break
         print '{:,} records processed! ({:,} successful)'.format(self._skip,
                                                                  n_success)
@@ -259,7 +263,7 @@ class XMungo(MongoBot):
         return True
 
 
-    def fast_iter(self, query=None, func=None, report=0, stop=0,
+    def fast_iter(self, query=None, func=None, report=0, skip=0, limit=0,
                   callback=None, **kwargs):
         """Use function to iterate through a MongoDB record set
 
@@ -270,7 +274,7 @@ class XMungo(MongoBot):
             func (function): name of iteration function
             report (int): number of records at which to report
                 progress. If 0, no progress report is made.
-            stop (int): number of record at which to stop
+            limit (int): number of record at which to stop
             callback (function): name of function to run upon completion
 
         Returns:
@@ -283,7 +287,7 @@ class XMungo(MongoBot):
         skipped = 0  # used to track consecutive failures
         while True:
             try:
-                return self._fast_iter(query, func, report, stop,
+                return self._fast_iter(query, func, report, skip, limit,
                                        callback, **kwargs)
             except pymongo.errors.CursorNotFound:
                 if num_retries > 8:
@@ -342,17 +346,20 @@ def mongo2xmu(doc, container):
         'CatSuffix': doc.getpath('catnb.catsf'),
         'CatDivision': doc.getpath('catdv'),
         'CatCatalog': doc.getpath('catct'),
-        'CatCollectionName_tab': doc.getpath('catcn'),
+        'CatCollectionName_tab': [doc.getpath('catcn')],
         'CatSpecimentCount': doc.getpath('darin'),
         'MinName': doc.getpath('minnm'),
         'MinJeweleryType': doc.getpath('minjt'),
         'MetMeteoriteName': doc.getpath('metnm'),
         'MetMeteoriteType': doc.getpath('metmt'),
+        'PetEruptionDate': doc.getpath('peted'),
         'PetLavaSource': doc.getpath('petls'),
         'MeaCurrentWeight': doc.getpath('meacw'),
         'MeaCurrentUnit': doc.getpath('meacu'),
         'AdmGUIDType_tab': ['EZID'],
         'BioEventSiteRef': container({
+            'LocSiteNumberSource': doc.getpath('bions'),
+            'LocSiteStationNumber': doc.getpath('biosn'),
             'LocCountry': doc.getpath('darct'),
             'LocProvinceStateTerritory': doc.getpath('darst'),
             'LocDistrictCountyShire': doc.getpath('darcy'),
@@ -420,6 +427,11 @@ def mongo2xmu(doc, container):
         cat.setdefault('AgeStratigraphyFormation_tab', []).append(agesf)
         cat.setdefault('AgeStratigraphyGroup_tab', []).append(agesg)
         cat.setdefault('AgeStratigraphyMember_tab', []).append(agesm)
+    for zoopp in doc.getpath('zoopp', []):
+        zoopr = zoopp.get('zoopr', '')
+        zoopc = zoopp.get('zoopc', '')
+        cat.setdefault('ZooPreparation_tab', []).append(zoopr)
+        cat.setdefault('ZooPreparationCount_tab', []).append(zoopc)
     for taxon in doc.getpath('ideil', []):
         cat.setdefault('IdeTaxonRef_tab', []).append(
             container({'ClaSpecies': taxon.get('idetx')})
