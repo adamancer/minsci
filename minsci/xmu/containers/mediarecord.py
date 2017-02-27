@@ -212,14 +212,14 @@ class MediaRecord(XMuRecord):
         """Updates record if unique match in catalog found"""
         print 'Matching against {}...'.format(self('MulTitle'))
         try:
-            object = self.match_one()
+            match = self.match_one()
         except ValueError:
             if strict:
                 raise
         else:
             print 'Unique match found! Updating record...'
             enhanced = self.clone(self)
-            enhanced._object = object
+            enhanced._object = match
             enhanced.catnums = self.catnums
             for key, func in enhanced._smart_functions.iteritems():
                 enhanced[key] = func() if func is not None else enhanced(key)
@@ -287,11 +287,9 @@ class MediaRecord(XMuRecord):
 
 
     def smart_related(self):
-        """Populate DetRelation_tab with info about matching catalog records"""
+        """Populates DetRelation_tab with info about matching catalog records"""
         # Find all catalog records that currently link to this multimedia record
-        cat_irns = []
-        if self('irn'):
-            cat_irns = self.cataloger.find_depicted(self('irn'))
+        cat_irns = self.cataloger.media.get(self('irn'))
         # Find all catalog records that match this multimedia record
         related = {}
         for obj in self.match():
@@ -302,9 +300,8 @@ class MediaRecord(XMuRecord):
         return related
 
 
-
     def smart_collections(self):
-        """Populate DetCollectionName_tab based on catalog record"""
+        """Populates DetCollectionName_tab based on catalog record"""
         collections = self('DetCollectionName_tab') if self else []
         collections = [COLLECTION_MAP.get(c, c) for c in collections]
         # Check if micrograph
@@ -344,7 +341,7 @@ class MediaRecord(XMuRecord):
                 break
         else:
             note.append('Linked: Yes')
-        return '; '.join(note)
+        return '; '.join(note).strip('; ')
 
 
 

@@ -12,11 +12,13 @@ class Cataloger(XMu):
         kwargs['container'] = MinSciRecord
         super(Cataloger, self).__init__(*args, **kwargs)
         self.catalog = {}
+        self.media = {}
         self.fast_iter()
 
 
     def iterate(self, element):
         rec = self.parse(element)
+        # Add record to catalog index
         identifiers = set([rec.get_catnum(include_code=False),
                            rec.get_identifier(include_code=False)])
         for identifier in identifiers:
@@ -26,6 +28,9 @@ class Cataloger(XMu):
                 dct.setdefault(index, {})
                 dct = dct[index]
             dct.setdefault(indexed[-1], []).append(rec)
+        # Add media to media index
+        for irn in rec('MulMultiMediaRef_tab', 'irn'):
+            self.media.setdefault(irn, []).append(rec('irn'))
 
 
     def index_identifier(self, identifier):
