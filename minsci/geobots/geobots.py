@@ -3,12 +3,39 @@
 import math
 import time
 
+import requests
 import requests_cache
 
-from .containers import GeoList
+from .containers import GeoList, TO_COUNTRY_CODE
 
 
-class GeoNamesBot(requests_cache.CachedSession):
+class GeoBot(requests_cache.CachedSession):
+
+    def __init__(self, wait, *args, **kwargs):
+        super(GeoBot, self).__init__(*args, **kwargs)
+        self.wait = wait
+
+
+    def _retry(self, func, *args, **kwargs):
+        """Retries failed requests using a simple exponential backoff"""
+        for i in xrange(8):
+            try:
+                response = func(*args, **kwargs)
+            except (requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout):
+                seconds = 30 * 2 ** i
+                print 'Retrying in {:,} seconds...'.format(seconds)
+                time.sleep(seconds)
+            else:
+                if not response.from_cache:
+                    print 'Resting up for the big push...'
+                    time.sleep(self.wait)
+                return response
+        else:
+            raise Exception('Maximum retries exceeded')
+
+
+class GeoNamesBot(GeoBot):
     """A cacheable requests object customized for GeoNames webservices
 
     Attributes:
@@ -18,7 +45,8 @@ class GeoNamesBot(requests_cache.CachedSession):
     """
 
     def __init__(self, username, user_id=None):
-        super(GeoNamesBot, self).__init__(cache_name='geobots')
+        wait = 3600. / 2000.
+        super(GeoNamesBot, self).__init__(wait, cache_name='geobots')
         self.username = username
         if user_id is None:
             user_id = username
@@ -26,10 +54,11 @@ class GeoNamesBot(requests_cache.CachedSession):
         self.headers.update({
             'User-Agent': user_agent
             })
+        # Maps simple names to GeoNames field names
         self._params = {
             'country': 'countryName',
-            'state': 'adminCode1',
-            'county': 'adminCode2'
+            'state': 'adminName1',
+            'county': 'adminName2'
         }
 
 
@@ -49,15 +78,13 @@ class GeoNamesBot(requests_cache.CachedSession):
             'username': self.username,
         }
         defaults.update(params)
-        response = self.get(url, params=defaults)
+        # Make and parse query
+        response = self._retry(self.get, url, params=defaults)
         if response.status_code == 200:
+            #print response.url
             content = response.json()
             status = content.get('status')
             if status is None:
-                # Enforce a wait between non-cached requests. The time is
-                # based on a limit of 2,000 requests per username per hour.
-                if not response.from_cache:
-                    time.sleep(1.8)
                 return GeoList(content.get('geonames', []), **self._params)
             elif response.from_cache:
                 # If bad response comes from cache, delete that entry and
@@ -67,19 +94,38 @@ class GeoNamesBot(requests_cache.CachedSession):
             else:
                 # If bad response is live, kill the process
                 self.cache.delete_url(response.url)
-                print status, content.get('message')
-                raise Exception('Out of credits')
+                print '{message} (code={value})'.format(**status)
+                if stats.get('value') in (18, 19, 20):
+                    raise RuntimeError('Out of credits')
+                # If not a credit error, try again in 30 seconds
+                time.sleep(30)
+                return self._query_geonames(url, **self._params)
 
 
-    def search(self, query, **params):
+    def get_by_id(self, geoname_id):
+        """Get feature by GeoNames ID
+
+        Args:
+            geoname_id (str): the ID of a feature in GeoNames
+
+        Returns:
+            JSON representation of the matching feature
+        """
+        url = 'http://api.geonames.org/getJSON'
+        if query:
+            params.update({'geonameId': query})
+            return self._query_geonames(url, **params)
+        else:
+            return GeoList([], **self._params)
+
+
+
+    def search(self, query, countries=None, **params):
         """Searches all GeoNames fields for a query string
 
         Args:
             query (str): query string
-            country (str)
-            adminCode1 (str)
-            adminCode2 (str)
-            adminCode3 (str)
+            countries (mixed): a list or pipe-delimited string of countries
             featureClass (list)
             featureCode (list)
 
@@ -88,7 +134,14 @@ class GeoNamesBot(requests_cache.CachedSession):
         """
         url = 'http://api.geonames.org/searchJSON'
         if query:
-            params.update({'q': query})
+            params['q'] = query
+            if countries is not None:
+                if isinstance(countries, basestring):
+                    countries = countries.split('|')
+                codes = [TO_COUNTRY_CODE.get(c.strip()) for c in countries if c]
+                codes = [code for code in codes if code is not None]
+                if len(codes) == len(countries):
+                    params['country'] = codes
             return self._query_geonames(url, **params)
         else:
             return GeoList([], **self._params)
@@ -145,8 +198,217 @@ class GeoNamesBot(requests_cache.CachedSession):
         return self._query_geonames(url, **params)
 
 
+
+
+class GEOLocateBot(GeoBot):
+
+
+    def search(loc_string, country, state, county=None, **kwargs):
+        """Use the GeoLocate webservice to geolocate the query string
+
+        Args:
+            loc_string (str): a query string
+            country (str): name or abbreviation of country
+            state (str): name or abbreviation of state or equivalent
+            country (str): name of county or equivalent
+
+        Returns:
+            Tuple including best match and payload. Best match is a list
+            including lat, lng, radius, precision, and score of match. payload
+            is a dict of search parameters.
+        """
+        cprint(u'Geolocating "{}" using GeoLocate...'.format(trs))
+        url = ('http://www.museum.tulane.edu/webservices'
+               '/geolocatesvcv2/geolocatesvc.asmx/Georef2')
+        headers = {'content-type' : 'application/x-www-form-urlencoded'}
+        params = {
+            'Country' : country,
+            'State' : state,
+            'County' : county,
+            'LocalityString' : loc_string,
+            'HwyX' : True,
+            'FindWaterbody' : True,
+            'RestrictToLowestAdm' : False,
+            'doUncert' : True,
+            'doPoly' : False,
+            'displacePoly' : False,
+            'polyAsLinkID' : False,
+            'LanguageKey' : 0
+            }
+        params.update(kwargs)
+        response = self.get(url, headers=headers, params=params)
+        if response.status_code == 200:
+            if not r.from_cache:
+                cprint(u' Caching {}...'.format(r.url))
+                time.sleep(3)  # GeoLocate asks for a 3-second gap b/w requests
+            #if not r.from_cache:
+            #    time.sleep(3)  # GeoLocate asks for a 3-second gap b/w requests
+            nmsp = 'http://www.museum.tulane.edu/webservices/'
+            base = '/nmsp:Georef_Result_Set/nmsp:ResultSet'
+            # Process results file. Keep only the best match.
+            root = etree.fromstring(r.text.encode('utf8'))  # why is encode here
+            lat = root.xpath('{}/nmsp:WGS84Coordinate/nmsp:Latitude'.format(base),
+                             namespaces = {'nmsp' : nmsp})
+            lng = root.xpath('{}/nmsp:WGS84Coordinate/nmsp:Longitude'.format(base),
+                             namespaces = {'nmsp' : nmsp})
+            radius = root.xpath('{}/nmsp:UncertaintyRadiusMeters'.format(base),
+                                namespaces = {'nmsp' : nmsp})
+            precision = root.xpath('{}/nmsp:Precision'.format(base),
+                                   namespaces = {'nmsp' : nmsp})
+            score = root.xpath('{}/nmsp:Score'.format(base),
+                               namespaces = {'nmsp' : nmsp})
+            results = [[s.text for s in row] for row
+                       in zip(lat, lng, radius, precision, score)]
+            try:
+                high_score = max([int(x[4]) for x in results])
+            except ValueError:
+                return None, params
+            try:
+                result = [row for row in results if int(row[4]) == high_score][0]
+            except:
+                # No match found
+                result = None
+            result[0] = dec(result[0])  # decimalize latitude
+            result[1] = dec(result[1])  # decimalize longitude
+            return result, params
+        else:
+            raw_input(r.text)
+
+
+    def geolocate_to_emu(result, payload):
+        """Create EMu import based on GeoLocate result
+
+        TKTK
+        """
+        note = (u'Coordinates determined using the GEOLocate'
+                 ' Georef2 webservice for locality string'
+                 ' "' + payload['LocalityString'] + '."'
+                 ' Additional search parameters were: ')
+        for key in (
+            'Country',
+            'State',
+            'County',
+            'HwyX',
+            'FindWaterbody',
+            'RestrictToLowestAdm',
+            'doUncert',
+            'doPoly',
+            'displacePoly',
+            'polyAsLinkID',
+            'LanguageKey'):
+            val = payload[key]
+            if val is True:
+                val = 'TRUE'
+            elif val is False:
+                val = 'FALSE'
+            else:
+                val = str(val)
+            if bool(val):
+                note += key + '=' + str(val) + '; '
+        note = note.rstrip('; ')
+        return {
+            'LatLatitudeDecimal' : [result[0]],
+            'LatLongitudeDecimal' : [result[1]],
+            'LatComment' : [result[3] + ' confidence'],
+            'LatGeoreferencingNotes' : [note],
+            'LatDetSource' : ['Georeference'],
+            'LatRadiusVerbatim' : [result[2] + ' m'],
+            'LatRadiusProbability' : [result[4]],
+            'LatRadiusNumeric' : [result[2]],
+            'LatRadiusUnit' :['m'],
+            'LatDatum' : ['WGS84'],
+            'LatDeterminedByRef' : ['1006206'],
+            'LatDetDate' : [datetime.now().strftime('%d%m%Y')]
+            }
+
+
+
+
+
+class TownshipGeocoder(requests_cache.CachedSession):
+
+    def geocommunicator(trs, state, pm=None):
+        """Use the BLM TownshipGeocoder webservice to geolocate TRS
+
+        Args:
+            trs (str): well-formed section-township-range
+            state (str): name or abbreviation of a U.S. state
+            pm (str): number of principal meridian. This is required to
+              geolocate a TRS, but rarely recorded, so the function will try
+              out all principal meridians in a state if it is not provided.
+
+        Returns:
+            List of lat-lng pairs
+        """
+        cprint(u'Geolocating "{}" using GeoCommunicator...'.format(trs))
+        # Get two-letter abberviation for state
+        if len(state) != 2:
+            try:
+                state = STATES[state.lower()]
+            except KeyError:
+                cprint(u'"{}" is not a valid state'.format(state))
+                return []
+        # Format TRS following GeoCommunicator guidelines
+        twn, rng, sec = trs.upper().split(' ', 2)
+        qtr = ''
+        if sec.count(' ') > 1:
+            sec, qtr = sec.rsplit(' ', 1)
+        gc_trs = [
+            state,               # two-letter state abbreviation
+            None,                # principal meridian (populated before request)
+            twn.strip('TNS'),    # township number
+            0,                   # township fraction (?)
+            twn[-1],             # township direction
+            rng.strip('REW'),    # range number
+            0,                   # range fraction (?)
+            rng[-1],             # range direction
+            sec.strip('SEC. '),  # section number
+            qtr,                 # quarter section as NW, N2NW, NWNWSW, etc.
+            0
+            ]
+        # Identify prime meridians in the given state if pm not given
+        if pm is None:
+            params = {'StateAbbrev': state}
+            url = ('http://www.geocommunicator.gov/TownshipGeocoder'
+                   '/TownshipGeocoder.asmx/GetPMList')
+            r = gc.get(url, params=params)
+            if r.status_code == 200:
+                if not r.from_cache:
+                    cprint(u' Caching {}...'.format(r.url))
+                    time.sleep(3)
+                root = etree.fromstring(r.text.encode('utf8'))
+                pms = root.xpath('/nmsp:TownshipGeocoderResult/nmsp:Data',
+                                 namespaces={'nmsp': 'http://www.esri.com/'})
+                pms = [pm.strip()[:2] for pm in pms[0].text.split(',')]
+        else:
+            pms = [pm.zfill(2)]
+        # Get coordinates for trs for all principal meridians
+        url = ('http://www.geocommunicator.gov/TownshipGeocoder'
+               '/TownshipGeocoder.asmx/GetLatLon')
+        coordinates = []
+        for pm in pms:
+            gc_trs[1] = pm
+            params = {'TRS': ','.join([str(s) for s in gc_trs])}
+            r = gc.get(url, params=params)
+            if r.status_code == 200:
+                if not r.from_cache:
+                    cprint(u' Caching {}...'.format(r.url))
+                    time.sleep(3)
+                root = etree.fromstring(r.text.encode('utf8'))
+                result = root.xpath('/nmsp:TownshipGeocoderResult/nmsp:Data',
+                                    namespaces={'nmsp': 'http://www.esri.com/'})
+                if len(result):
+                    root = etree.fromstring(result[0].text)
+                    point = root.xpath('/rss/channel/item/georss:point',
+                                       namespaces={'georss' : 'http://www.georss.org/georss'})
+                    lng, lat = [dec(c) for c in point[0].text.split(' ')]
+                    coordinates.append((lat, lng))
+        return coordinates
+
+
+
 def distance_on_unit_sphere(lat1, long1, lat2, long2):
-    """Calculates the distance between two points on a sphere
+    """Calculates the distance in km between two points on a sphere
 
     From http://www.johndcook.com/blog/python_longitude_latitude/
 
@@ -184,3 +446,21 @@ def distance_on_unit_sphere(lat1, long1, lat2, long2):
     # Remember to multiply arc by the radius of the earth
     # in your favorite set of units to get length.
     return arc * 6371.
+
+
+def dec2dms(dec, is_lat=True):
+    d = abs(int(dec))
+    m = 60. * (abs(dec) % 1)
+    s = int(round(60. * (m % 1)))
+    m = int(m)
+    if s == 60:
+        m += 1
+        s = 0
+    if m == 60:
+        d += 1
+        m = 0
+    if dec >= 0:
+        h = 'N' if is_lat else 'E'
+    else:
+        h = 'S' if is_lat else 'W'
+    return '{} {} {} {}'.format(d, m, s, h)
