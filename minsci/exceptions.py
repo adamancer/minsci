@@ -1,3 +1,5 @@
+"""Custom exceptions for minsci module"""
+
 class MinSciException(Exception):
     """Root exception. Used only to except any error, never raised."""
     pass
