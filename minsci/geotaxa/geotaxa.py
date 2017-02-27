@@ -47,6 +47,10 @@ class GeoTaxon(dict):
         return is_official(self)
 
 
+    def is_child_of(self, taxon):
+        return format_key(taxon) in self['parent']
+
+
     def pprint(self):
         """Pretty prints the taxon data"""
         pp.pprint(self)

@@ -25,33 +25,34 @@ class GeoTaxaUpdater(XMu):
         rec = self.parse(element)
         name = clean_taxon(rec('NarTitle'))
         definition = rec('NarNarrative')
-        if 'EMu' in definition or definitions.startswith('No additional info'):
+        if 'EMu' in definition or definition.startswith('No additional info'):
             definition = ''
         parent = clean_taxon(rec('AssMasterNarrativeRef', 'NarTitle'))
+        alternatives = rec('TaxTaxaRef_tab', 'ClaSpecies')
         key = format_key(name)
         try:
             self.taxa[key]
         except KeyError:
-            # Find preferred synonym, then confirm that it isn't equivalent
-            preferred = rec.get_synonyms()
-            if key in [format_key(species) for species in preferred]:
-                print key, 'in', preferred
-                return True
             # Add to taxadict
             taxadict = GeoTaxon({
                 'irn': int(rec('irn')),
                 'name': name,
                 'definition': definition,
                 'parent': parent,
-                'preferred': preferred,
-                'alternatives': rec('TaxTaxaRef_tab', 'ClaSpecies'),
+                'preferred': rec.get_synonyms(),
+                'alternatives': alternatives,
                 'tax_irns': rec('TaxTaxaRef_tab', 'irn'),
                 'schema': rec.get_schema()
             })
-            self.taxa[key] = taxadict
+            # Format and test values in taxadict
+            taxadict['parent'] = format_key(parent)
+            for key in ['preferred', 'alternatives']:
+                taxadict[key] = [format_key(t) for t in taxadict[key]]
+            if not format_key(name) in taxadict['preferred']:
+                self.taxa[key] = taxadict
         else:
-            self.taxa[key]['alternatives'].extend(rec('TaxTaxaRef_tab',
-                                                      'ClaSpecies'))
+            alternatives = [format_key(t) for t in alternatives]
+            self.taxa[key]['alternatives'].extend(alternatives)
             warning = u'Warning: {} already exists!'
             try:
                 print warning.format(name)
@@ -135,9 +136,6 @@ class GeoTaxaUpdater(XMu):
         """Recursively identifies synonyms for the current, preferred taxon"""
         if synonyms is None:
             synonyms = []
-        if len(self.taxa[taxon]['preferred']) > 1:
-            print taxadict
-            raw_input()
         for preferred in self.taxa[taxon]['preferred']:
             try:
                 print taxon, '=>', preferred
@@ -148,6 +146,7 @@ class GeoTaxaUpdater(XMu):
             while taxadict['preferred']:
                 synonyms.append(taxadict['name'])
                 taxadict = self.taxa[format_key(taxadict['preferred'][-1])]
+            synonyms = [format_key(t) for t in synonyms]
             taxadict.setdefault('synonyms', []).extend(synonyms)
 
 
