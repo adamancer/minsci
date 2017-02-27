@@ -1,40 +1,41 @@
 """Subclass of XMuRecord with methods specific to emultimedia"""
 
-import os
 import re
-from collections import namedtuple
-from itertools import chain, izip_longest
 
 from dateparser import parse
 
 from .xmurecord import XMuRecord
-from ..tools.multimedia.embedder import Embedder
-from ..tools.multimedia.hasher import hash_file
-from ...helpers import format_catnums, oxford_comma, parse_catnum, parse_names
+from ...helpers import oxford_comma
 
 
 class BiblioRecord(XMuRecord):
     """Subclass of XMuRecord with methods specific to ebibliography"""
 
-    def __init__(self, *args):
-        super(BiblioRecord, self).__init__(*args)
+    def __init__(self, *args, **kwargs):
+        super(BiblioRecord, self).__init__(*args, **kwargs)
         self.module = 'ebibliography'
         self.prefix = self('BibRecordType')[:3]
         self.masks = {
             'Art': (u'{authors}, {year}. "{title}." <i>{source}</i>,'
-                     ' {volume}:({issue}) {pages}'),
+                    ' {volume}({issue}): {pages}'),
+            'Boo': (u'{authors}, {year}. {title}. In <i>{source}</i> '
+                    ' (v. {volume}), {pages}p.'),
         }
-
 
 
     def __call__(self, *args, **kwargs):
         """Shorthand for XMuRecord.smart_pull(*args)"""
         args = [self.prefix + arg[3:] if arg.startswith('Art')
                 else arg for arg in args]
-        return self.smart_pull(*args)
+        try:
+            return self.smart_pull(*args)
+        except KeyError:
+            print 'Path not found:', args
+            return ''
 
 
     def format_reference(self):
+        """Formats reference according to publication type"""
         authors = oxford_comma(self.get_authors())
         title = self('ArtTitle')
         # Get publication date
@@ -80,6 +81,7 @@ class BiblioRecord(XMuRecord):
     def get_source(self):
         sources = {
             'Art': 'Jou',
+            'Boo': 'Bos',
             'Cha': 'Boo'
         }
         return self('ArtParentRef', sources[self.prefix] + 'Title')
@@ -87,7 +89,7 @@ class BiblioRecord(XMuRecord):
 
     @staticmethod
     def clean_reference(ref):
-        characters = ['()', ' : ', ' :', ' ,', ' .', '""', '<i></i>']
+        characters = ['()', ' : ', ' :', ' ,', ' .', '""', '<i></i>', ', p.', '(v. )']
         for char in characters:
             ref = ref.replace(char, ' ')
         while '  ' in ref:
