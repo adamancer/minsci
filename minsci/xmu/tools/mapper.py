@@ -20,8 +20,8 @@ class FieldMapper(object):
     """
 
     def __init__(self, module):
-        emu = XMu(None, module=module, container=MinSciRecord)
-        self.schema = emu.fields.schema
+        xmudata = XMu(None, module=module, container=MinSciRecord)
+        self.schema = xmudata.fields.schema
         self.module = module
         self.aliases = {}
         self.paths = {}
@@ -236,13 +236,13 @@ class FieldMapper(object):
                                 raise Exception('Reference length error')
                             d[last] = rec[field][0]
                         else:
-                            for i in xrange(len(rec[field])):
+                            for i, val in enumerate(rec[field]):
                                 try:
-                                    d[i][last] = rec[field][i]
+                                    d[i][last] = val
                                 except KeyError:
-                                    d = [{last: rec[field][i]}]
+                                    d = [{last: val}]
                                 except IndexError:
-                                    d.append({last: rec[field][i]})
+                                    d.append({last: val})
                     else:
                         d[last] = rec[field]
                     del rec[field]

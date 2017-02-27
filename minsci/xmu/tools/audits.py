@@ -1,3 +1,5 @@
+"""Tools to parse audits data from EMu"""
+
 from collections import namedtuple
 from lxml import etree
 

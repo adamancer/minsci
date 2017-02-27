@@ -3,14 +3,14 @@
 import os
 import re
 from collections import namedtuple
-from itertools import izip_longest
+from itertools import chain, izip_longest
 
 from dateparser import parse
 
 from .xmurecord import XMuRecord
 from ..tools.multimedia.embedder import Embedder
 from ..tools.multimedia.hasher import hash_file
-from ...helpers import format_catnums, oxford_comma, parse_catnum
+from ...helpers import format_catnums, oxford_comma, parse_catnum, parse_names
 
 
 class BiblioRecord(XMuRecord):

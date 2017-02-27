@@ -9,6 +9,14 @@ from unidecode import unidecode
 from ...xmu import XMu, MinSciRecord, is_table, is_reference
 
 
+def standardize_taxon(species):
+    """Standardize formatting of classification to improve matching"""
+    species = unidecode(species).replace('-', ' ')
+    if species.count(',') == 1:
+        species = ' '.join([s.strip() for s in species.split(',')[::-1]])
+    return species
+
+
 # List of fields to include for the attachment search. All other fields will
 # be excluded.
 INCLUDE = {
@@ -29,11 +37,15 @@ EXCLUDE = {
                           'LatCentroidLongitude0',
                           'LatCentroidLongitudeDec_tab',
                           'LatPreferred_tab',
+                          'LocRecordClassification'
+                          'LocSiteStationNumber',
+                          'LocSiteStationSource',
+                          'LocSiteName_tab',
                           'MulMultiMediaRef_tab',
                           'LocContinent',
                           'VolRegionName',
                           'VolSubRegionName']
-}
+                          }
 
 # Contains lists of fields that contain the same data converted to different
 # units. This causes matching problems, and only one of these should be
@@ -69,63 +81,37 @@ class Matcher(XMu):
 
     def __init__(self, module, include=None, exclude=None):
         print 'Creating attachment search for {}...'.format(module)
-        fp = os.path.join('matcher', '{}.json'.format(module))
+        fp = os.path.join('matcher', '{}'.format(module))
+        super(Matcher, self).__init__(fp, module=module, container=MinSciRecord)
+        self.keep = ['_records', '_fields']
+        self.include = INCLUDE.get(module, []) if include is None else include
+        self.exclude = EXCLUDE.get(module, []) if exclude is None else exclude
+        self.transformations = TRANSFORMATIONS.get(module, {})
+        self.derived = DERIVED.get(module, {})
+        self.new = []
+        self.write = False
+        json_path = os.path.join('matcher', '{}.json'.format(module))
+        #os.remove(json_path)
         try:
-            data = json.load(open(fp, 'rb'))
-            self._records = data['records']
-            self._fields = data['fields']
-        except (IOError, KeyError):
-            self.from_json = False
+            self.load(json_path)
+        except IOError:
             self._records = {}
             self._fields = []
             fp = os.path.join('matcher', module)
-            try:
-                super(Matcher, self).__init__(fp, container=MinSciRecord)
-            except TypeError:
-                super(Matcher, self).__init__(None, module=module,
-                                              container=MinSciRecord)
-        else:
-            self.from_json = True
-            super(Matcher, self).__init__(None, module=module,
-                                          container=MinSciRecord)
-        self.module = module
-        if include is None:
-            try:
-                include = INCLUDE[module]
-            except KeyError:
-                include = []
-        self.include = include
-        if exclude is None:
-            try:
-                exclude = EXCLUDE[module]
-            except KeyError:
-                exclude = []
-        self.exclude = exclude
-        try:
-            self.transformations = TRANSFORMATIONS[module]
-        except KeyError:
-            self.transformations = {}
-        try:
-            self.derived = DERIVED[module]
-        except KeyError:
-            self.derived = {}
-        self.new = []
+            self.fast_iter(report=10000)
+            self._fields = list(set(self._fields))
+            print self._fields
+            self.save(json_path)
         self._fields.sort()
-        self.write = False
-        # Field to keep
-        self.keep = ['_fields', '_records']
-
-
-    #def save(self):
-    #    """Save the JSON-encoded key list"""
-    #    fp = os.path.join('matcher', '{}.json'.format(self.module))
-    #    data = {'fields': list(set(self._fields)), 'records': self._records}
-    #    json.dump(data, open(fp, 'wb'))
 
 
     def iterate(self, element):
         """Populate dict used for matching"""
         rec = self.parse(element)
+        # HACK: Skip sites if given by collector
+        if (self.module == 'ecollectionevents'
+            and rec('LocSiteNumberSource') == 'Collector'):
+            return True
         irn = rec.pop('irn')  # IRN will never be included in the match set
         key = self.keyer(rec)
         self._fields.extend(rec.keys())
@@ -133,7 +119,7 @@ class Matcher(XMu):
             data = self.container({'irn': irn})
             self._records.setdefault(key, []).append(data)
         else:
-            raise Exception(rec)
+            raise ValueError(rec)
 
 
     def keyer(self, rec):
@@ -246,10 +232,7 @@ class Matcher(XMu):
             rec (xmu.DeepDict): object data
         """
         if self.module == 'etaxonomy':
-            try:
-                rec['ClaCurrentlyAccepted']
-            except KeyError:
-                rec['ClaCurrentlyAccepted'] = 'Unknown'
+            rec.setdefault('ClaCurrentlyAccepted', 'Unknown')
         # Explicitly include the fields that should be empty. Fields that
         # we don't want to use as part of the match (as defined by the include
         # and exclude attributes) are also removed here.
@@ -257,10 +240,7 @@ class Matcher(XMu):
             try:
                 rec[key]
             except KeyError:
-                if is_table(key):
-                    rec[key] = []
-                else:
-                    rec[key] = u''
+                rec_key = [] if is_table(key) else u''
             if ((self.include and not key in self.include)
                     or key in self.exclude):
                 del rec[key]
@@ -287,35 +267,22 @@ class Matcher(XMu):
         for sources in self.derived:
             keep = u''
             for src in sources:
-                try:
-                    if rec[src]:
-                        keep = src
-                        break
-                except KeyError:
-                    pass
-            if keep:
-                for derived in [derived for derived in sources
-                                if not derived == keep]:
-                    try:
-                        del rec[derived]
-                    except KeyError:
-                        pass
+                if rec.get(src) is not None:
+                    keep = src
+                    for derived in [fld for fld in sources if not fld == keep]:
+                        try:
+                            del rec[derived]
+                        except KeyError:
+                            pass
+                    break
         return rec
-
-
-def standardize_taxon(species):
-    """Standardize formatting of classification to improve matching"""
-    species = unidecode(species).replace('-', ' ')
-    if species.count(',') == 1:
-        species = ' '.join([s.strip() for s in species.split(',')[::-1]])
-    return species
 
 
 def rower(rec, cols):
     """Group data from different fields into rows"""
     rows = []
     for col in cols:
-        for i, val in rec.get(col, []):
+        for i, val in enumerate(rec.get(col, [])):
             try:
                 rows[i][col] = val
             except IndexError:

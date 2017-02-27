@@ -1,3 +1,5 @@
+"""Tools to parse legacy data from an EMu export"""
+
 import csv
 import os
 import re
@@ -5,10 +7,11 @@ from collections import namedtuple
 from pprint import pprint
 
 from ..xmu import XMu, write
-from .groups import group
+from .groups import write_group
 
 
 class Legacy(XMu):
+    """Methods to parse legacy data from an EMu export"""
 
     def __init__(self, *args, **kwargs):
         super(Legacy, self).__init__(*args, **kwargs)
@@ -299,12 +302,7 @@ class Legacy(XMu):
 
 
     def iterate(self, element):
-        """Default function called by self.fast_iter()"""
-        return self.iterlegacy(element)
-
-
-    def iterlegacy(self, element):
-        """Compares current and legacy """
+        """Compares current and legacy data"""
         rec = self.parse(element)
         irn = rec('irn')
         legacy = rec('AdmOriginalDataRef', 'AdmOriginalData')
@@ -341,8 +339,8 @@ class Legacy(XMu):
             os.mkdir(dn)
         mask = os.path.join(dn, '{}')
         for name in self.groups:
-            group('ecatalogue', self.groups[name],
-                  fp=mask.format(name + '.xml'), name=name)
+            write_group('ecatalogue', self.groups[name],
+                        fp=mask.format(name + '.xml'), name=name)
         if self.errors:
             with open(mask.format('results.log'), 'wb') as f:
                 writer = csv.writer(f)
