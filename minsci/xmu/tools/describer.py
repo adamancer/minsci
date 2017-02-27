@@ -5,7 +5,7 @@ from collections import namedtuple
 from copy import deepcopy
 
 from ...helpers import (add_article, lcfirst, oxford_comma,
-                         plural, singular, ucfirst)
+                        plural, singular, ucfirst)
 
 
 # Objects that are sometimes found in the cut field and represent a whole
@@ -23,7 +23,7 @@ OBJECTS = [
     'vase',
     'carving'
 ]
-INFLECTED = [(singular(term), plural(term)) for term in OBJECTS]
+INFLECTED = [(singular(_), plural(_)) for _ in OBJECTS]
 
 # Terms that need hyphens to be properly formatted as adjectives
 PAIRS = [
@@ -77,8 +77,9 @@ def summarize(rec):
     catnum = descriptors['catnum']
     summary = u'{}: {} [{}]'.format(catnum, caption, tags).rstrip('[] ')
     # Cull unneeded keys from descriptors
-    keep = ['irn', 'catnum', 'xname', 'url']
+    keep = ['irn', 'catnum', 'status', 'xname', 'url']
     obj = {key: val for key, val in descriptors.iteritems() if key in keep}
+    obj['xname'] = ucfirst(obj['xname'])
     return Description(object=obj, caption=caption,
                        keywords=keywords, summary=summary)
 
@@ -119,17 +120,18 @@ def get_descriptors(rec):
 
 
 def get_caption(rec=None, descriptors=None):
+    """Derives a simple descripton of an object"""
     if descriptors is None:
         descriptors = get_descriptors(rec)
-    caption = [format_caption(descriptors)]
+    lines = [format_caption(descriptors)]
     # Mark inactive records
     if descriptors['status'] != 'active':
         status = descriptors['status']
         if status == 'inactive':
             status = 'made inactive'
-        caption.append('The catalog record associated with this'
-                       ' specimen has been {}.'.format(status))
-    caption = '. '.join([s.rstrip('. ') for s in caption])
+        lines.append('The catalog record associated with this'
+                     ' specimen has been {}.'.format(status))
+    caption = '. '.join([s.rstrip('. ') for s in lines])
     if not caption.endswith(('.', '"')):
         caption += '.'
     return caption
@@ -154,13 +156,12 @@ def get_tags(rec=None, descriptors=None):
     if descriptors is None:
         descriptors = get_descriptors(rec)
     tags = []
-    return []
-    if obj.collections and 'polished thin' in obj.collections[0].lower():
-        tags.append('PTS')
-    if 'GGM' in obj.location.upper():
-        tags.append('GGM')
-    elif 'POD 4' in obj.location.upper():
-        tags.append('POD 4')
+    #if obj.collections and 'polished thin' in obj.collections[0].lower():
+    #    tags.append('PTS')
+    #if 'GGM' in obj.location.upper():
+    #    tags.append('GGM')
+    #elif 'POD 4' in obj.location.upper():
+    #    tags.append('POD 4')
     return tags
 
 
@@ -190,7 +191,9 @@ def format_caption(descriptors):
         if xname.isalpha() and not xname == xname.upper():
             working['xname'] = lcfirst(working['xname'])
     # Select a mask and format the data for it
-    if working['cut'] and not working['cut'] in ('carved', 'intarsia') and not 'beads' in working['cut']:
+    if (working['cut']
+            and not working['cut'] in ('carved', 'intarsia')
+            and not 'beads' in working['cut']):
         working['cut'] = format_modifier(working['cut']) + '-cut'
     if working['setting'].lower() in OBJECTS:
         working['colors'] = format_modifier(oxford_comma(working['colors']))
@@ -210,15 +213,14 @@ def format_caption(descriptors):
         working['colors'] = oxford_comma(working['colors'])
         mask = u'{cut} {xname} colored {colors} from {locality}'
     elif working['name'] and not working['locality']:
-        mask = ''
+        mask = u''
     else:
-        mask =  '{xname} from {locality}'
+        mask = u'{xname} from {locality}'
     # Add common elements
     prefix = u'{name}.'
     suffix = u'weighing {weight}. Described as "{description}."'
     mask = u' '.join([s for s in [prefix, mask, suffix] if s])
     caption = clean_caption(mask.format(**working))
-    print working['xname']
     # Fix capitalization of second sentence when name is specified
     if working['name']:
         sentences = caption.split('. ', 1)
@@ -288,7 +290,7 @@ def format_gems(rec):
 
 def format_modifier(modifier):
     """Formats a string as a compound modifier"""
-    words = [s.strip('. ') for s in re.split('[\s\-]+', modifier.strip())]
+    words = [s.strip('. ') for s in re.split(r'[\s\-]+', modifier.strip())]
     formatted = [s + ' ' if is_adverb(s) and not i else s + '-'
                  for i, s in enumerate(words)]
     return ''.join(formatted).rstrip('-')

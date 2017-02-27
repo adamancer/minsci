@@ -1,27 +1,23 @@
 """Tools to embed metadata in image files"""
 
-import hashlib
 import os
 import shutil
 import subprocess
 import tempfile
 from collections import namedtuple
 from datetime import datetime
-from pprint import pprint
 
-from PIL import Image
-
-from .hasher import hash_file, hash_image_data
-from ....helpers import (format_catnums, localize_datetime,
-                         parse_catnum, oxford_comma)
+from .hasher import hash_image_data
+from ....helpers import localize_datetime
 
 
 EmbedField = namedtuple('EmbedField', ['name', 'length', 'function'])
+LOGFILE = open('embedder.log', 'ab', 0)
 
 class Embedder(object):
     """Tools to embed metadata in image files"""
 
-    def __init__(self, output_dir):
+    def __init__(self, output_dir, overwrite=True):
         self.metadata_fields = {
             'copyright': EmbedField('Copyright', 128, self.get_copyright),
             'creator': EmbedField('Creator', 64, self.get_creator),
@@ -42,9 +38,8 @@ class Embedder(object):
                                                  64, self.get_transmission_reference),
         }
         self.output_dir = self.change_output_directory(output_dir)
-        self.tmpfile = tempfile.NamedTemporaryFile()
-        self.logfile = open('embedder.log', 'wb', 0)
-        self.overwrite = True
+        self.logfile = LOGFILE
+        self.overwrite = overwrite
         self.defaults = [
             ('xmp:copyrightstatus', 'unknown'),
             ('xmp-xmprights:marked', '')
@@ -177,7 +172,9 @@ class Embedder(object):
             else:
                 self.logfile.write('Info: {}: Already exists\n'.format(path))
                 return dst
-        pre_embed_hash = hash_image_data(path)
+        print ' Hashing original image...'
+        pre_embed_hash = hash_image_data(path, output_dir=self.output_dir)
+        print ' Copying file to {}...'.format(self.output_dir)
         shutil.copy2(path, dst)
         # Use exiftool to embed metadata in file
         metadata = self.derive_metadata(rec)
@@ -185,18 +182,20 @@ class Embedder(object):
         for key, val in metadata:
             cmd.append('-{}={}'.format(key, val))
         cmd.append(dst)
-        print '\n'.join(sorted(cmd, key=lambda v:v[0]))
-        return_code = subprocess.call(cmd, cwd=os.getcwd(), stdout=self.tmpfile)
+        print ' Writing metadata...'
+        tmpfile = tempfile.NamedTemporaryFile()
+        return_code = subprocess.call(cmd, cwd=os.getcwd(), stdout=tmpfile)
         if return_code:
             self.logfile.write('Error: {}: Bad return'
                                ' code ({})\n'.format(path, return_code))
         # Check temporary log for errors
-        result = self._parse_log(self.tmpfile)
+        result = self._parse_log(tmpfile)
         if '1 image files updated' not in result:
             self.logfile.write('Error: {}: Embed failed\n'.format(path))
             return False
         # Check modified file
-        post_embed_hash = hash_image_data(dst)
+        print ' Hashing image with embedded metadata...'
+        post_embed_hash = hash_image_data(dst, output_dir=self.output_dir)
         if pre_embed_hash == post_embed_hash:
             self.logfile.write('Info: {}: Embed succeeded\n'.format(dst))
             return dst
@@ -208,6 +207,10 @@ class Embedder(object):
     def change_output_directory(self, output_dir):
         """Change the output directory"""
         self.output_dir = os.path.abspath(output_dir)
+        try:
+            os.makedirs(self.output_dir)
+        except OSError:
+            pass
         return self.output_dir
 
 

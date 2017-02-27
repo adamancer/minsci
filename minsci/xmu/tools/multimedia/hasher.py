@@ -1,5 +1,6 @@
 import hashlib
 import os
+import subprocess
 
 from PIL import Image
 
@@ -38,7 +39,7 @@ def hash_file(path):
     return hasher(open(path, 'rb'))
 
 
-def hash_image_data(path):
+def hash_image_data(path, output_dir='images'):
     """Returns hash based on image data
 
     Args:
@@ -52,14 +53,13 @@ def hash_image_data(path):
     except IOError:
         # Encountered a file format that PIL can't handle. Convert
         # file to something usable, hash, then delete the derivative.
-        print 'Hashing jpeg derivative...'
         fn = os.path.basename(path)
         jpeg = os.path.splitext(fn)[0] + '.jpg'
         cmd = 'iconvert "{}" "{}"'.format(path, jpeg)
-        return_code = subprocess.call(cmd, cwd=self.output_dir)
+        return_code = subprocess.call(cmd, cwd=output_dir)
         if return_code:
             raise IOError('Hash failed')
-        dst = os.path.join(r'D:\embedded', jpeg)
+        dst = os.path.join(output_dir, jpeg)
         hexhash = hashlib.md5(Image.open(dst).tobytes()).hexdigest()
         os.remove(dst)
         return hexhash
