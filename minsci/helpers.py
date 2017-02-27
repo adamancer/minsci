@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
 """Helper functions used throughout the minsci module"""
 
+import csv
+import io
 import os
 import re
 import string
 import sys
 from copy import copy, deepcopy
-from datetime import datetime
 from itertools import izip_longest
 from pprint import pprint
-from pytz import timezone
 from textwrap import fill
 
 import inflect
 import pyodbc
 from nameparser import HumanName
+from pytz import timezone
 from unidecode import unidecode
 
 
@@ -45,7 +46,7 @@ def int2base(i, base):
     i *= sign
     digits = []
     while i:
-        digits.append(digs[x % base])
+        digits.append(digs[i % base])
         i /= base
     if sign < 0:
         digits.append('-')
@@ -415,16 +416,13 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
     if not isinstance(default_suffix, basestring):
         raise Exception('Default suffix must be a string')
     # Regular expressions for use with catalog number functions
-    p_pre = r'(?:([A-Z]{3} |[A-Z]{3})A?|(?:(USNM|NMNH)\s)?([BCGMRS])-?)?'
-    p_num = r'([0-9]{1,6})'  # this will pick up ANY number
-    p_suf = r'\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,][0-9]{1,2}|\.[0-9]+)?'
-    # Force regex to require a prefix if a USNM/NMNH catalog number
-    if prefixed_only:
-        p_pre = p_pre.replace(r'?:(USNM|NMNH)\s)?)', r'(?:(USNM|NMNH)\s)')
-    regex = re.compile(r'\b(' + p_pre + p_num + p_suf + r')\b')
+    p_pre = ur'(?:([A-Z]{3}[A ] ?)|(?:(NMNH |USNM )?(?:([BCGMRS])-?)?))?'
+    p_num = ur'([0-9]{1,6})'  # this will pick up ANY number
+    p_suf = ur'\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
+    regex = re.compile(ur'\b(' + p_pre + p_num + p_suf + ur')\b')
     all_id_nums = []
-    for substring in re.split(r'\s(and|&)\s', val, flags=re.I):
-        id_nums = _parse_matches(regex.findall(substring))
+    for substring in re.split(ur'\s(and|&)\s', val, flags=re.I):
+        id_nums = _parse_matches(regex.findall(substring), prefixed_only)
         id_nums = _fix_misidentified_suffixes(id_nums)
         id_nums = _fill_range(id_nums, substring)
         id_nums = _clean_suffixes(id_nums, attrs, default_suffix,
@@ -434,14 +432,18 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
         # excluding records with low catalog numbers.
         id_nums = [id_num for id_num in id_nums
                    if id_num.get('CatPrefix')
-                   or id_num.get('CatNumber', 0) > 999]
+                       or id_num.get('CatMuseumAcronym')
+                       or id_num.get('CatNumber', 0) > 999
+                       or id_num.get('MetMeteoriteName')]
         # Format results as tuple
         all_id_nums.extend(id_nums)
     # Return parsed catalog numbers
     return all_id_nums
 
 
-def parse_catnums(strings, *args, **kwargs):
+
+
+def parse_catnums(vals, **kwargs):
     """Parse a list of strings containing catalog numbers
 
     See parse_catnums() for a description of the available arguments.
@@ -451,8 +453,8 @@ def parse_catnums(strings, *args, **kwargs):
     """
     # Return list of parsed catalog numbers
     catnums = []
-    for s in strings:
-        catnums.extend(parse_catnum(s, **kwargs))
+    for val in vals:
+        catnums.extend(parse_catnum(val, **kwargs))
     return catnums
 
 
@@ -484,7 +486,7 @@ def format_catnum(parsed, code=True, div=False):
         parsed[key] = parsed[key].strip()
     # Set museum code
     if code:
-        parsed['CatMuseumAcronym'] = 'NMNH'
+        parsed.setdefault('CatMuseumAcronym', 'NMNH')
         if parsed['CatDivision'] == 'Meteorites':
             parsed['CatMuseumAcronym'] = 'USNM'
     if not parsed['CatPrefix']:
@@ -492,7 +494,7 @@ def format_catnum(parsed, code=True, div=False):
     parsed['CatPrefix'] = parsed['CatPrefix'].upper()
     # Format catalog number
     catnum = (
-        '{CatMuseumAcronym} {CatPrefix}{CatNumber}-{CatSuffix}'
+        u'{CatMuseumAcronym} {CatPrefix}{CatNumber}-{CatSuffix}'
         .format(**parsed)
         .rstrip('-')
         .strip()
@@ -540,13 +542,13 @@ def sort_catnums(catnums):
         catnums = parse_catnums(catnums)
     except IndexError:
         # Catalog numbers were given as dicts, so return them that way
-        return sorted(catnums, key=_catnum_keyer)
+        return sorted(catnums, key=catnum_keyer)
     else:
         # Catalog numbers are strings, so format them before returning them
-        return format_catnums(sorted(catnums, key=_catnum_keyer))
+        return format_catnums(sorted(catnums, key=catnum_keyer))
 
 
-def _catnum_keyer(catnum):
+def catnum_keyer(catnum):
     """Create sortable key for a catalog number by zero-padding each component
 
     Args:
@@ -555,15 +557,15 @@ def _catnum_keyer(catnum):
     Returns:
         Sortable catalog number
     """
-    print catnum, type(catnum)
     if isinstance(catnum, basestring):
         try:
             catnum = parse_catnum(catnum)[0]
         except IndexError:
             print 'Sort error: ' + catnum
+            raise
             return 'Z' * 63
     keys = ('CatPrefix', 'CatNumber', 'CatSuffix')
-    return '|'.join([catnum.get(key, '').zfill(20) for key in keys])
+    return '|'.join([str(catnum.get(key, '')).zfill(20) for key in keys])
 
 
 def fxrange(start, stop, step):
@@ -669,17 +671,21 @@ def add_article(val):
     return u'a {}'.format(val)
 
 
-def _parse_matches(matches):
+def _parse_matches(matches, prefixed_only=False):
     """Format catalog numbers from a parsed list"""
     id_nums = []
     for match in matches:
-        id_num = dict(zip(CATKEYS, [val.rstrip('-,') for val in match]))
+        id_num = dict(zip(CATKEYS, [val.rstrip('-, ') for val in match]))
         # Handle meteorites
         if id_num['MetPrefix'] or id_num['CatMuseumAcronym'] == 'USNM':
             if id_num['MetPrefix']:
-                return [{'MetMeteoriteName': id_num['FullNumber']}]
+                metname = id_num['FullNumber'].replace(', ', ',')
+                return [{'MetMeteoriteName': metname}]
         # Handle catalog numbers from other departments
         else:
+            # Exclude catalog numbers without a prefix
+            if prefixed_only and not id_num['CatMuseumAcronym']:
+                continue
             id_num['CatNumber'] = int(id_num['CatNumber'])
             # Handle petrology suffix format (.0001)
             if id_num['CatSuffix'].startswith('.'):
@@ -694,6 +700,9 @@ def _clean_suffixes(id_nums, attrs, default_suffix,
                     min_suffix_length, strip_suffix):
     """Clean the identification numbers based on passed arguments"""
     for i, id_num in enumerate(id_nums):
+        # HACK
+        if not id_num.get('CatSuffix'):
+            continue
         # Clean suffixes
         if min_suffix_length:
             suffix = id_num['CatSuffix']
@@ -716,15 +725,24 @@ def _fix_misidentified_suffixes(id_nums):
         id_num = id_nums[0]
         try:
             suffix = int(id_num['CatSuffix'])
-        except ValueError:
+        except KeyError:
             pass
+        except ValueError:
+            # Check for where suffix is itself a prefixed catalog number
+            last_num = parse_catnum(id_num['CatSuffix'])
+            if (len(last_num) == 1
+                    and last_num[0]['CatNumber'] > id_num['CatNumber']
+                    and (not last_num[0]['CatPrefix']
+                         or last_num[0]['CatPrefix'] == id_num['CatPrefix'])):
+                id_num['CatSuffix'] = ''
+                id_nums = [id_num, last_num[0]]
         else:
             if suffix > id_num['CatNumber']:
                 first_num = id_num
                 first_num['CatSuffix'] = u''
                 last_num = {key: '' for key in CATKEYS}
                 last_num['CatNumber'] = suffix
-                for key in ('CatPrefix', 'CatMuseum'):
+                for key in ('CatPrefix', 'CatMuseumAcronym'):
                     last_num[key] = first_num[key]
                 id_nums = [first_num, last_num]
     return id_nums
@@ -738,10 +756,12 @@ def _fill_range(id_nums, substring):
         pass
     else:
         is_range = (
-            substring.count('-') > 0
-            and substring.count('-') != 2
+            ((substring.count('-') > 0 and substring.count('-') != 2)
+             or substring.count('through') == 1
+             or substring.count('thru') == 1)
             and first_num['CatPrefix'] == last_num['CatPrefix']
             and last_num['CatNumber'] > first_num['CatNumber']
+            and not first_num['CatSuffix'] and not last_num['CatSuffix']
             and first_num['CatNumber'] > 10
             )
         # Fill range
@@ -750,6 +770,7 @@ def _fill_range(id_nums, substring):
             for i in xrange(first_num['CatNumber'], last_num['CatNumber'] + 1):
                 id_num = deepcopy(first_num)
                 id_num['CatNumber'] = i
+                id_num['FullNumber'] = format_catnum(id_num)
                 id_nums.append(id_num)
     return id_nums
 
@@ -766,3 +787,20 @@ def localize_datetime(timestamp, timezone_id='US/Eastern',
     if mask is not None:
         return localized.strftime(mask)
     return localized
+
+
+def read_unicode_text(fp, encoding='utf-16', skiplines=0):
+    """Read a unicode text file generated by Excel"""
+    import io
+    records = []
+    with io.open(fp, 'r', encoding=encoding) as f:
+        contents = io.BytesIO(f.read().encode('utf-8'))
+        rows = csv.reader(contents, dialect='excel-tab')
+        for i in xrange(skiplines+1):
+            keys = next(rows)
+        keys = [s.strip().decode('utf-8') for s in keys]
+        for row in rows:
+            if ''.join(row).strip():
+                vals = [s.strip().decode('utf-8') for s in row]
+                record = {key: val for key, val in zip(keys, vals)}
+    return records
