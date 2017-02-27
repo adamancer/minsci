@@ -1,36 +1,52 @@
 """Containers with methods to store and analyze geographical data"""
 
 import os
-from copy import deepcopy
+import re
+from collections import namedtuple
+from copy import copy, deepcopy
 from pprint import pprint
 
+from requests.structures import CaseInsensitiveDict
 from unidecode import unidecode
 
 
 DIRPATH = os.path.join(os.path.dirname(__file__), 'files')
 
 # Maps state names to abbreviations
-ABBR_TO_NAME, NAME_TO_ABBR = _read_abbreviations('abbreviations.txt')
-TERMS = ('county', 'co', 'department', 'dept', 'province', 'prov')
+ENDINGS = {
+    'admin': ['county', 'co', 'department', 'dept', 'departamento-de',
+              'district', 'dist', 'municipio-de', 'oblast',
+              'prefecture', 'pref', 'province', 'provincia-de',
+              'prov', 'region', 'terr', 'territory'],
+    'islands': ['atoll', 'atolls', 'ile', 'iles', 'island', 'islands',
+                'isle', 'isles', 'islet', 'islets'],
+    'mine': ['claim', 'claims', 'deposit', 'deposits', 'mine', 'mines',
+             'occurrence', 'pit', 'pits', 'prospect', 'prospects', 'quarry',
+             'quarries']
+}
+
+
+Site = namedtuple('Site', ['id', 'source', 'names', 'kind', 'code'])
 
 
 class GeoList(list):
     """Container with methods to filter locations"""
 
     def __init__(self, *args, **kwargs):
-        self._params = deepcopy(kwargs)
+        self._map_params = deepcopy(kwargs)
         self.country = kwargs.pop('country')
         self.state = kwargs.pop('state')
         self.county = kwargs.pop('county')
+        self.matched_on = []
         super(GeoList, self).__init__(*args, **kwargs)
 
 
-    def filter_matches(self, country=None, state=None, county=None):
+    def filter_matches(self, countries=None, state=None, county=None):
         """Identifies good matches based on political geography
 
         Args:
             result (dict): a GeoNames result set
-            country (str): country containing the locality
+            country (mixed): country containing the locality
             state (str): state or equivalent containing the locality
             country (str): county of equivalent containing the locality
 
@@ -39,66 +55,146 @@ class GeoList(list):
         """
         scored = []
         for match in self:
-            score = 0
-            score += score_match(match.get(self.country), country)
-            score += score_match(match.get(self.state), state)
-            score += score_match(match.get(self.county), county)
+            scores = {}
+            # Country can have multiple values. Keep the first match.
+            if isinstance(countries, basestring):
+                countries = countries.split('|')
+            scores['country'] = 0
+            for country in countries if countries is not None else []:
+                score = score_match(match.get(self.country), country, 'admin')
+                #print match.get(self.country), country, scr
+                scores['country'] = score
+                if score > 0:
+                    break
+            scores['state'] = score_match(match.get(self.state), state, 'admin')
+            scores['county'] = score_match(match.get(self.county), county, 'admin')
+            score = sum(scores.values())
             if score >= 0:
-                scored.append([match, score])
+                scored.append([match, score, scores])
         # Get the best matches based on score
+        matched_on = []
         if scored:
-            high_score = max([score for match, score in scored])
-            scored = [match for match, score in scored if score == high_score]
+            high_score = max([score for match, score, scores in scored])
+            scored = [m for m in scored if m[1] == high_score]
+            matched_on = [k for k, v in scored[0][2].iteritems() if v]
         # Assign matches
-        self = self.__class__(scored, **self._params)
-        return self
+        matches = self.__class__([m[0] for m in scored], **self._map_params)
+        matches.matched_on = matched_on
+        return matches
 
 
-    def pprint(self):
+    def match_name(self, name, kind):
+        """Return matches on name"""
+        matches = [m for m in self if self._match_name(name, m, kind)]
+        matches = self.__class__(matches, **self._map_params)
+        matches.matched_on = self.matched_on
+        return matches
+
+
+    def get_site_data(self):
+        """Return site/station data"""
+        return [Site(m['geonameId'], 'GeoNames', self.get_names(m),
+                     m.get('fcodeName'), m.get('fcode')) for m in self]
+
+
+    def pprint(self, pause=False):
         """Pretty prints the contents of the list"""
         pprint(self)
+        if pause:
+            raw_input('Paused. Press any key to continue.')
 
 
+    def _match_name(self, name, match, kind=None):
+        # Get variants from match
+        scored = [score_match(name, nm, kind) for nm in self.get_names(match)]
+        return bool([s for s in scored if s > 0])
 
-def score_match(loc, ref_loc):
+
+    @staticmethod
+    def get_names(match, include_alts=True):
+        names = [match.get('name'),
+                 match.get('asciiName'),
+                 match.get('toponymName')]
+        if include_alts:
+            names.extend([alt['name'] for alt
+                          in match.get('alternativeNames', {})])
+        return sorted(list(set(names)))
+
+
+def normalize_name(name, kind, for_query=False):
+    name = format_name(name).strip('-')
+    # Normalize common terms in name
+    normalize = {
+        r'st': 'saint',
+        r'ste': 'sainte',
+        r'mt': 'mount',
+        r'monte': 'mount',
+        r'mtn': 'mountain',
+        r'mtns': 'mountains',
+    }
+    for search, repl in normalize.iteritems():
+        pattern = re.compile(r'\b(' + search + r')\b')
+        name = pattern.sub(repl, name)
+    # Strip field-specific endings
+    terms = ['ca', 'nr', 'near'] + ENDINGS.get(kind, [])
+    if for_query:
+        landforms = ['mount', 'mountain', 'region', 'valley']
+        landforms.extend([s + 's' for s in landforms])
+        terms.extend(landforms)
+    terms.extend(['de', 'des', 'du', 'of', 'la', 'le', 'les'])
+    for term in terms:
+        if re.compile(r'^{0}\b|\b{0}$'.format(term), re.I).search(name):
+            if name.startswith(term):
+                name = name[len(term):].strip(' -')
+            if name.endswith(term):
+                name = name[:-len(term)].strip(' -')
+    return name
+
+
+def score_match(name, ref_name, kind=None):
     """Score the similarity of two place names
 
     Args:
-        loc (str): a locality name
-        ref_loc (str): a locality name to match against loc
+        name (str): a locality name
+        ref_name (str): a locality name to compare with name
 
     Returns:
         Score corresponding to quality of match
     """
     # Do not score if either value is missing
-    if not all((loc, ref_loc)):
+    if not all((name, ref_name)):
         return 0
+    #print 'Scoring match...'
     # Format strings
-    loc, ref_loc = [format_string(s) for s in (loc, ref_loc)]
-    # Check for identical values
-    abbr_loc = ABBR_TO_NAME.get(loc, loc)
-    abbr_ref_loc = ABBR_TO_NAME.get(ref_loc, ref_loc)
-    if (loc == ref_loc or abbr_loc == abbr_ref_loc):
-        return 2
+    name, ref_name = [format_name(s) for s in (name, ref_name)]
+    #print u' Standardized: {} => {}'.format(name, ref_name)
+    if name == ref_name:
+        return 3
+    # Compare abbreviations for high-level admin divisions
+    if kind == 'admin':
+        abbr_name = ABBR_TO_NAME.get(name, name)
+        abbr_ref_name = ABBR_TO_NAME.get(ref_name, ref_name)
+        if abbr_name == abbr_ref_name:
+            return 3
     # Strip endings for each string and compare
-    for term in TERMS:
-        if loc.startswith(term):
-            loc = loc[len(term):].strip()
-        if loc.endswith(term):
-            loc = loc[:-len(term)].strip()
-        if ref_loc.startswith(term):
-            ref_loc = ref_loc[len(term):].strip()
-        if ref_loc.endswith(term):
-            ref_loc = ref_loc[:-len(term)].strip()
-    if loc and ref_loc and loc == ref_loc:
+    name = normalize_name(name, kind)
+    ref_name = normalize_name(ref_name, kind)
+    #print u' Normalized:   {} => {}'.format(name, ref_name)
+    if name and ref_name and name == ref_name:
+        return 2
+    # Compare sets
+    name = set(re.split('\W', name))
+    ref_name = set(re.split('\W', ref_name))
+    #print u' Sets:         {} => {}'.format(name, ref_name)
+    if name and ref_name and name == ref_name:
         return 1
     # No match could be made. The penalty here should be much larger than
     # the value returned for a good match because we want to exclude any
     # explicit mismatches.
-    return -10
+    return -100
 
 
-def format_string(val):
+def format_name(val):
     """Standardizes the format of a string to improve comparisons
 
     Args:
@@ -107,10 +203,33 @@ def format_string(val):
     Returns:
         Formatted string
     """
-    return unidecode(val).lower().strip('.')
+    formatted = re.sub(u'[\W]+', u'-', unidecode(val)).lower().strip('.-')
+    return formatted.decode('ascii')
 
 
-def _read_abbreviations(fn):
+def _read_countries(fn):
+    """Reads ISO country codes from file
+
+    Args:
+        fn (str): name of file containing abbreviations
+
+    Returns:
+        Dictioanaries mapping abbreviatiosn to names and vice versa
+    """
+    abbr_to_name = CaseInsensitiveDict()
+    name_to_abbr = CaseInsensitiveDict()
+    with open(os.path.join(DIRPATH, fn), 'rb') as f:
+        for line in f:
+            row = line.split('\t')
+            country = row[4]
+            code = row[0]
+            if code and country:
+                abbr_to_name[code] = country
+                name_to_abbr[country] = code
+    return abbr_to_name, name_to_abbr
+
+
+def _read_states(fn):
     """Reads U.S. state abbreviations from file
 
     Args:
@@ -119,8 +238,8 @@ def _read_abbreviations(fn):
     Returns:
         Dictioanaries mapping abbreviatiosn to names and vice versa
     """
-    abbr_to_name = {}
-    name_to_abbr = {}
+    abbr_to_name = CaseInsensitiveDict()
+    name_to_abbr = CaseInsensitiveDict()
     with open(os.path.join(DIRPATH, fn), 'rb') as f:
         for line in f:
             row = line.split('\t')
@@ -129,3 +248,7 @@ def _read_abbreviations(fn):
             abbr_to_name[abbr] = state
             name_to_abbr[state] = abbr
     return abbr_to_name, name_to_abbr
+
+
+ABBR_TO_NAME, NAME_TO_ABBR = _read_states('states.txt')
+FROM_COUNTRY_CODE, TO_COUNTRY_CODE = _read_countries('countries.txt')
