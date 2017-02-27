@@ -100,12 +100,12 @@ class DeepDict(dict):
             i += 1
         if args[-1] is not None:
             d[args[-1]] = val
-    '''
+
+
 
 
     def pluck(self, *args):
         """Remove the path stipulated by *args
-
         Args:
             *args: the path to a value in the dictionary, with one component
                 of that path per arg
@@ -120,7 +120,7 @@ class DeepDict(dict):
             if first:
                 # The first value is always deleted. After that, empty
                 # containers are deleted until a populated one is found.
-                d.pop(last)
+                val = d.pop(last)
                 first = False
             elif isinstance(last, (int, long)) and any(d):
                 # Lists with any true-like values are left intact
@@ -129,9 +129,48 @@ class DeepDict(dict):
                 del d[last]
             else:
                 break
-    '''
+        #self.pprint()
 
 
+    def prune(self, d=None, path=None):
+        if path is None:
+            d = self
+            path = []
+        if isinstance(d, basestring):
+            # Any non-empty string is considered true
+            if not d.strip():
+                self.pluck(*path)
+            else:
+                return True
+        elif isinstance(d, (int, long, float)):
+            # Any number-like value is considered true
+            return True
+        elif not d:
+            self.pluck(*path)
+        else:
+            try:
+                keys = d.keys()
+                is_list = False
+            except AttributeError:
+                keys = range(len(d))[::-1]  # reverse order, see below
+                is_list = True
+            for key in keys:
+                # DeepDict.pluck() is aggressive, so keys can disappear
+                # before they are reached in this loop
+                path.append(key)
+                try:
+                    result = self.prune(d[key], path)
+                except KeyError:
+                    pass
+                path.pop()
+                # Stop processing a list if a value is found. This
+                # is based on table structure in EMu, where values higher
+                # in a column may be blank if values lower in the same
+                # column are populated.
+                if is_list and result is True:
+                    break
+
+                    
     def pprint(self, pause=False):
         """Pretty prints the DeepDict object
 
