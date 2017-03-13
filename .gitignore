@@ -17,8 +17,8 @@ README.rst
 *.DS_Store
 
 # Other files to ignore
-*_helpers.py
-*_old.py
+minsci/.gitattributes
+minsci/.pylintrc
 *.pl
 
 # Documentation
