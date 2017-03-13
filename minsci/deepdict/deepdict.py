@@ -48,15 +48,15 @@ class DeepDict(dict):
         Returns:
             Value for the given path, if exists
         """
-        d = self
+        val = self
         for arg in args:
             try:
-                d = d[arg]
+                val = val[arg]
             except KeyError:
                 raise KeyError('/'.join(args))
             except TypeError:
                 raise KeyError('/'.join(args))
-        return d
+        return val
 
 
     def path(self, path, delimiter='/'):
@@ -66,6 +66,7 @@ class DeepDict(dict):
             *args: the path to a value in the dictionary, with one component
                 of that path per arg
             delimiter (str): the character used to delimit the path
+                if given as a string
 
         Returns:
             Value for the given path, if exists
@@ -84,28 +85,29 @@ class DeepDict(dict):
         """
         if isinstance(val, Mapping) and not isinstance(val, DeepDict):
             val = self.clone(val)
-        d = self
+        mapping = self
         i = 0
         while i < (len(args) - 1):
             if isinstance(args[i+1], (int, long)):
-                d = d.setdefault(args[i], [])
+                mapping = mapping .setdefault(args[i], [])
                 try:
-                    d = d[args[i+1]]
+                    mapping = mapping[args[i+1]]
                 except (IndexError, KeyError):
-                    d.append(self.clone())
-                    d = d[args[i+1]]
+                    mapping.append(self.clone())
+                    mapping = mapping[args[i+1]]
                 i += 1
             else:
-                d = d.setdefault(args[i], self.clone())
+                mapping = mapping.setdefault(args[i], self.clone())
             i += 1
         if args[-1] is not None:
-            d[args[-1]] = val
+            mapping[args[-1]] = val
 
 
 
 
     def pluck(self, *args):
-        """Remove the path stipulated by *args
+        """Remove the path stipulated by args
+
         Args:
             *args: the path to a value in the dictionary, with one component
                 of that path per arg
@@ -113,53 +115,55 @@ class DeepDict(dict):
         args = list(args)
         first = True
         while len(args):
-            d = self
+            mapping = self
             last = args.pop()
             for arg in args:
-                d = d[arg]
+                mapping = mapping[arg]
             if first:
-                # The first value is always deleted. After that, empty
-                # containers are deleted until a populated one is found.
-                val = d.pop(last)
+                # The first value encountered is always deleted. After that,
+                # empty containers are deleted until a populated one is found.
+                mapping.pop(last)
                 first = False
-            elif isinstance(last, (int, long)) and any(d):
+            elif isinstance(last, (int, long)) and any(mapping):
                 # Lists with any true-like values are left intact
                 pass
-            elif not _any(d[last]):
-                del d[last]
+            elif not _any(mapping[last]):
+                del mapping[last]
             else:
                 break
         #self.pprint()
 
 
-    def prune(self, d=None, path=None):
+    def prune(self, mapping=None, path=None):
+        """Delete the branch of the mapping specified by path"""
+        assert path is not None
         if path is None:
-            d = self
+            mapping = self
             path = []
-        if isinstance(d, basestring):
+        if isinstance(mapping, basestring):
             # Any non-empty string is considered true
-            if not d.strip():
+            if not mapping.strip():
                 self.pluck(*path)
             else:
                 return True
-        elif isinstance(d, (int, long, float)):
+        elif isinstance(mapping, (int, long, float)):
             # Any number-like value is considered true
             return True
-        elif not d:
+        elif not mapping:
             self.pluck(*path)
         else:
             try:
-                keys = d.keys()
+                keys = mapping.keys()
                 is_list = False
             except AttributeError:
-                keys = range(len(d))[::-1]  # reverse order, see below
+                keys = range(len(mapping))[::-1]  # reverse order, see below
                 is_list = True
             for key in keys:
                 # DeepDict.pluck() is aggressive, so keys can disappear
                 # before they are reached in this loop
                 path.append(key)
                 try:
-                    result = self.prune(d[key], path)
+                    result = self.prune(mapping[key], path)
                 except KeyError:
                     pass
                 path.pop()
@@ -170,7 +174,7 @@ class DeepDict(dict):
                 if is_list and result is True:
                     break
 
-                    
+
     def pprint(self, pause=False):
         """Pretty prints the DeepDict object
 

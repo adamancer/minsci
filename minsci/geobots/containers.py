@@ -3,7 +3,6 @@
 import os
 import re
 from collections import namedtuple
-from copy import copy, deepcopy
 from pprint import pprint
 
 from requests.structures import CaseInsensitiveDict
@@ -30,7 +29,7 @@ Site = namedtuple('Site', ['id', 'source', 'names', 'kind', 'code'])
 
 
 class GeoList(list):
-    """Container with methods to filter locations"""
+    """Container with methods to filter locations based on country, etc."""
 
     def __init__(self, *args, **kwargs):
         self._map_params = deepcopy(kwargs)
@@ -38,6 +37,10 @@ class GeoList(list):
         self.state = kwargs.pop('state')
         self.county = kwargs.pop('county')
         self.matched_on = []
+        # Coerce first argument to list
+        if not isinstance(args[0], list):
+            args = list(args)
+            args[0] = [args[0]]
         super(GeoList, self).__init__(*args, **kwargs)
 
 
@@ -84,7 +87,7 @@ class GeoList(list):
 
 
     def match_name(self, name, kind):
-        """Return matches on name"""
+        """Return matches on a name"""
         matches = [m for m in self if self._match_name(name, m, kind)]
         matches = self.__class__(matches, **self._map_params)
         matches.matched_on = self.matched_on
@@ -104,14 +107,28 @@ class GeoList(list):
             raw_input('Paused. Press any key to continue.')
 
 
-    def _match_name(self, name, match, kind=None):
-        # Get variants from match
-        scored = [score_match(name, nm, kind) for nm in self.get_names(match)]
+    def _match_name(self, name, geoname, kind=None):
+        """Checks if the given name matches a geoname
+
+        Args:
+            name (str): the name of a place
+            geoname (str): the name of a place
+            kind (None): the type of place
+
+        Returns:
+            Boolean indicating if the name is a match
+        """
+        scored = [score_match(name, nm, kind) for nm in self.get_names(geoname)]
         return bool([s for s in scored if s > 0])
 
 
     @staticmethod
     def get_names(match, include_alts=True):
+        """Returns variants on a given geoname
+
+        Note that the complete list of synonyms is only retured if the
+        GeoNames ID is queried directly.
+        """
         names = [match.get('name'),
                  match.get('asciiName'),
                  match.get('toponymName')]
@@ -122,6 +139,7 @@ class GeoList(list):
 
 
 def normalize_name(name, kind, for_query=False):
+    """Normalizes the format of a name to improve matching"""
     name = format_name(name).strip('-')
     # Normalize common terms in name
     normalize = {
@@ -183,8 +201,8 @@ def score_match(name, ref_name, kind=None):
     if name and ref_name and name == ref_name:
         return 2
     # Compare sets
-    name = set(re.split('\W', name))
-    ref_name = set(re.split('\W', ref_name))
+    name = set(re.split(r'\W', name))
+    ref_name = set(re.split(r'\W', ref_name))
     #print u' Sets:         {} => {}'.format(name, ref_name)
     if name and ref_name and name == ref_name:
         return 1
@@ -203,7 +221,7 @@ def format_name(val):
     Returns:
         Formatted string
     """
-    formatted = re.sub(u'[\W]+', u'-', unidecode(val)).lower().strip('.-')
+    formatted = re.sub(ur'[\W]+', u'-', unidecode(val)).lower().strip('.-')
     return formatted.decode('ascii')
 
 

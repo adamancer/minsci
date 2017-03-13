@@ -70,6 +70,7 @@ class BiblioRecord(XMuRecord):
 
 
     def get_authors(self):
+        """Formats a list of author names"""
         authors = []
         for author in self('ArtAuthorsRef_tab'):
             authors.append(self.format_name(author('NamLast'),
@@ -79,6 +80,7 @@ class BiblioRecord(XMuRecord):
 
 
     def get_source(self):
+        """Determines the type of the source/parent publication"""
         sources = {
             'Art': 'Jou',
             'Boo': 'Bos',
@@ -89,6 +91,9 @@ class BiblioRecord(XMuRecord):
 
     @staticmethod
     def clean_reference(ref):
+        """Cleans punctuation, etc. left behind when ref has empty fields
+        FIXME: This is horrible
+        """
         characters = ['()', ' : ', ' :', ' ,', ' .', '""', '<i></i>', ', p.', '(v. )']
         for char in characters:
             ref = ref.replace(char, ' ')
@@ -100,6 +105,7 @@ class BiblioRecord(XMuRecord):
     @staticmethod
     def format_name(last, first, middle, use_initials=True,
                     mask='{last}, {first} {middle}'):
+        """Formats a name according to the given mask"""
         if use_initials:
             first = first[0] + '.' if first else ''
             middle = middle[0] + '.' if middle else ''

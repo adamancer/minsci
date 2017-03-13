@@ -65,7 +65,7 @@ class GeoNamesBot(GeoBot):
 
 
     def _query_geonames(self, url, **params):
-        """Basic search function
+        """Generalized method for querying the GeoNames webservices
 
         Args:
             url (str): the url to query
@@ -83,11 +83,11 @@ class GeoNamesBot(GeoBot):
         # Make and parse query
         response = self._retry(self.get, url, params=defaults)
         if response.status_code == 200:
-            #print response.url
+            print response.url
             content = response.json()
             status = content.get('status')
             if status is None:
-                return GeoList(content.get('geonames', []), **self._params)
+                return GeoList(content.get('geonames', content), **self._params)
             elif response.from_cache:
                 # If bad response comes from cache, delete that entry and
                 # try again
@@ -105,7 +105,7 @@ class GeoNamesBot(GeoBot):
 
 
     def get_by_id(self, geoname_id):
-        """Get feature by GeoNames ID
+        """Returns feature data for a given GeoNames ID
 
         Args:
             geoname_id (str): the ID of a feature in GeoNames
@@ -277,10 +277,7 @@ class GEOLocateBot(GeoBot):
 
     @staticmethod
     def geolocate_to_emu(result, payload):
-        """Create EMu import based on GeoLocate result
-
-        TKTK
-        """
+        """Create EMu import based on GeoLocate result"""
         note = (u'Coordinates determined using the GEOLocate'
                 ' Georef2 webservice for locality string'
                 ' "' + payload['LocalityString'] + '."'
@@ -426,15 +423,12 @@ def distance_on_unit_sphere(lat1, long1, lat2, long2):
 
     # Convert latitude and longitude to spherical coordinates in radians.
     degrees_to_radians = math.pi / 180.0
-
     # phi = 90 - latitude
     phi1 = (90.0 - lat1) * degrees_to_radians
     phi2 = (90.0 - lat2) * degrees_to_radians
-
     # theta = longitude
     theta1 = long1 * degrees_to_radians
     theta2 = long2 * degrees_to_radians
-
     # Compute spherical distance from spherical coordinates.
     # For two locations in spherical coordinates
     # (1, theta, phi) and (1, theta', phi')
@@ -444,14 +438,21 @@ def distance_on_unit_sphere(lat1, long1, lat2, long2):
     cos = (math.sin(phi1) * math.sin(phi2) * math.cos(theta1 - theta2) +
            math.cos(phi1) * math.cos(phi2))
     arc = math.acos(cos)
-
     # Remember to multiply arc by the radius of the earth
     # in your favorite set of units to get length.
     return arc * 6371.
 
 
-def dec2dms(dec, is_lat=True):
-    """Converts decimal degrees to degrees-minutes-seconds"""
+def dec2dms(dec, is_lat):
+    """Converts decimal degrees to degrees-minutes-seconds
+
+    Args:
+        dec (float): a coordinate as a decimal
+        is_lat (bool): specifies if the coordinate is a latitude
+
+    Returns:
+        Coordinate in degrees-minutes-seconds
+    """
     # Force longitude if decimal degrees more than 90
     if is_lat and dec > 90:
         raise ValueError('Invalid latitude: {}'.format(dec))

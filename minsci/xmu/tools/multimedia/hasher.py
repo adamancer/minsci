@@ -1,3 +1,5 @@
+"""Contains methods to hash a file or image data from a file"""
+
 import hashlib
 import os
 import subprocess
@@ -28,7 +30,7 @@ def hasher(filestream, size=8192):
 
 
 def hash_file(path):
-    """Get MD5 hash of an image file
+    """Returns MD5 hash of a file
 
     Args:
         path (str): path to image
@@ -40,7 +42,7 @@ def hash_file(path):
 
 
 def hash_image_data(path, output_dir='images'):
-    """Returns hash based on image data
+    """Returns MD5 hash of the image data in a file
 
     Args:
         path (str): path to image file
@@ -53,12 +55,14 @@ def hash_image_data(path, output_dir='images'):
     except IOError:
         # Encountered a file format that PIL can't handle. Convert
         # file to something usable, hash, then delete the derivative.
+        # The derivatives can be compared to ensure that the image hasn't
+        # been messed up. Requires ImageMagick.
         fn = os.path.basename(path)
         jpeg = os.path.splitext(fn)[0] + '.jpg'
         cmd = 'iconvert "{}" "{}"'.format(path, jpeg)
         return_code = subprocess.call(cmd, cwd=output_dir)
         if return_code:
-            raise IOError('Hash failed')
+            raise IOError('Hash failed: {}'.format(fn))
         dst = os.path.join(output_dir, jpeg)
         hexhash = hashlib.md5(Image.open(dst).tobytes()).hexdigest()
         os.remove(dst)

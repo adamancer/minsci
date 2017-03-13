@@ -1,11 +1,8 @@
 """Subclass of XMuRecord with methods specific to emultimedia"""
 
 import os
-import re
 from collections import namedtuple
 from itertools import izip_longest
-
-from PIL import Image
 
 from .xmurecord import XMuRecord
 from ..tools.multimedia.embedder import Embedder, EmbedField
@@ -76,8 +73,8 @@ class MediaRecord(XMuRecord):
         self.image_data = {}
         # Attributes used with cataloger
         self.catnums = []
-        self._object = None
-        self._smart_functions = {
+        self.object = None
+        self.smart_functions = {
             'MulTitle': self.smart_title,
             'MulDescription': self.smart_caption,
             'DetRelation_tab': self.smart_related,
@@ -91,10 +88,12 @@ class MediaRecord(XMuRecord):
 
 
     def add_embedder(self, embedder, **kwargs):
+        """Create an Embedder instance for the MediaRecord"""
         self.embedder = embedder(**kwargs)
 
 
     def add_cataloger(self, cataloger):
+        """Add a Cataloger instance to the MediaRecord"""
         self.cataloger = cataloger
 
 
@@ -202,7 +201,11 @@ class MediaRecord(XMuRecord):
 
 
     def match_one(self):
+        """Returns a matching catalog object if exactly one match found"""
         matches = self.match()
+        catnums = [m.object['catnum'] for m in matches]
+        matches = [m for i, m in enumerate(matches)
+                   if not m.object['catnum'] in catnums[:i]]
         if not matches or len(matches) > 1:
             raise ValueError('No unique match: {}'.format(self.catnums))
         return matches[0]
@@ -219,9 +222,9 @@ class MediaRecord(XMuRecord):
         else:
             print 'Unique match found! Updating record...'
             enhanced = self.clone(self)
-            enhanced._object = match
+            enhanced.object = match
             enhanced.catnums = self.catnums
-            for key, func in enhanced._smart_functions.iteritems():
+            for key, func in enhanced.smart_functions.iteritems():
                 enhanced[key] = func() if func is not None else enhanced(key)
             # Tweak rights statement for non-collections objects
             non_si_coll = 'Non-collections object (Mineral Sciences)'
@@ -229,11 +232,12 @@ class MediaRecord(XMuRecord):
                 enhanced['DetRights'] = ('One or more objects depicted in this'
                                          ' image are not owned by the'
                                          ' Smithsonian Institution.')
-            enhanced['_Objects'] = [object]
+            enhanced['_Objects'] = [match]
             return enhanced
 
 
     def strip_derived(self):
+        """Strips fields derived by EMu from the record"""
         strip = [
             'AdmImportIdentifier',
             'ChaImageHeight',
@@ -256,32 +260,34 @@ class MediaRecord(XMuRecord):
 
 
     def smart_title(self):
-        """Derive image title from catalog"""
+        """Derives image title from catalog"""
         title = self('MulTitle')
         if (not title
                 or (title.startswith('Mineral Sci') and title.endswith('Photo'))
                 or title.endswith('[AUTO]')):
             # Use the catnum originally parsed from the title, not the one
             # from the linked record
-            xname = self._object.object['xname']
+            xname = self.object.object['xname']
             catnum = self.catnums[0]
             title = u'{} ({}) [AUTO]'.format(xname, catnum).replace(' ()', ' ')
         return title
 
 
     def smart_caption(self):
-        """Derive image caption from catalog"""
+        """Derives image caption from catalog"""
         description = self('MulDescription')
         if not description or description.endswith('[AUTO]'):
-            description = self._object.caption + ' [AUTO]'
+            description = self.object.caption + ' [AUTO]'
         return description
 
 
     def smart_keywords(self, whitelist=None):
-        """Derive keywords from catalog"""
-        keywords = self._object.keywords
+        """Derives keywords from catalog"""
+        if whitelist is None:
+            whitelist = KW_WHITELIST
+        keywords = self.object.keywords
         keywords.extend([kw for kw in self('DetSubject_tab')
-                         if ':' in kw or kw in KW_WHITELIST])
+                         if ':' in kw or kw in whitelist])
         keywords.extend(self.defaults['DetSubject_tab'])
         return dedupe(keywords, False)
 
@@ -289,7 +295,7 @@ class MediaRecord(XMuRecord):
     def smart_related(self):
         """Populates DetRelation_tab with info about matching catalog records"""
         # Find all catalog records that currently link to this multimedia record
-        cat_irns = self.cataloger.media.get(self('irn'))
+        cat_irns = self.cataloger.media.get(self('irn'), [])
         # Find all catalog records that match this multimedia record
         related = {}
         for obj in self.match():
@@ -312,7 +318,7 @@ class MediaRecord(XMuRecord):
         # collections and restrictions are applied for these photos.
         si_object = 'Collections objects (Mineral Sciences)'
         non_si_object = 'Non-collections object (Mineral Sciences)'
-        if self._object.object['status'] != 'active':
+        if self.object.object['status'] != 'active':
             rights = ('One or more objects depicted in this image are not'
                       ' owned by the Smithsonian Institution.')
             collections.append(non_si_object)
@@ -327,13 +333,13 @@ class MediaRecord(XMuRecord):
             except ValueError:
                 pass
         # Return collection and rights data as a dict
-        #if rights:
-        #    self.enhanced['DetRights'] = rights
+        if rights:
+            self.enhanced['DetRights'] = rights
         return dedupe(collections, False)
 
 
     def smart_note(self):
-        """Update note based on catalog record"""
+        """Updates note based on catalog record"""
         note = self('NotNotes').split(';')
         for i, val in enumerate(note):
             if val.strip().startswith('Linked:'):
@@ -347,7 +353,7 @@ class MediaRecord(XMuRecord):
 
 
 class EmbedFromEMu(Embedder):
-    """Tools to embed metadata based on existing records in EMu"""
+    """Tools to embed metadata into a file based on existing data in EMu"""
 
     def __init__(self, *args, **kwargs):
         super(EmbedFromEMu, self).__init__(*args, **kwargs)

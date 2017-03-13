@@ -48,6 +48,7 @@ class GeoTaxon(dict):
 
 
     def is_child_of(self, taxon):
+        """Returns the parent of the given taxon"""
         return format_key(taxon) in self['parent']
 
 

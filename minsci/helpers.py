@@ -127,7 +127,7 @@ def dict_from_odbc(cursor, tbl, row_id=None, cols=None, where=None,
         for row in result:
             for fld in row.cursor_description:
                 if not bool(error) and fld[1] != str and tbl.endswith('$]'):
-                    error = fill('Warning: Non-string data type '
+                    error = fill(u'Warning: Non-string data type '
                                  'found. Convert the input sheet '
                                  'to text to prevent data loss.')
             row = [s if bool(s) else '' for s in row]
@@ -268,15 +268,9 @@ def parse_names(name_string, last_name_first=False):
     # Parse names using nameparser
     results = []
     for unparsed in names:
-        # Handle words that nameparser bobbles
-        overwrite = {}
-        for word in sorted(problem_words, key=len)[::-1]:
-            if unparsed.startswith(word):
-                unparsed = unparsed.split(word)[1].strip()
-                overwrite['NamTitle'] = word
-                break
+        # Parse name into components
         name = HumanName(unparsed)
-        d = {
+        parsed = {
             'NamPartyType' : 'Person',
             'NamTitle' : name.title,
             'NamFirst' : name.first,
@@ -284,12 +278,15 @@ def parse_names(name_string, last_name_first=False):
             'NamLast' : name.last,
             'NamSuffix' : name.suffix
             }
-        for key in overwrite:
-            d[key] = overwrite[key]
-        for key in d.keys():
-            if not bool(d[key]):
-                del d[key]
-        results.append(d)
+        # Handle words that nameparser struggles with
+        overwrite = {}
+        for word in sorted(problem_words, key=len)[::-1]:
+            if unparsed.startswith(word):
+                unparsed = unparsed.split(word)[1].strip()
+                overwrite['NamTitle'] = word
+                break
+        parsed.update(overwrite)
+        results.append({key: val for key, val in parsed.iteritems() if val})
     return results
 
 
@@ -432,9 +429,9 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
         # excluding records with low catalog numbers.
         id_nums = [id_num for id_num in id_nums
                    if id_num.get('CatPrefix')
-                       or id_num.get('CatMuseumAcronym')
-                       or id_num.get('CatNumber', 0) > 999
-                       or id_num.get('MetMeteoriteName')]
+                   or id_num.get('CatMuseumAcronym')
+                   or id_num.get('CatNumber', 0) > 999
+                   or id_num.get('MetMeteoriteName')]
         # Format results as tuple
         all_id_nums.extend(id_nums)
     # Return parsed catalog numbers

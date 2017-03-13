@@ -1,5 +1,6 @@
+"""Summarizes and generates metadata for the objects in an ecatalogue export"""
+
 import pprint as pp
-import re
 
 from ..describer import summarize
 from ....xmu import XMu, MinSciRecord
@@ -7,6 +8,7 @@ from ....helpers import parse_catnum
 
 
 class Cataloger(XMu):
+    """Contains methods to generate metadata for a set of catalog objects"""
 
     def __init__(self, *args, **kwargs):
         kwargs['container'] = MinSciRecord
@@ -17,6 +19,7 @@ class Cataloger(XMu):
 
 
     def iterate(self, element):
+        """Indexes the objects in an EMu export file"""
         rec = self.parse(element)
         # Add record to catalog index
         identifiers = set([rec.get_catnum(include_code=False),
@@ -33,7 +36,27 @@ class Cataloger(XMu):
             self.media.setdefault(irn, []).append(rec('irn'))
 
 
-    def index_identifier(self, identifier):
+    def get(self, identifier, default=None):
+        """Retrieves catalog data matching a given identifier"""
+        dct = self.catalog
+        for index in self.index_identifier(identifier):
+            try:
+                dct = dct[index]
+            except KeyError:
+                return default
+        return [summarize(rec) for rec in dct]
+
+
+    def pprint(self, pause=False):
+        """Pretty prints the catalog dictionary"""
+        pp.pprint(self.catalog)
+        if pause:
+            raw_input('Paused. Press ENTER to continue.')
+
+
+    @staticmethod
+    def index_identifier(identifier):
+        """Indexes identification numbers from a catalog record"""
         if not isinstance(identifier, dict):
             parsed = parse_catnum(identifier)
         else:
@@ -50,20 +73,3 @@ class Cataloger(XMu):
         indexed = [parsed.get(key) for key in keys]
         indexed = [index if index else None for index in indexed]
         return indexed
-
-
-
-    def get(self, identifier, default=None):
-        dct = self.catalog
-        for index in self.index_identifier(identifier):
-            try:
-                dct = dct[index]
-            except KeyError:
-                return default
-        return [summarize(rec) for rec in dct]
-
-
-    def pprint(self, pause=False):
-        pp.pprint(self.catalog)
-        if pause:
-            raw_input('Paused. Press ENTER to continue.')

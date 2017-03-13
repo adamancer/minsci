@@ -2,6 +2,10 @@
 GUIDs,AdmGUIDIsPreferred_tab
 GUIDs,AdmGUIDType_tab
 GUIDs,AdmGUIDValue_tab
-Authors,ArtAuthorsRef_tab
-Authors,ArtRole_tab
+ArticleAuthors,ArtAuthorsRef_tab
+ArticleAuthors,ArtRole_tab
+BookAuthors,BooAuthorsRef_tab
+BookAuthors,BooRole_tab
+SeriesAuthors,BosAuthorsRef_tab
+SeriesAuthors,BosRole_tab
 Multimedia,MulMultiMediaRef_tab

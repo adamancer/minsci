@@ -24,6 +24,7 @@ class MinSciRecord(XMuRecord):
         self.antmet = ANTMET
 
 
+
     def get_name(self, taxa=None, force_derived=False):
         """Derives object name based on record
 
@@ -113,6 +114,7 @@ class MinSciRecord(XMuRecord):
 
 
     def get_catnum(self, include_code=True, include_div=False):
+        """Returns the catalog number of the current object"""
         return self.get_identifier(include_code, include_div, force_catnum=True)
 
 
@@ -182,6 +184,11 @@ class MinSciRecord(XMuRecord):
 
 
     def get_political_geography(self):
+        """Gets political geographic info for an object
+
+        Returns:
+            List of place names in order of decreasing specificity
+        """
         country_path = ['LocCountry']
         state_path = ['LocProvinceStateTerritory']
         county_path = ['LocDistrictCountyShire']

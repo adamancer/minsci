@@ -48,16 +48,6 @@ PAIRS = [
     ['medium to light', 'medium-to-light']
 ]
 
-# Keywords that should never been removed
-KW_WHITELIST = [
-    'Allure of Pearls',
-    'Blue Room',
-    'Splendor of Diamonds',
-    'Micrograph, cross-polarized light',
-    'Micrograph, plane-polarized light',
-    'Micrograph, reflected light'
-]
-
 ALWAYS_PLURAL = [
     'bead'
 ]

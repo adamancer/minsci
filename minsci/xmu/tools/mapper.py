@@ -148,17 +148,18 @@ class FieldMapper(object):
 
     def get_data(self, *args):
         """Returns data for a given path or alias"""
-        d = self.schema[self.module]
+        val = self.schema[self.module]
         # Check if first key is an alias
-        if len(args) == 1 and d.get(args[0]) is None:
+        if len(args) == 1 and val.get(args[0]) is None:
             args = self.get_path(args[0])
         for arg in args:
-            d = d[arg]
+            val = val[arg]
+            # Test for references (changes in module)
             try:
-                d = self.schema[d['schema']['RefTable']]
+                val = self.schema[val['schema']['RefTable']]
             except (KeyError, TypeError):
                 pass
-        return d
+        return val
 
 
     def get_tables(self, fields):

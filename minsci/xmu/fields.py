@@ -126,14 +126,14 @@ class XMuFields(object):
         Returns:
             Dictionary with information about the given path
         """
-        d = self.schema
+        mapping = self.schema
         i = 0
         while i < len(args):
             try:
-                d = d[args[i]]
+                mapping = mapping[args[i]]
             except KeyError:
                 try:
-                    d = self.schema[d['schema']['RefTable']]
+                    mapping = self.schema[mapping['schema']['RefTable']]
                 except KeyError:
                     if args[0] is None:
                         raise KeyError('Unrecognized module: {}'.format(args))
@@ -141,7 +141,7 @@ class XMuFields(object):
                         raise KeyError('Illegal path: {}'.format(args))
             else:
                 i += 1
-        return d
+        return mapping
 
 
     def _read_schema(self, fp, whitelist=None, blacklist=None):
@@ -327,13 +327,13 @@ class XMuFields(object):
                 if module is not None and not path.startswith(module):
                     continue
                 try:
-                    d = self.schema(path)
+                    mapping = self.schema(path)
                 except KeyError:
                     cprint(' Alias error: Path not found: {}'.format(alias))
                 else:
                     #cprint('{} => {}'.format(alias, path))
-                    d['alias'] = alias
-                    self.schema.push(alias, d)
+                    mapping['alias'] = alias
+                    self.schema.push(alias, mapping)
                     aliases[alias] = True
                     try:
                         self(path)['columns']
@@ -381,22 +381,29 @@ class XMuFields(object):
         """
         paths = []
         schema = []
+        module = None
         with open(fp, 'rb') as f:
             for line in f:
+                if module is None and 'table name="e' in line:
+                    module = line.split('"')[1]
                 schema.append(line.rstrip())
                 if line.strip() == '?>':
                     break
-        schema = schema[schema.index('<?schema')+1:-1]
-        containers = ['schema']
-        for field in schema:
-            kind, field = [s.strip() for s in field.rsplit(' ', 1)]
-            if kind in ('table', 'tuple'):
-                containers.append(field)
-                continue
-            if field == 'end':
-                containers.pop()
-            else:
-                paths.append('/'.join(containers[1:] + [field]))
+        try:
+            schema = schema[schema.index('<?schema')+1:-1]
+        except ValueError:
+            paths = [module]
+        else:
+            containers = ['schema']
+            for field in schema:
+                kind, field = [s.strip() for s in field.rsplit(' ', 1)]
+                if kind in ('table', 'tuple'):
+                    containers.append(field)
+                    continue
+                if field == 'end':
+                    containers.pop()
+                else:
+                    paths.append('/'.join(containers[1:] + [field]))
         return paths
 
 

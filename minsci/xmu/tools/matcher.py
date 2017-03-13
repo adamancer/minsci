@@ -6,7 +6,7 @@ import os
 
 from unidecode import unidecode
 
-from ...xmu import XMu, MinSciRecord, is_table, is_reference
+from ...xmu import XMu, MinSciRecord, is_reference
 
 
 def standardize_taxon(species):
@@ -45,7 +45,7 @@ EXCLUDE = {
                           'LocContinent',
                           'VolRegionName',
                           'VolSubRegionName']
-                          }
+}
 
 # Contains lists of fields that contain the same data converted to different
 # units. This causes matching problems, and only one of these should be
@@ -110,7 +110,7 @@ class Matcher(XMu):
         rec = self.parse(element)
         # HACK: Skip sites if given by collector
         if (self.module == 'ecollectionevents'
-            and rec('LocSiteNumberSource') == 'Collector'):
+                and rec('LocSiteNumberSource') == 'Collector'):
             return True
         irn = rec.pop('irn')  # IRN will never be included in the match set
         key = self.keyer(rec)
@@ -240,7 +240,7 @@ class Matcher(XMu):
             try:
                 rec[key]
             except KeyError:
-                rec_key = [] if is_table(key) else u''
+                pass #rec_key = [] if is_table(key) else u''
             if ((self.include and not key in self.include)
                     or key in self.exclude):
                 del rec[key]
