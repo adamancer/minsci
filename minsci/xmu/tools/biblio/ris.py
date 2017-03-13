@@ -1,27 +1,31 @@
+"""Populates an ebibliography record based on RIS data in NotNotes"""
+
 import re
+from collections import namedtuple
 from itertools import chain
 
 from ....helpers import parse_names
 from ....xmu import XMu, BiblioRecord, MinSciRecord
 
+Source = namedtuple('Source', ['type', 'parent_type'])
 
-RIS_TYPES = {
-    'JOUR': 'Article',
-    'RPRT': 'Article'
-}
 
 USGS = {
-    'Annual Report': 'U. S. Annual Report',
+    'Annual Report': 'U. S. Geological Survey Annual Report',
     'Bulletin': 'U. S. Geological Survey Bulletin',
     'Monograph': 'U. S. Geological Survey Monograph',
     'Professional Paper': 'U. S. Geological Survey Professional Paper'
 }
-
 LISTS = ['AU', 'A2', 'A3', 'A4', 'ED']
+PREFIXES = {
+    'Book Series': 'Bos'
+}
+
+Contributor = namedtuple('Contributor', ['name', 'role'])
 
 
 class FillFromRIS(XMu):
-    """Fill out skeleton bibliography records that have DOIs"""
+    """Fill out skeleton bibliography records that have RIS data in notes"""
 
     def __init__(self, *args, **kwargs):
         super(FillFromRIS, self).__init__(*args, **kwargs)
@@ -37,51 +41,56 @@ class FillFromRIS(XMu):
             formatted = emuize(ris)
             if len(formatted) == 1:
                 for rec in formatted:
-                    rec['irn'] = irn
-                    del rec['NotNotes']
+                    if irn:
+                        rec['irn'] = irn
+                        del rec['NotNotes']
                 self.records.extend(formatted)
 
 
 
 
 def ris2emu(fp):
+    """Parses RIS data in the notes field of an ebibliography export"""
     bib = FillFromRIS(fp, container=MinSciRecord)
-    bib.fast_iter(report=5)
+    bib.fast_iter(report=25)
     return bib.records
 
 
 def emuize(ris, customizer=None):
+    """Converts RIS record to EMu ebibliograhy format"""
     records = []
-    rec = []
+    lines = []
     pattern = re.compile(ur'[A-Z][A-Z0-9] -')
     for line in ris.split('\n'):
         line = line.strip().decode('utf-8')
         if pattern.match(line):
-            rec.append(line)
+            lines.append(line)
             if line.startswith('ER'):
-                records.append(rec)
-                rec = []
+                records.append(lines)
+                lines = []
     bibs = []
     for ris in records:
         rec = ris2dict(ris)
         customizer = usgs
         if customizer is not None:
             rec = customizer(rec)
+        source = get_type(rec)
+        parent_prefix = PREFIXES.get(source.parent_type, source.parent_type[:3])
         # Create a bibliography record
         bib = {}
-        bib['BibRecordType'] = RIS_TYPES[rec.pop('TY')]
+        bib['BibRecordType'] = source.type
         bib['{}PublicationLanguage'] = rec.pop('LA', None)
         bib['{}Title'] = rec.pop('TI')
         bib['{}Volume'] = rec.pop('VL', None)
         bib['{}Issue'] = rec.pop('IS', None)
         bib['{}Pages'] = rec.pop('SP', None)
         bib['{}ParentRef'] = {
-            'BibRecordType': 'Journal',
-            'JouTitle': rec.pop('T2')
+            'BibRecordType': source.parent_type,
+            '{}Title'.format(parent_prefix): rec.pop('T2')
             }
         # Contributors
         contributors = rec.pop('AU', [])
-        blank =  {'NamPartyType': 'Person'}
+        blank = {'NamPartyType': 'Person'}
         parties = [p for p in contributors if p.name != blank]
         if len(parties) != len(contributors):
             bib['{}AuthorsEtAl'] = 'Yes'
@@ -103,7 +112,7 @@ def emuize(ris, customizer=None):
         if len(ris) > 50:
             raise ValueError('RIS file is too long to fit in EMu notes field')
         # Apply prefix
-        prefix = bib['BibRecordType'][:3]
+        prefix = PREFIXES.get(bib['BibRecordType'], bib['BibRecordType'][:3])
         bib = {key.format(prefix): val for key, val in bib.iteritems() if val}
         bibs.append(BiblioRecord(bib).expand())
         if rec:
@@ -112,6 +121,7 @@ def emuize(ris, customizer=None):
 
 
 def ris2dict(ris):
+    """Converts a RIS record to a dictionary"""
     rec = {}
     for line in ris:
         key, val = [s.strip(' -') for s in line.split('-', 1)]
@@ -124,7 +134,21 @@ def ris2dict(ris):
     return {key: val for key, val in rec.iteritems() if any(val)}
 
 
+def get_type(rec):
+    """Determines the kind of publication"""
+    bib_type = rec.pop('TY')
+    # Classify publication by type. Keys with a leading underscore are
+    # assigned by customizer functions and are not official RIS types.
+    types = {
+        'JOUR': Source('Article', 'Journal'),
+        'RPRT': Source('Article', 'Journal'),
+        '_MONOGRAPH': Source('Book', 'Book Series')
+    }
+    return types[bib_type]
+
+
 def usgs(ris):
+    """Formats RIS records from the USGS"""
     # Remove keys containing info we don't want/need
     keys = ['A3', 'CY', 'DB', 'ET', 'M3', 'UR']
     for key in keys:
@@ -134,9 +158,9 @@ def usgs(ris):
         if ris.get('VL'):
             raise ValueError('Both VL and SN populated for USGS report')
         ris['VL'] = ris.pop('SN')
+    if 'cont' in ris['VL']:
+        ris['VL'] = ris['VL'].split('cont', 1)[0].strip() + ' (cont.)'
     # Handle contributors
-    from collections import namedtuple
-    Contributor = namedtuple('Contributor', ['name', 'role'])
     roles = {
         'AU': u'Author',
         'A1': u'First author',
@@ -145,18 +169,26 @@ def usgs(ris):
         'A4': u'Subsidiary author',
         'ED': u'Editor'
     }
-    def keep(name):
+
+    def _keep(name):
+        """Determines whether a name is a person, excluding other entities"""
         name = name.lower()
         for key in ('govt', 'government', 'survey'):
             if key in name:
                 return False
         return True
+
     for key in ('AU', 'ED'):
         parties = ris.pop(key, [])
         if not isinstance(parties, list):
             parties = []
-        parties = [parse_names(name, True) for name in parties if keep(name)]
+        parties = [parse_names(name, True) for name in parties if _keep(name)]
         if parties:
-            contributors = [Contributor(name, roles[key]) for name in chain(*parties)]
+            contributors = [Contributor(name, roles[key])
+                            for name in chain(*parties)]
             ris.setdefault('AU', []).extend(contributors)
+    # Identify monographs based on T2
+    series = ['U. S. Geological Survey Annual Report']
+    if ris.get('T2') in series:
+        ris['TY'] = '_MONOGRAPH'
     return ris

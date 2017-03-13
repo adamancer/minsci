@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Creates ebibliography records based on BibTex records pulled using DOI"""
+"""Populates ebibliography records based on BibTeX records pulled using DOI"""
 
 import csv
 import io
@@ -28,11 +28,12 @@ SOURCES = {
     'Journal': 'journal'
 }
 
-# List of entities from BibTex
+# List of entities from BibTeX
 ENTITIES = {
     r'$\mathsemicolon$': ';',
     r'{\{AE}}': u'Æ',
-    r'({IUCr})': '(IUCr)'
+    r'({IUCr})': '(IUCr)',
+    r'{\textquotesingle}': "'"
 }
 
 
@@ -45,10 +46,12 @@ class FillFromDOI(XMu):
 
 
     def iterate(self, element):
-        """Pulls reference information from BibTex based on DOI in EMu record"""
+        """Pulls reference information from BibTeX based on DOI in EMu record"""
         rec = self.parse(element)
         doi = rec.get_guid('DOI')
         if doi:
+            if 'bhl.title' in doi:
+                raise ValueError('BHL DOIs are forbidden: {}'.format(doi))
             bibtex = doi2bib(doi)
             if bibtex is not None:
                 formatted = emuize(parse_bibtex(bibtex))
@@ -63,8 +66,9 @@ class FillFromDOI(XMu):
 
 
 def doi2emu(fp):
+    """Parses BibTeX data for a DOI found in an ebibliography export"""
     bib = FillFromDOI(fp, container=MinSciRecord)
-    bib.fast_iter(report=5)
+    bib.fast_iter(report=25)
     return bib.records
 
 
@@ -77,7 +81,7 @@ def doi2bib(doi):
         doi (str): a valid DOI corresponding to a publication
 
     Returns:
-        BibTex record as a string
+        BibTeX record as a string
     """
     url = 'http://dx.doi.org/' + doi
     headers = {'accept': 'application/x-bibtex'}
@@ -88,17 +92,17 @@ def doi2bib(doi):
 
 
 def parse_bibtex(bib):
-    """Parses the BibTex returned by the DOI resolver
+    """Parses the BibTeX returned by the DOI resolver
 
     Args:
-        bib (str): a BibTex record
+        bib (str): a BibTeX record
 
     Returns:
         Dict containing reference data
     """
     for entity, repl in ENTITIES.iteritems():
         bib = bib.replace(entity, repl)
-    # Parse BibTex using the handy dandy bibtexparser module
+    # Parse BibTeX using the handy dandy bibtexparser module
     import bibtexparser
     from bibtexparser.bparser import BibTexParser
     from bibtexparser.customization import convert_to_unicode
@@ -106,7 +110,7 @@ def parse_bibtex(bib):
     parser.customization = convert_to_unicode
     parsed = bibtexparser.loads(bib, parser=parser).entries[0]
     # Miscellaneous clean up
-    braces = re.compile(u'\{([A-Z_ \-]+|[\u0020-\uD7FF])\}', re.U)
+    braces = re.compile(ur'\{([A-Z_ \-]+|[\u0020-\uD7FF])\}', re.U)
     for key, val in parsed.iteritems():
         val = braces.sub(r'\1', val)
         if '{' in val:
@@ -129,7 +133,7 @@ def parse_authors(author_string, parse_names=True):
     Returns:
         A list of the parsed authors
     """
-    authors = re.split(',| & | and ', author_string)
+    authors = re.split(r',| & | and ', author_string)
     parsed = []
     for author in authors:
         author = author.replace('.', '. ').replace('  ', ' ')
@@ -148,10 +152,10 @@ def parse_authors(author_string, parse_names=True):
 
 
 def emuize(data):
-    """Convert a BibText record into an EMu record
+    """Convert a BibTex record into an EMu record
 
     Args:
-        data (dict): a parsed BibText record
+        data (dict): a parsed BibTeXt record
 
     Returns:
         A DeepDict object formatted for EMu
@@ -325,7 +329,7 @@ def process_file(fp):
             rec = emuize(bib.copy())
             if rec is not None:
                 records.append(rec)
-                # Update filename to match the id from the BibTex record
+                # Update filename to match the id from the BibTeX record
                 fn = ref['Filename']
                 if fn:
                     ext = os.path.splitext(fn)[1]
