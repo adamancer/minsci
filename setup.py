@@ -8,7 +8,7 @@ except:
                         ' for more information about the MinSci Toolkit.')
 
 setup(name='minsci',
-      version='0.30',
+      version='0.50',
       description='Tools for data management in Mineral Sciences at NMNH',
       long_description=long_description,
       classifiers = [
@@ -21,12 +21,18 @@ setup(name='minsci',
       license='MIT',
       packages=['minsci', 'minsci.geotaxa', 'minsci.xmu'],
       install_requires = [
+          'bibtexparser',
+          'dateparser',
           'inflect',
           'lxml',
           'nameparser',
-          'natsort',
+          'pillow',
           'pymongo',
-          'pyodbc'
+          'pyodbc',
+          'pytz',
+          'requests',
+          'requests_cache',
+          'unidecode'
       ],
       include_package_data=True,
       zip_safe=False)
