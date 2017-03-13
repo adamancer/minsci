@@ -11,6 +11,9 @@ from dateparser import parse
 from ...deepdict import DeepDict
 
 
+Row = namedtuple('Row', ['irn', 'field', 'row', 'val'])
+
+
 class XMuRecord(DeepDict):
     """Contains methods for reading data from EMu XML exports"""
 
@@ -300,17 +303,28 @@ class XMuRecord(DeepDict):
                                        mask)
 
 
-    def get_current_weight(self, mask=''):
+    def get_current_weight(self, decimal_places=2):
+        """Gets the current weight of the object
+
+        Args:
+            decimal_places (int): the number of decimal places to which to
+                round the weight
+
+        Returns:
+            Unicode-encoded string with the weight and unit, if any
+        """
+        assert isinstance(decimal_places, int)
         weight = self('MeaCurrentWeight').rstrip('0.')
         unit = self('MeaCurrentUnit')
         if weight and unit:
             if '.' in weight:
                 weight = float(weight)
-                return '{weight:.2f} {unit}'.format(weight=weight, unit=unit)
+                mask = u'{weight:.' + str(decimal_places) + 'f} {unit}'
+                return mask.format(weight=weight, unit=unit)
             else:
                 weight = int(weight)
-                return '{weight:,} {unit}'.format(weight=weight, unit=unit)
-        return ''
+                return u'{weight:,} {unit}'.format(weight=weight, unit=unit)
+        return u''
 
 
     @staticmethod
@@ -462,7 +476,10 @@ class XMuRecord(DeepDict):
 
 
     def to_refine(self):
-        Row = namedtuple('Row', ['irn', 'field', 'row', 'val'])
+        """Maps EMu data to Google Refine
+
+        FIXME: Needs to be cleaned up and tested
+        """
         irn = self('irn')
         rows = []
         for field in self:
@@ -476,11 +493,45 @@ class XMuRecord(DeepDict):
                 # Excludes attachments
                 pass
             else:
-                print key, vals, type(val)
+                print field, vals, type(val)
         return rows
 
 
+    def delete_rows(self, key, indexes=None, conditions=None):
+        """Deletes any rows matching the given conditions from a table"""
+        assert indexes is not None or conditions is not None
+        if indexes is not None:
+            if not isinstance(indexes, list):
+                indexes = [indexes]
+            indexes.sort(reverse=True)
+            for i in indexes:
+                self.delete_row(key, i)
+        else:
+            matches = {}
+            for field, condition in conditions.iteritems:
+                for i, val in enumerate(self(field)):
+                    if val == condition:
+                        matches.setdefault(field, []).append(i)
+            if matches.values:
+                indexes = set(matches[0]).intersection(*matches)
+                for i in indexes:
+                    self.delete_row(key, i)
+
+
+
+
+    def delete_row(self, key, i):
+        """Deletes the row matching the given index"""
+        self.pprint()
+        for field in self.fields.get_table(key):
+            vals = self(field)
+            del vals[i]
+        self.pprint(True)
+
+
+
     def zip(self, *args):
+        """Zips the set of lists, padding each list to the max length"""
         return izip_longest(*[self(arg) for arg in args])
 
 
