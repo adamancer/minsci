@@ -21,5 +21,10 @@ README.rst
 *_old.py
 *.pl
 
-# Precompiled Sphinx docs
-/docs/
+# Documentation
+/docs/_build
+/docs/_static
+/docs/_templates
+/docs/make.bat
+/docs/Makefile
+/docs/*.log
