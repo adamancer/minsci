@@ -6,7 +6,7 @@ import re
 from collections import namedtuple
 from pprint import pprint
 
-from ..xmu import XMu, write
+from ..xmu import XMu
 from .groups import write_group
 
 
@@ -19,157 +19,157 @@ class Legacy(XMu):
             'AAAAAAAA': skip,
             'ACCESSION_': skip,
             'ACCESSION NO.': skip,
-            'AL2O3': check_analysis,
-            'ANALYST': check_analysis,
-            'ANALYTICAL_KEYWORDS': check_analysis,
-            'ANALYTICAL2': check_analysis,
+            'AL2O3': verify_analysis,
+            'ANALYST': verify_analysis,
+            'ANALYTICAL_KEYWORDS': verify_analysis,
+            'ANALYTICAL2': verify_analysis,
             'ASSOCIATED': skip,
             'ASSOCIATED ROCK(S)': skip,
             'AUTHOR': skip,
             'AUTHOR_2': skip,
-            'BAO': check_analysis,
-            'C': check_analysis,
-            'CAO': check_analysis,
+            'BAO': verify_analysis,
+            'C': verify_analysis,
+            'CAO': verify_analysis,
             'CASE': skip,
             'CATALOG_NO': skip,
             'CATALOG_NU': skip,
             'CATALOG_SU': skip,
             'CHEMICAL_M': skip,           # chemical modifier of taxon
-            'CITY_TOWN': check_event,
-            'CITY/TOWN/TOWNSHIP': check_event,
-            'CL': check_analysis,
-            'CO': check_analysis,
+            'CITY_TOWN': verify_event,
+            'CITY/TOWN/TOWNSHIP': verify_event,
+            'CL': verify_analysis,
+            'CO': verify_analysis,
             'COLKEYCOLLECTION': skip,
             'COLLECTIO0': skip,
             'COLLECTION': skip,
             'COLLECTOR NUMBER': skip,
-            'CO2': check_analysis,
+            'CO2': verify_analysis,
             'COMMODITY/METAL': skip,
-            'CONTINENT': check_event,
-            'CONTINENT/COUNTRY/U.S. ST': check_country,
-            'COUNTRY': check_country,
-            'COUNTRY_MO': check_country,
-            'COUNTY/DISTRICT': check_country,
-            'CR2O3': check_analysis,
-            'DATE COLLECTED': check_event,
-            'DEPTH__OFF': check_event,
-            'DEPTH__ON_': check_event,
+            'CONTINENT': verify_event,
+            'CONTINENT/COUNTRY/U.S. ST': verify_country,
+            'COUNTRY': verify_country,
+            'COUNTRY_MO': verify_country,
+            'COUNTY/DISTRICT': verify_country,
+            'CR2O3': verify_analysis,
+            'DATE COLLECTED': verify_event,
+            'DEPTH__OFF': verify_event,
+            'DEPTH__ON_': verify_event,
             'DESCRIBED': skip,
-            'DISTRICT_C': check_event,           # district/county
+            'DISTRICT_C': verify_event,           # district/county
             'DIMENSIONS': skip,
             'DONOR': skip,
             'DRAWER': skip,
-            'E_W(OFF_BOTTOM)': check_event,
-            'E_W(ON_BOTTOM)': check_event,
+            'E_W(OFF_BOTTOM)': verify_event,
+            'E_W(ON_BOTTOM)': verify_event,
             'E/I': skip,
-            'ELEVATION': check_event,
+            'ELEVATION': verify_event,
             'ERUPTION DATE': skip,
-            'F': check_analysis,
-            'FE2O3': check_analysis,
-            'FEO': check_analysis,
-            'FES': check_analysis,
+            'F': verify_analysis,
+            'FE2O3': verify_analysis,
+            'FEO': verify_analysis,
+            'FES': verify_analysis,
             'FIGURED': skip,
             'FLOW/TEPHRA DATE': skip,
-            'GEOGRAPHICAL LOCATION': check_event,
-            'GEOLOGIC FORMATION': check_event,
-            'GEOLOGIC SETTING': check_event,
-            'H2O_': check_analysis,
-            'H2O__TOTAL': check_analysis,
-            'H2O_0': check_analysis,
+            'GEOGRAPHICAL LOCATION': verify_event,
+            'GEOLOGIC FORMATION': verify_event,
+            'GEOLOGIC SETTING': verify_event,
+            'H2O_': verify_analysis,
+            'H2O__TOTAL': verify_analysis,
+            'H2O_0': verify_analysis,
             'INV.PAST_LOANS': skip,
-            'ISLAND': check_event,
-            'ISLAND_GRO': check_event,
+            'ISLAND': verify_event,
+            'ISLAND_GRO': verify_event,
             'JOURNAL': skip,
             'JOURNAL_2': skip,
             'KEY': skip,
-            'LATD(OFF_BOTTOM)': check_event,
-            'LATM(OFF_BOTTOM)': check_event,
-            'LATS(OFF_BOTTOM)': check_event,
-            'LATD(ON_BOTTOM)': check_event,
-            'LATM(ON_BOTTOM)': check_event,
-            'LATS(ON_BOTTOM)': check_event,
+            'LATD(OFF_BOTTOM)': verify_event,
+            'LATM(OFF_BOTTOM)': verify_event,
+            'LATS(OFF_BOTTOM)': verify_event,
+            'LATD(ON_BOTTOM)': verify_event,
+            'LATM(ON_BOTTOM)': verify_event,
+            'LATS(ON_BOTTOM)': verify_event,
             'LAVA SOURCE': skip,
-            'LI2O': check_analysis,
-            'LOCALITY SORT KEY': check_event,
-            'LONGD(OFF_BOTTOM)': check_event,
-            'LONGM(OFF_BOTTOM)': check_event,
-            'LONGS(OFF_BOTTOM)': check_event,
-            'LONGD_ON_B': check_event,
-            'LONGM_ON_B': check_event,
-            'LONGS_ON_B': check_event,
+            'LI2O': verify_analysis,
+            'LOCALITY SORT KEY': verify_event,
+            'LONGD(OFF_BOTTOM)': verify_event,
+            'LONGM(OFF_BOTTOM)': verify_event,
+            'LONGS(OFF_BOTTOM)': verify_event,
+            'LONGD_ON_B': verify_event,
+            'LONGM_ON_B': verify_event,
+            'LONGS_ON_B': verify_event,
             'LOSS_ON_IG': skip,
-            'MAJOR ISLAND GROUP': check_event,
+            'MAJOR ISLAND GROUP': verify_event,
             'MICROPROBE': skip,
-            'MINE_NAME': check_mine,
+            'MINE_NAME': verify_mine,
             'MINE_SPECI': skip,
-            'MINE/QUARRY': check_mine,
-            'MINERAL_NA': check_taxon,
+            'MINE/QUARRY': verify_mine,
+            'MINERAL_NA': verify_taxon,
             'MINERAL_N1': skip,
             'MINERAL_PETROGRAPHY': skip,
-            'MINING DISTRICT': check_mine,
+            'MINING DISTRICT': verify_mine,
             'MISSING/ON LOAN': skip,
-            'MGO': check_analysis,
-            'MNO': check_analysis,
-            'MODIFIER OF SPECIFIC LOCA': check_event,
+            'MGO': verify_analysis,
+            'MNO': verify_analysis,
+            'MODIFIER OF SPECIFIC LOCA': verify_event,
             'MSC LOCATION/FUMIGATION D': skip,
-            'NA2O': check_analysis,
-            'NEAREST_NA': check_event,   # nearest named feature
-            'NIO': check_analysis,
-            'N_S_ON_BOT': check_event,
-            'N_S(OFF_BOTTOM)': check_event,
+            'NA2O': verify_analysis,
+            'NEAREST_NA': verify_event,   # nearest named feature
+            'NIO': verify_analysis,
+            'N_S_ON_BOT': verify_event,
+            'N_S(OFF_BOTTOM)': verify_event,
             'NUMBER_MOD': skip,          # specimen count modifier
             'NUMBER_OF_': skip,
-            'OCEAN': check_ocean,
-            'OCEAN/SEA': check_ocean,
+            'OCEAN': verify_ocean,
+            'OCEAN/SEA': verify_ocean,
             'PETROGRAPHIC SECTIONS': skip,
             'PUBLICATIO': skip,
-            'QUADRANGLE': check_event,
+            'QUADRANGLE': verify_event,
             'QUANTITY': skip,
             'QUESTIONABLE IDENTIFICATI': skip,
             'REMARKS': skip,
             'R_TYPE': skip,               # object type?
-            'S': check_analysis,
-            'SIO2': check_analysis,
-            'SPECIFIC_L': check_event,    # locality
+            'S': verify_analysis,
+            'SIO2': verify_analysis,
+            'SPECIFIC_L': verify_event,    # locality
             'SPECIAL_GE': skip,           # special geo(logy? graphy?)
             'SPECIMEN NAME': skip,        # taxonomic info
             'SPECIMEN_T': skip,           # object type?
-            'SO3': check_analysis,
-            'SRO': check_analysis,
-            'STATE_MODI': check_state,
-            'STATE_PROV': check_state,
-            'STATE/PROVINCE': check_state,
+            'SO3': verify_analysis,
+            'SRO': verify_analysis,
+            'STATE_MODI': verify_state,
+            'STATE_PROV': verify_state,
+            'STATE/PROVINCE': verify_state,
             'STATUS': skip,
             'STORAGE_ID': skip,
             'STRATIGRAPHIC AGE': skip,
-            'SUBREGION': check_event,     # GVP subregion
+            'SUBREGION': verify_event,     # GVP subregion
             'SYNONYMS_V': skip,           # what is the V?
             'SYNTHETIC': skip,
             'TEXTURE_STRUCTURE': skip,
-            'TOTAL': check_analysis,
-            'TIO2': check_analysis,
+            'TOTAL': verify_analysis,
+            'TIO2': verify_analysis,
             'TYPE': skip,
             'USNM#': skip,
-            'V2O3': check_analysis,
-            'VNUM': check_volcano,        # GVP legacy number
-            'VOLCANO_NA': check_volcano,
-            'VOLC_NAME': check_volcano,
-            'VOLCANIC GLASS (VG) NUMBE': check_volcano,
-            'VOLCANO NAME': check_volcano,
-            'VOLCANO NUMBER AND SUBREG': check_volcano,
+            'V2O3': verify_analysis,
+            'VNUM': verify_volcano,        # GVP legacy number
+            'VOLCANO_NA': verify_volcano,
+            'VOLC_NAME': verify_volcano,
+            'VOLCANIC GLASS (VG) NUMBE': verify_volcano,
+            'VOLCANO NAME': verify_volcano,
+            'VOLCANO NUMBER AND SUBREG': verify_volcano,
             'WEIGHT': skip,
             'X_RAYED': skip,
             'YEAR_ACQUI': skip,
             'YEAR_PUBLI': skip,
             'YEAR_PUBLI2': skip,
-            'ZRO2': check_analysis,
+            'ZRO2': verify_analysis,
             'Accession number': skip,
             'Age': skip,
-            'Al2O3': check_analysis,
+            'Al2O3': verify_analysis,
             'Associated gems': skip,
             'Associated minerals': skip,
             'Catalog Number': skip,
-            'CaO': check_analysis,
+            'CaO': verify_analysis,
             'Chemical modifier': skip,
             'Coll_Key_ID': skip,
             'Collection': skip,
@@ -177,17 +177,17 @@ class Legacy(XMu):
             'Collection_ID': skip,
             'CollectionID': skip,
             'Color': skip,
-            'Country': check_country,
+            'Country': verify_country,
             'Comments': skip,
             'Condition': skip,
-            'Country_Code': check_country,
-            'Cruise': check_event,
+            'Country_Code': verify_country,
+            'Cruise': verify_event,
             'Current Wt. (g)': skip,
             'CutRemarks': skip,
             'Date Out': skip,
             'Date out on Loan': skip,
             'Date Due': skip,
-            'Depth': check_event,
+            'Depth': verify_event,
             'DescribedBy': skip,
             'DescribedDate': skip,
             'DescribedIn': skip,
@@ -197,38 +197,38 @@ class Legacy(XMu):
             'Dimensions in cm': skip,
             'Donor': skip,
             'DonorID': skip,
-            'Dredge': check_event,
+            'Dredge': verify_event,
             'Fashion/Cut': skip,
-            'FeO*': check_analysis,
+            'FeO*': verify_analysis,
             'Identifier': skip,
             'In/Out': skip,               # loan status
             'InventoryStat': skip,
             'Group # code': skip,
             'Jewelry type': skip,
-            'K2O': check_analysis,
+            'K2O': verify_analysis,
             'Keywords': skip,
-            'Latitude': check_event,
+            'Latitude': verify_event,
             'Loan': skip,
-            'Locality': check_event,
+            'Locality': verify_event,
             'Location': skip,             # storage location
             'Location_1': skip,           # storage location
             'Location_2': skip,
             'Location_3': skip,
             'Location_4': skip,
-            'Longitude': check_event,
+            'Longitude': verify_event,
             'LotDescription': skip,
             'Maker': skip,
-            'MajorIsID': check_event,     # island group ID
-            'Mine name': check_mine,
-            'MgO': check_analysis,
-            'MnO': check_analysis,
-            'Na2O': check_analysis,
+            'MajorIsID': verify_event,     # island group ID
+            'Mine name': verify_mine,
+            'MgO': verify_analysis,
+            'MnO': verify_analysis,
+            'Na2O': verify_analysis,
             'Name': skip,                 # object name
             'Number modifier': skip,
             'Not Migrated - OldRemarks': skip,
             'ObjectOrImage': skip,
-            'Ocean': check_ocean,
-            'OceanSeaID': check_ocean,
+            'Ocean': verify_ocean,
+            'OceanSeaID': verify_ocean,
             'On Loan': skip,
             'On Loan to': skip,
             'Origional Wt. (g)': skip,
@@ -236,9 +236,9 @@ class Legacy(XMu):
             'OthNumSource2': skip,
             'OthNumValue': skip,
             'OthNumValue2': skip,
-            'P2O5': check_analysis,
+            'P2O5': verify_analysis,
             'Past Loan': skip,
-            'Provenance': check_event,
+            'Provenance': verify_event,
             'Publication/Figured': skip,
             'Range': skip,
             'Record_No': skip,           # meteorite record number
@@ -249,17 +249,17 @@ class Legacy(XMu):
             'Samples Distributed A': skip,
             'Samples Distributed (g)': skip,
             'Sampling method': skip,
-            'Ship/Dredge': check_event,
-            'ShipName': check_event,
-            'SiO2': check_analysis,
+            'Ship/Dredge': verify_event,
+            'ShipName': verify_event,
+            'SiO2': verify_analysis,
             'Split': skip,
-            'State': check_state,
-            'State_Code': check_state,
-            'Station': check_event,
+            'State': verify_state,
+            'State_Code': verify_state,
+            'Station': verify_event,
             'Special or 1/2': skip,       # for thin sections
             'Species Name': skip,
             'Species_Name_Code': skip,
-            'Specific locality': check_event,
+            'Specific locality': verify_event,
             'Specimens': skip,
             'SpecimenTypeID': skip,
             'Status': skip,
@@ -268,8 +268,8 @@ class Legacy(XMu):
             'Synonym': skip,              # meteorite!
             'Synonyms': skip,
             'Synthetic': skip,
-            'Tectonic code': check_event,
-            'TiO2': check_analysis,
+            'Tectonic code': verify_event,
+            'TiO2': verify_analysis,
             'Total Wt. (g)': skip,
             'VG Disk #': skip,
             'VG no#': skip,
@@ -278,15 +278,16 @@ class Legacy(XMu):
             'XRayed': skip,
             'Year': skip                  # year of expedition
         }
+        # FIXME: What the hell is this?
         self.field_lookup = {}
         for field, func in self.function_lookup.iteritems():
             self.field_lookup.setdefault(func.__name__, []).append(field)
-            if func.__name__ in ('check_country',
-                                 'check_mine',
-                                 'check_ocean',
-                                 'check_state',
-                                 'check_volcano'):
-                self.field_lookup.setdefault('check_event', []).append(field)
+            if func.__name__ in ('verify_country',
+                                 'verify_mine',
+                                 'verify_ocean',
+                                 'verify_state',
+                                 'verify_volcano'):
+                self.field_lookup.setdefault('verify_event', []).append(field)
         skipped = []
         for field, func in self.function_lookup.iteritems():
             if func == skip:
@@ -330,7 +331,7 @@ class Legacy(XMu):
 
 
     def group(self):
-        """Create EMu import for egroups for problematic records"""
+        """Create group of problematic records"""
         dn = 'errors'
         try:
             for fn in os.listdir(dn):
@@ -351,68 +352,51 @@ class Legacy(XMu):
 
 Result = namedtuple('Result', ['result', 'emu_value', 'orig_value'])
 
-def standardize(s):
-    return s.strip().upper()
+def standardize(val):
+    """Normalize a string to improve comparisons"""
+    return val.strip().upper()
 
 
 def skip(rec, *args, **kwargs):
+    """Placeholder function for fields that have not been mapped"""
     return
 
 
-def check_event(rec, orig):
-    return
-    if len(orig) == 1 and 'Locality' in orig and rec('LocPreciseLocation'):
-        pprint(orig)
-        rec.pprint(True)
-    return
+def verify_event(rec, orig):
+    """Verifies collection event against legacy data"""
+    pass
 
 
-def check_analysis(rec, orig):
-    return
+def verify_analysis(rec, orig):
+    """Verifies chemical analysis against legacy data"""
+    pass
 
 
-def check_country(rec, orig):
-    emu_value = standardize(rec('BioEventSiteRef', 'LocCountry'))
-    try:
-        orig_value = orig.values()[0]
-    except IndexError:
-        orig_value = None
-    result = emu_value == orig_value
-    # Exceptions
-    exceptions = {
-        'GERMANY, EAST': 'EAST GERMANY',
-        'GERMANY, WEST': 'WEST GERMANY',
-        'OCEAN': None,
-        'UNKNOWN': None,
-    }
-    eq = exceptions.get(orig_value)
-    if emu_value == eq or (eq is None and not emu_value):
-        result = True
-    return Result(result, emu_value, orig_value)
+def verify_country(rec, orig):
+    """Verifies country against legacy data"""
+    pass
 
 
-def check_mine(rec, orig):
-    return
-    emu_value = standardize(rec('BioEventSiteRef', 'LocMineName'))
-    try:
-        orig_value = orig.values()[0]
-    except IndexError:
-        orig_value = None
-    result = emu_value == orig_value
-    return Result(result, emu_value, orig_value)
+def verify_mine(rec, orig):
+    """Verifies mine name against legacy data"""
+    pass
 
 
-def check_ocean(rec, orig):
-    emu_key = rec('BioEventSiteRef', 'LocOcean')
+def verify_ocean(rec, orig):
+    """Verifies ocean against legacy data"""
+    pass
 
 
-def check_state(rec, orig):
-    return
+def verify_state(rec, orig):
+    """Verifies state/province against legacy data"""
+    pass
 
 
-def check_taxon(rec, orig):
-    emu_key = rec('IdeTaxonRef_tab', 'ClaSpecies')
+def verify_taxon(rec, orig):
+    """Verifies classification against legacy data"""
+    pass
 
 
-def check_volcano(rec, orig):
-    return
+def verify_volcano(rec, orig):
+    """Verifies volcano name against legacy data"""
+    pass
