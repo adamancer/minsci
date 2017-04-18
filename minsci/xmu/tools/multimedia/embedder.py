@@ -7,6 +7,8 @@ import tempfile
 from collections import namedtuple
 from datetime import datetime
 
+from unidecode import unidecode
+
 from .hasher import hash_image_data
 from ....helpers import localize_datetime
 
@@ -180,6 +182,8 @@ class Embedder(object):
         metadata = self.derive_metadata(rec)
         cmd = ['exiftool', '-overwrite_original', '-v']
         for key, val in metadata:
+            if isinstance(val, unicode):
+                val = unidecode(val)
             cmd.append('-{}={}'.format(key, val))
         cmd.append(dst)
         print ' Writing metadata...'
