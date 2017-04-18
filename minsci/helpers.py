@@ -627,12 +627,13 @@ def ucfirst(val):
     Returns:
         Capitalized string
     """
-    if not val:
-        return val
-    try:
-        return val[0].upper() + val[1:]
-    except IndexError:
-        return val[0].upper()
+    chars = []
+    for i, c in enumerate(val):
+        if c.isalpha():
+            return ''.join(chars) + c.upper() + ''.join(val[i + 1:])
+        chars.append(c)
+    return val
+
 
 
 def lcfirst(val):
@@ -644,10 +645,12 @@ def lcfirst(val):
     Returns:
         Capitalized string
     """
-    try:
-        return val[0].lower() + val[1:]
-    except IndexError:
-        return val[0].lower()
+    chars = []
+    for i, c in enumerate(val):
+        if c.isalpha():
+            return ''.join(chars) + c.lower() + ''.join(val[i + 1:])
+        chars.append(c)
+    return val
 
 
 def add_article(val):
@@ -728,13 +731,13 @@ def _fix_misidentified_suffixes(id_nums):
             # Check for where suffix is itself a prefixed catalog number
             last_num = parse_catnum(id_num['CatSuffix'])
             if (len(last_num) == 1
-                    and last_num[0]['CatNumber'] > id_num['CatNumber']
+                    and (last_num[0]['CatNumber'] - id_num['CatNumber'] > 10)
                     and (not last_num[0]['CatPrefix']
                          or last_num[0]['CatPrefix'] == id_num['CatPrefix'])):
                 id_num['CatSuffix'] = ''
                 id_nums = [id_num, last_num[0]]
         else:
-            if suffix > id_num['CatNumber']:
+            if (suffix - id_num['CatNumber']) > 10:
                 first_num = id_num
                 first_num['CatSuffix'] = u''
                 last_num = {key: '' for key in CATKEYS}
