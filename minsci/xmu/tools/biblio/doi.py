@@ -9,10 +9,13 @@ import re
 from datetime import datetime
 
 import requests
+import requests_cache
 from dateparser import parse
 from nameparser import HumanName
 
-from ....xmu import XMu, MinSciRecord, write, FIELDS
+from .bibbot import BibBot
+from .ris import split_records, ris2dict
+from ....xmu import XMu, BiblioRecord, write, FIELDS
 
 
 MODULE = 'ebibliography'
@@ -30,11 +33,16 @@ SOURCES = {
 
 # List of entities from BibTeX
 ENTITIES = {
-    r'$\mathsemicolon$': ';',
+    r'$\mathsemicolon$': u';',
     r'{\{AE}}': u'Æ',
-    r'({IUCr})': '(IUCr)',
-    r'{\textquotesingle}': "'"
+    r'({IUCr})': u'(IUCr)',
+    r'{\textdegree}': u'°' ,
+    r'{\textquotesingle}': u"'",
+    r'\textendash': u'–'
 }
+
+
+bot = BibBot()
 
 
 class FillFromDOI(XMu):
@@ -49,25 +57,39 @@ class FillFromDOI(XMu):
         """Pulls reference information from BibTeX based on DOI in EMu record"""
         rec = self.parse(element)
         doi = rec.get_guid('DOI')
+        # Check for DOIs in the notes field if not found in the GUID table
+        note = rec('NotNotes')
+        ris = None
+        if not doi and 'DO' in note:
+            ris = ris2dict(split_records(note)[0])
+            doi = ris.get('DO')
+            if doi:
+                rec['AdmGUIDType_tab'] = 'DOI'
+                rec['AdmGUIDValue_tab'] = doi
         if doi:
             if 'bhl.title' in doi:
                 raise ValueError('BHL DOIs are forbidden: {}'.format(doi))
-            bibtex = doi2bib(doi)
+            try:
+                bibtex = doi2bib(doi)
+            except ValueError as e:
+                bibtex = None
+                print e
             if bibtex is not None:
                 formatted = emuize(parse_bibtex(bibtex))
                 formatted['irn'] = rec('irn')
                 # Remove DOIs, since these already exist in the source
-                # record and the existing values are more likely to be
-                # cased properly
-                del formatted['AdmGUIDType_tab']
-                del formatted['AdmGUIDValue_tab']
+                # record and the existing values are already cased properly.
+                # DOIs found in the notes field are excepted.
+                if ris is None:
+                    del formatted['AdmGUIDType_tab']
+                    del formatted['AdmGUIDValue_tab']
                 formatted['NotNotes'] = bibtex
                 self.records.append(formatted)
 
 
 def doi2emu(fp):
     """Parses BibTeX data for a DOI found in an ebibliography export"""
-    bib = FillFromDOI(fp, container=MinSciRecord)
+    bib = FillFromDOI(fp, container=BiblioRecord)
     bib.fast_iter(report=25)
     return bib.records
 
@@ -85,9 +107,11 @@ def doi2bib(doi):
     """
     url = 'http://dx.doi.org/' + doi
     headers = {'accept': 'application/x-bibtex'}
-    response = requests.get(url, headers=headers)
+    response = bot.get(url, headers=headers)
     if response.text.startswith('@'):
         return response.text
+    else:
+        raise ValueError('Could not resolve {}'.format(doi))
     return None
 
 
@@ -110,7 +134,7 @@ def parse_bibtex(bib):
     parser.customization = convert_to_unicode
     parsed = bibtexparser.loads(bib, parser=parser).entries[0]
     # Miscellaneous clean up
-    braces = re.compile(ur'\{([A-Z_ \-]+|[\u0020-\uD7FF])\}', re.U)
+    braces = re.compile(ur'\{([A-z_ \-]+|[\u0020-\uD7FF])\}', re.U)
     for key, val in parsed.iteritems():
         val = braces.sub(r'\1', val)
         if '{' in val:
@@ -306,8 +330,8 @@ def emuize(data):
 
 
 def clone(*args):
-    """Creates new MinSciRecord with key attributes copied from global scope"""
-    container = MinSciRecord(*args)
+    """Creates new record with key attributes copied from global scope"""
+    container = BiblioRecord(*args)
     container.fields = FIELDS
     container.module = MODULE
     return container
