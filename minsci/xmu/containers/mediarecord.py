@@ -326,15 +326,13 @@ class MediaRecord(XMuRecord):
                 collections.remove(si_object)
             except ValueError:
                 pass
+            self['DetRights'] = rights
         else:
             collections.append(si_object)
             try:
                 collections.remove(non_si_object)
             except ValueError:
                 pass
-        # Return collection and rights data as a dict
-        if rights:
-            self.enhanced['DetRights'] = rights
         return dedupe(collections, False)
 
 
