@@ -14,7 +14,7 @@ class BiblioRecord(XMuRecord):
     def __init__(self, *args, **kwargs):
         super(BiblioRecord, self).__init__(*args, **kwargs)
         self.module = 'ebibliography'
-        self.prefix = self('BibRecordType')[:3]
+        self.prefix = self.get_prefix()
         self.masks = {
             'Art': (u'{authors}, {year}. "{title}." <i>{source}</i>,'
                     ' {volume}({issue}): {pages}'),
@@ -32,6 +32,35 @@ class BiblioRecord(XMuRecord):
         except KeyError:
             print 'Path not found:', args
             return ''
+
+
+    def __getattribute__(self, key):
+        val = object.__getattribute__(self, key)
+        if key == 'prefix' and not val and self.is_biblio():
+            prefix = self.get_prefix()
+            self.prefix = prefix
+            return prefix
+        return val
+
+
+    def get_prefix(self):
+        """Get prefix based on record type or keys"""
+        prefix = self('BibRecordType')[:3]
+        if not prefix and self.is_biblio():
+            prefixes = {}
+            for key in self:
+                prefixes.setdefault(key[:3], 0)
+                prefixes[key[:3]] += 1
+            prefix = [key for key, val in prefixes.iteritems()
+                      if val == max(prefixes.values())][0]
+        return prefix
+
+
+
+    def is_biblio(self):
+        """Checks if record is a reference"""
+        prefixes = ('Art', 'Bib', 'Boo', 'Bos', 'Jou')
+        return bool([key for key in self if key.startswith(prefixes)])
 
 
     def format_reference(self):
