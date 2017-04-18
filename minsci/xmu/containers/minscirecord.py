@@ -15,14 +15,16 @@ ANTMET = re.compile(r'([A-Z]{3} |[A-Z]{4})[0-9]{5,6}(,[A-z0-9]+)?')
 
 class MinSciRecord(XMuRecord):
     """Subclass of XMuRecord with methods specific to Mineral Sciences"""
+    geotaxa = GEOTAXA
+    antmet = ANTMET
+
 
     def __init__(self, *args):
         super(MinSciRecord, self).__init__(*args)
         # Add constants as attributes so they're available elsewhere
         # without being explicitly imported
-        self.geotaxa = GEOTAXA
-        self.antmet = ANTMET
-
+        #self.geotaxa = GEOTAXA
+        #self.antmet = ANTMET
 
 
     def get_name(self, taxa=None, force_derived=False):
@@ -57,9 +59,11 @@ class MinSciRecord(XMuRecord):
         Returns:
             List of classification terms
         """
-        for key in ('IdeTaxonRef_tab/ClaSpecies', 'MetMeteoriteType'):
+        for key in ('IdeTaxonRef_tab/ClaOtherValue_tab', 'MetMeteoriteType'):
             taxa = self(*key.split('/'))
             if taxa:
+                if isinstance(taxa[0], list):
+                    taxa = [taxon[0]['ClaOtherValue'] for taxon in taxa]
                 break
         else:
             taxa = []
