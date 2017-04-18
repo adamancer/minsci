@@ -1,7 +1,6 @@
 """Subclass of dictionary designed to read/store at depth"""
+import pprint as pp
 from collections import Mapping
-
-from ..helpers import cprint, rprint
 
 
 ENDPOINTS = basestring, int, long, float
@@ -20,8 +19,22 @@ class DeepDict(dict):
         return self.pull(*args)
 
 
+    def __str__(self):
+        return pp.pformat(self)
+
+
     def clone(self, obj=None):
-        """Creates new object of subclass with key attributes copied over"""
+        """Creates empty instance of DeepDict with key attributes copied over
+
+        The attributes to copy are stored in the DeepDict._attributes, which
+        can be defined when initializing a subclass.
+
+        Args:
+            obj (dict): a dict to convert into a DeepDict
+
+        Returns:
+            Empty DeepDict or subclass thereof
+        """
         if obj is not None:
             clone = self.__class__(obj)
         else:
@@ -39,10 +52,10 @@ class DeepDict(dict):
 
 
     def pull(self, *args):
-        """Returns data from the path stipulated by *args
+        """Returns data from the path stipulated by args
 
         Args:
-            *args: the path to a value in the dictionary, with one component
+            args: the path to a value in the dictionary, with one component
                 of that path per arg
 
         Returns:
@@ -60,10 +73,10 @@ class DeepDict(dict):
 
 
     def path(self, path, delimiter='/'):
-        """Call DeepDict.pull() by passing the path as a delimtied string
+        """Calls DeepDict.pull() by passing the path as a delimtied string
 
         Args:
-            *args: the path to a value in the dictionary, with one component
+            path: the path to a value in the dictionary, with one component
                 of that path per arg
             delimiter (str): the character used to delimit the path
                 if given as a string
@@ -75,11 +88,10 @@ class DeepDict(dict):
 
 
     def push(self, val, *args):
-        """Add data to the path stipulated by *args
+        """Adds data to the path stipulated by *args
 
         Args:
-            val (mixed): the value to add. Must be a DeepDict or subclass
-                thereof if dict-like.
+            val (mixed): the value to add
             *args: the path to a value in the dictionary, one component
                 per arg. If the last arg is None, the value is not added.
         """
@@ -89,7 +101,7 @@ class DeepDict(dict):
         i = 0
         while i < (len(args) - 1):
             if isinstance(args[i+1], (int, long)):
-                mapping = mapping .setdefault(args[i], [])
+                mapping = mapping.setdefault(args[i], [])
                 try:
                     mapping = mapping[args[i+1]]
                 except (IndexError, KeyError):
@@ -103,10 +115,8 @@ class DeepDict(dict):
             mapping[args[-1]] = val
 
 
-
-
     def pluck(self, *args):
-        """Remove the path stipulated by args
+        """Removes all keys and values along the given path
 
         Args:
             *args: the path to a value in the dictionary, with one component
@@ -135,7 +145,16 @@ class DeepDict(dict):
 
 
     def prune(self, mapping=None, path=None):
-        """Delete the branch of the mapping specified by path"""
+        """Deletes the branch of the mapping specified by path
+
+        FIXME: The argument structure here is confusing
+        FIXME: This vs. pluck?
+
+        Args:
+            mapping (DeepDict): the DeepDict object to prune. If None, uses the
+                current object.
+            path (list): the path to prune
+        """
         assert path is not None
         if path is None:
             mapping = self
@@ -147,7 +166,7 @@ class DeepDict(dict):
             else:
                 return True
         elif isinstance(mapping, (int, long, float)):
-            # Any number-like value is considered true
+            # Any number-like value is considered true (so zeroes are kept)
             return True
         elif not mapping:
             self.pluck(*path)
@@ -179,12 +198,11 @@ class DeepDict(dict):
         """Pretty prints the DeepDict object
 
         Args:
-            pause (bool): if True, waits for user input before continuing
+            pause (bool): specifies whether to pause script after printing
         """
+        pp.pprint(self)
         if pause:
-            rprint(self)
-        else:
-            cprint(self)
+            raw_input('Paused. Press ENTER to continue.')
 
 
 def _any(val):
