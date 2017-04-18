@@ -340,7 +340,7 @@ class XMuRecord(DeepDict):
 
 
     def get_guid(self, kind='EZID', allow_multiple=False):
-        """Get value from the GUID table for a given key
+        """Gets value from the GUID table for a given key
 
         Args:
             kind (str): name of GUID
@@ -365,7 +365,7 @@ class XMuRecord(DeepDict):
 
 
     def get_url(self):
-        """Get ark link to this record"""
+        """Gets the ark link to this record"""
         ezid = self.get_guid('EZID')
         if ezid:
             return 'http://n2t.net/{}'.format(ezid)
@@ -424,9 +424,14 @@ class XMuRecord(DeepDict):
             val = self[key]
             k = key.rsplit('(', 1)[0]               # key stripped of row logic
             base = key.split('_', 1)[0].rstrip('(0+)') # key without table info
-            # Confirm that all tables are lists
+            # Confirm that data type appears to be correct
             if key.endswith(('0', 'tab', ')')) and not isinstance(val, list):
                 raise ValueError('{} must be a list'.format(key))
+            elif (val
+                  and not key.startswith('_')
+                  and not key.endswith(('0', 'tab', ')', 'Ref'))
+                  and not isinstance(val, (basestring, int, long, float))):
+                raise ValueError('{} must be atomic'.format(key))
             if k.endswith('_nesttab'):
                 # Test if the table has already been expanded by looking
                 # for a corresponding _nesttab_inner key
@@ -499,6 +504,7 @@ class XMuRecord(DeepDict):
 
     def delete_rows(self, key, indexes=None, conditions=None):
         """Deletes any rows matching the given conditions from a table"""
+        assert key.endswith(self.tabends)
         assert indexes is not None or conditions is not None
         if indexes is not None:
             if not isinstance(indexes, list):
@@ -508,26 +514,35 @@ class XMuRecord(DeepDict):
                 self.delete_row(key, i)
         else:
             matches = {}
-            for field, condition in conditions.iteritems:
+            for field, condition in conditions.iteritems():
                 for i, val in enumerate(self(field)):
                     if val == condition:
                         matches.setdefault(field, []).append(i)
-            if matches.values:
-                indexes = set(matches[0]).intersection(*matches)
+            if matches.values():
+                values = [set(val) for val in matches.values()]
+                indexes = list(values[0].intersection(*values))
+                indexes.sort(reverse=True)
                 for i in indexes:
                     self.delete_row(key, i)
-
-
+        # Add blank rows for any fields not represented
+        for key in self.get_table(key):
+            if not self(key):
+                self[key] = []
 
 
     def delete_row(self, key, i):
         """Deletes the row matching the given index"""
-        self.pprint()
-        for field in self.fields.get_table(key):
-            vals = self(field)
-            del vals[i]
-        self.pprint(True)
+        for field in self.get_table(key):
+            try:
+                del self[field][i]
+            except (IndexError, KeyError):
+                pass
 
+
+    def get_table(self, *path):
+        """Returns the table to which the field specified in path belongs"""
+        fields = self.fields.get(self.module, *path).get('columns', [])
+        return ['/'.join(field[1:]) for field in fields]
 
 
     def zip(self, *args):
