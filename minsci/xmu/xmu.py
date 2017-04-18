@@ -4,6 +4,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 from collections import namedtuple
 from datetime import datetime
 
@@ -241,7 +242,7 @@ class XMu(object):
             counter = {}
         for child in root:
             name = child.get('name')
-            # Check for tuples
+            # Check for unnamed tuples, which represent rows inside a table
             if name is None:
                 path = tuple(keys)
                 try:
@@ -254,8 +255,12 @@ class XMu(object):
                 # lxml always returns ascii-encoded strings in Python 2, so
                 # so convert to unicode here
                 val = unicode(child.text) if child.text is not None else u''
-                # Handle gaps in tables where the fields are also references
-                if val == '\n      ' and isinstance(keys[-1], int):
+                if child.tag == 'table':
+                    # Handle empty tables. These happen with nested tables
+                    # and possibly elsewhere.
+                    result.push([], *keys)
+                elif val == '\n      ' and isinstance(keys[-1], int):
+                    # Handle gaps in reference tables
                     keys.append(None)
                     result.push(None, *keys)
                     keys.pop()
@@ -264,6 +269,9 @@ class XMu(object):
                     while '  ' in val:
                         val = val.replace('  ', ' ')
                     result.push(val.strip(), *keys)
+                # Pop the table name from an empty table
+                if child.tag == 'table':
+                    keys.pop()
             else:
                 result = self.read(child, keys, result)
             keys.pop()
@@ -429,6 +437,8 @@ def _emuize(rec, root=None, path=None, handlers=None,
                 hashed = (hashlib.md5(group.fields +\
                           '|{}'.format(path)).hexdigest())
                 operator = group.operator.format(path + 1)
+                if not re.match(r'^(\+|-|\d+=)$', operator):
+                    raise ValueError('Illegal operator: {}'.format(operator))
                 root.set('row', operator)
                 if group.operator == '+':
                     root.set('group', hashed)
@@ -465,12 +475,15 @@ def _sort(paths):
     }
     for key, group in rules.iteritems():
         if key in paths:
+            keep = []
             for path in group:
                 try:
                     paths.remove(path)
                 except ValueError:
                     pass
-            paths.extend(group)
+                else:
+                    keep.append(path)
+            paths.extend(keep)
     return paths
 
 
