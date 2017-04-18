@@ -11,6 +11,7 @@ Taxonomy,IdeNamedPart_tab
 Taxonomy,IdeTextureStructure_tab
 Taxonomy,IdeComments_tab
 Taxonomy,IdeQualifier_tab
+Taxonomy,IdeIdentifiedByRef_tab
 CurrentLocation,LocLocationRef_tab
 CurrentLocation,LocMovementNotes_tab
 Movement,LocDateMoved0
@@ -25,9 +26,9 @@ Measurements,MeaCurrent_tab
 Color,MinColor_tab
 Multimedia,MulMultiMediaRef_tab
 Notes,NotNmnhText0
+Notes,NotNmnhDate0
 Notes,NotNmnhType_tab
 Notes,NotNmnhAttributedToRef_nesttab
-Notes,NotNmnhDate0
 Notes,NotNmnhWeb_tab
 InventoryStatus,StaInventoryStatus_tab
 InventoryStatus,StaInventoryRecordedByRef_tab
