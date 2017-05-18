@@ -24,6 +24,17 @@ import os
 # sys.path.insert(0, u'/Users/atmansur/Dropbox (Smithsonian)/python/packages/minsci')
 sys.path.insert(0, os.path.abspath('..'))
 
+# ReadTheDocs doesn't support many C libraries, so mock loading any modules
+# that depend on them.
+from mock import Mock as MagicMock
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+        return Mock()
+
+MOCK_MODULES = ['lxml']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 # -- General configuration ------------------------------------------------
 
