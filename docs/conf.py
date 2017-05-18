@@ -66,8 +66,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'minsci'
-copyright = u'2017, Author'
-author = u'Author'
+copyright = u'2017, adamancer'
+author = u'adamancer'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -90,8 +90,8 @@ language = 'en'
 # This patterns also effect to html_static_path and html_extra_path
 exclude_patterns = [
     '_build',
-    '../../register.py',
-    '../../setup.py',
+    '../register.py',
+    '../setup.py',
     'Thumbs.db',
     '.DS_Store'
     ]
