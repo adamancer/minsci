@@ -1,5 +1,5 @@
-minsci.geotaxa package
-======================
+minsci\.geotaxa package
+=======================
 
 Subpackages
 -----------
@@ -11,16 +11,16 @@ Subpackages
 Submodules
 ----------
 
-minsci.geotaxa.geotaxa module
------------------------------
+minsci\.geotaxa\.geotaxa module
+-------------------------------
 
 .. automodule:: minsci.geotaxa.geotaxa
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.geotaxa.updater module
------------------------------
+minsci\.geotaxa\.updater module
+-------------------------------
 
 .. automodule:: minsci.geotaxa.updater
     :members:

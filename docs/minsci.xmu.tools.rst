@@ -1,5 +1,5 @@
-minsci.xmu.tools package
-========================
+minsci\.xmu\.tools package
+==========================
 
 Subpackages
 -----------
@@ -12,56 +12,56 @@ Subpackages
 Submodules
 ----------
 
-minsci.xmu.tools.audits module
-------------------------------
+minsci\.xmu\.tools\.audits module
+---------------------------------
 
 .. automodule:: minsci.xmu.tools.audits
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.tools.describer module
----------------------------------
+minsci\.xmu\.tools\.describer module
+------------------------------------
 
 .. automodule:: minsci.xmu.tools.describer
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.tools.groups module
-------------------------------
+minsci\.xmu\.tools\.groups module
+---------------------------------
 
 .. automodule:: minsci.xmu.tools.groups
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.tools.legacy module
-------------------------------
+minsci\.xmu\.tools\.legacy module
+---------------------------------
 
 .. automodule:: minsci.xmu.tools.legacy
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.tools.mapper module
-------------------------------
+minsci\.xmu\.tools\.mapper module
+---------------------------------
 
 .. automodule:: minsci.xmu.tools.mapper
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.tools.matcher module
--------------------------------
+minsci\.xmu\.tools\.matcher module
+----------------------------------
 
 .. automodule:: minsci.xmu.tools.matcher
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.tools.operations module
-----------------------------------
+minsci\.xmu\.tools\.operations module
+-------------------------------------
 
 .. automodule:: minsci.xmu.tools.operations
     :members:

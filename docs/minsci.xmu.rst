@@ -1,5 +1,5 @@
-minsci.xmu package
-==================
+minsci\.xmu package
+===================
 
 Subpackages
 -----------
@@ -12,24 +12,24 @@ Subpackages
 Submodules
 ----------
 
-minsci.xmu.fields module
-------------------------
+minsci\.xmu\.fields module
+--------------------------
 
 .. automodule:: minsci.xmu.fields
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.xmu module
----------------------
+minsci\.xmu\.xmu module
+-----------------------
 
 .. automodule:: minsci.xmu.xmu
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.xmungo module
-------------------------
+minsci\.xmu\.xmungo module
+--------------------------
 
 .. automodule:: minsci.xmu.xmungo
     :members:

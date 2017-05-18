@@ -14,16 +14,16 @@ Subpackages
 Submodules
 ----------
 
-minsci.exceptions module
-------------------------
+minsci\.exceptions module
+-------------------------
 
 .. automodule:: minsci.exceptions
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.helpers module
----------------------
+minsci\.helpers module
+----------------------
 
 .. automodule:: minsci.helpers
     :members:

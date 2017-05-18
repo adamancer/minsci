@@ -1,16 +1,22 @@
-minsci.deepdict
-===============
+minsci\.deepdict package
+========================
 
-.. automodule:: minsci.deepdict
+Submodules
+----------
+
+minsci\.deepdict\.deepdict module
+---------------------------------
+
+.. automodule:: minsci.deepdict.deepdict
     :members:
     :undoc-members:
     :show-inheritance:
 
 
-minsci.deepdict.deepdict
-------------------------
+Module contents
+---------------
 
-.. automodule:: minsci.deepdict.deepdict
+.. automodule:: minsci.deepdict
     :members:
     :undoc-members:
     :show-inheritance:

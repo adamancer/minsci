@@ -1,11 +1,11 @@
-minsci.geotaxa.containers package
-=================================
+minsci\.geotaxa\.containers package
+===================================
 
 Submodules
 ----------
 
-minsci.geotaxa.containers.minscitaxon module
---------------------------------------------
+minsci\.geotaxa\.containers\.minscitaxon module
+-----------------------------------------------
 
 .. automodule:: minsci.geotaxa.containers.minscitaxon
     :members:

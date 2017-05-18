@@ -1,27 +1,27 @@
-minsci.xmu.tools.multimedia package
-===================================
+minsci\.xmu\.tools\.multimedia package
+======================================
 
 Submodules
 ----------
 
-minsci.xmu.tools.multimedia.cataloger module
---------------------------------------------
+minsci\.xmu\.tools\.multimedia\.cataloger module
+------------------------------------------------
 
 .. automodule:: minsci.xmu.tools.multimedia.cataloger
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.tools.multimedia.embedder module
--------------------------------------------
+minsci\.xmu\.tools\.multimedia\.embedder module
+-----------------------------------------------
 
 .. automodule:: minsci.xmu.tools.multimedia.embedder
     :members:
     :undoc-members:
     :show-inheritance:
 
-minsci.xmu.tools.multimedia.hasher module
------------------------------------------
+minsci\.xmu\.tools\.multimedia\.hasher module
+---------------------------------------------
 
 .. automodule:: minsci.xmu.tools.multimedia.hasher
     :members:
