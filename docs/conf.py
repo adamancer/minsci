@@ -33,7 +33,7 @@ class Mock(MagicMock):
     def __getattr__(cls, name):
         return Mock()
 
-MOCK_MODULES = ['lxml', 'pyodbc']
+MOCK_MODULES = ['lxml', 'pyodbc', 'minsci.helpers']
 sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 # -- General configuration ------------------------------------------------
