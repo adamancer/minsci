@@ -12,7 +12,8 @@ class Operation(XMu):
 
     def __init__(self, *args, **kwargs):
         super(Operation, self).__init__(*args, **kwargs)
-        self.module = None
+        self.module = 'eoperations'
+        #self.fields = FIELDS
         self.group = []
         self.records = {}
 
@@ -85,7 +86,7 @@ def write_operation(func, module, username, records, date,
 
 
 def merge(module, username, primary, duplicates,
-          name_key=None, date=None, delay=0):
+          mask=None, date=None, delay=0):
     """Creates an operation to merge a set of duplicates
 
     Args:
@@ -104,7 +105,7 @@ def merge(module, username, primary, duplicates,
     """
     operation = OPERATIONS.container({
         'MerTargetRef_': primary('irn'),
-        'OpeName': primary(name_key) if name_key is not None else 'Merge',
+        'OpeName': mask.format(**primary) if mask is not None else 'Merge',
         'OpeType': 'Merge',
         'OpeModule': module,
         'OpeExecutionTime': 'Yes',
@@ -115,7 +116,7 @@ def merge(module, username, primary, duplicates,
         })
     _set_operation_time(operation, date, delay)
     for rec in duplicates:
-        operation.setdefault('IrnsToBeProcessedRef_tab', []).append(rec('irn'))
+        operation.setdefault('IrnsToBeProcessedRef_tab_', []).append(rec('irn'))
     return operation.expand()
 
 
@@ -183,7 +184,7 @@ def _set_operation_time(operation, date=None, delay=None):
         The operation data modified to include a starttime
     """
     if delay is not None:
-        date = date.replace(hour=6, minute=31, second=0, microsecond=0)
+        #date = date.replace(hour=6, minute=31, second=0, microsecond=0)
         date += timedelta(seconds=delay)
         operation['OpeExecutionTime'] = 'No'
         operation['OpeDateToRun'] = date.strftime('%Y-%m-%d')
