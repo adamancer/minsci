@@ -117,7 +117,7 @@ class XMuFields(object):
         # Check if JSON is newer than XML
         try:
             json_newer = os.path.getmtime(cache_path) > os.path.getmtime(schema_path)
-        except OSError:
+        except (IOError, OSError)::
             json_newer = False
         if json_newer:
             cprint('Reading cached XMuFields object...')
@@ -209,7 +209,7 @@ class XMuFields(object):
         try:
             with open(fp, 'rb') as f:
                 modules = re_module.findall(f.read())
-        except OSError:
+        except (IOError, OSError):
             #raise Exception('{} not found'.format(fp))
             return DeepDict()
         schema = DeepDict()
