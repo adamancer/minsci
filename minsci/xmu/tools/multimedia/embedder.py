@@ -176,8 +176,9 @@ class Embedder(object):
                 return dst
         print ' Hashing original image...'
         pre_embed_hash = hash_image_data(path, output_dir=self.output_dir)
-        print ' Copying file to {}...'.format(self.output_dir)
-        shutil.copy2(path, dst)
+        if path != dst:
+            print ' Copying file to {}...'.format(self.output_dir)
+            shutil.copy2(path, dst)
         # Use exiftool to embed metadata in file
         metadata = self.derive_metadata(rec)
         cmd = ['exiftool', '-overwrite_original', '-v']
