@@ -3,6 +3,7 @@
 import os
 import re
 from collections import namedtuple
+from copy import deepcopy
 from pprint import pprint
 
 from requests.structures import CaseInsensitiveDict

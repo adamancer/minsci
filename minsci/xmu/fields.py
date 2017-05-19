@@ -117,7 +117,7 @@ class XMuFields(object):
         # Check if JSON is newer than XML
         try:
             json_newer = os.path.getmtime(cache_path) > os.path.getmtime(schema_path)
-        except (IOError, OSError)::
+        except (IOError, OSError):
             json_newer = False
         if json_newer:
             cprint('Reading cached XMuFields object...')
