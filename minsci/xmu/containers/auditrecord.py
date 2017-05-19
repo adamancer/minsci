@@ -14,46 +14,7 @@ class AuditRecord(XMuRecord):
 
     def __init__(self, *args):
         super(AuditRecord, self).__init__(*args)
-
-
-    def format_value(self, field, val):
-        """Formats values pulled from the old/new table for printing"""
-        if field.endswith(('0', '_nesttab', '_nesttab_inner', '_tab')):
-            vals = val if val is not None else []
-            vals = [u'<li>{}</li>'.format(val) for val in vals]
-            return u'<ol>' + u''.join(vals) + u'</ol>'
-        return val
-
-
-    def to_html(self, whitelist=None, blacklist=None):
-        """Converts an audit record to HTML for display"""
-        html = ['<h1>{}</h1>'.format(self('AudKey'))]
-        html.append(u'<table>')
-        keys = ['irn', 'AudUser', 'AudTable', 'AudOperation']
-        for key in keys:
-            html.append('<tr><th>{}</th><td colspan="2">{}</a>'.format(key, self(key)))
-        changes = self.parse_changes()
-        # Limit fields if whitelist or blacklist set
-        if whitelist:
-            changes = {fld: changes[fld] for fld in changes if fld in whitelist}
-        elif blacklist:
-            changes = {fld: changes[fld] for fld in changes if fld not in blacklist}
-        for field in sorted(changes):
-            change = changes[field]
-            #num_rows = max([len(val) if isinstance(val, list) else 1
-            #                for val in [change.old, change.new]
-            #                if val is not None])
-            old = self.format_value(field, change.old)
-            new = self.format_value(field, change.new)
-            # Capture changes only
-            if old != new:
-                html.append(u'<tr>')
-                html.append(u'<th>{}</th>'.format(field))
-                html.append(u'<td>{}</td>'.format(old))
-                html.append(u'<td>{}</td>'.format(new))
-                html.append(u'</tr>')
-        html.append(u'</table>')
-        return html
+        self.changes = None
 
 
     def parse_field(self, field):
@@ -61,7 +22,15 @@ class AuditRecord(XMuRecord):
         vals = {}
         for line in self(field):
             field, xml = line.split(': ', 1)
-            tree = etree.fromstring(xml)
+            if len(xml) >= 30000:
+                print 'Could not parse {}'.format(field)
+                vals[field] = 'PARSE_ERROR'
+                continue
+            try:
+                tree = etree.fromstring(xml)
+            except etree.XMLSyntaxError:
+                print xml
+                raise
             if xml.startswith('<atom'):
                 val = tree.text if isinstance(tree.text, unicode) else tree.text.decode('utf-8')
             else:
@@ -71,7 +40,7 @@ class AuditRecord(XMuRecord):
         return vals
 
 
-    def parse_changes(self):
+    def parse_changes(self, whitelist=None, blacklist=None):
         """Parse values in the old and new values table in Audits
 
         Args:
@@ -84,6 +53,17 @@ class AuditRecord(XMuRecord):
         # process each separately.
         old = self.parse_field('AudOldValue_tab')
         new = self.parse_field('AudNewValue_tab')
-        # Return dictionary of all changes
-        return {field: Change(field, old.get(field), new.get(field))
-                for field in set(old.keys() + new.keys())}
+        changes = {field: Change(field, old.get(field), new.get(field))
+                   for field in set(old.keys() + new.keys())}
+        # Limit fields based on whitelist/blacklist
+        if whitelist:
+            changes = {fld: changes[fld] for fld
+                       in changes if fld in whitelist}
+        elif blacklist:
+            endswith = ('Local', 'Local0', 'Local_tab')
+            changes = {fld: changes[fld] for fld in changes
+                       if (fld not in blacklist
+                           and not fld.startswith('Dar')
+                           and not fld.endswith(endswith))}
+        self.changes = changes
+        return changes

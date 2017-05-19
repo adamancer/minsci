@@ -3,6 +3,7 @@
 from random import randint
 
 from ...xmu import XMu, AuditRecord
+from ..containers.auditrecord import Change
 
 
 class Auditor(XMu):
@@ -29,8 +30,11 @@ class Auditor(XMu):
         self.percent_to_review = kwargs.pop('percent_to_review', 2)
         self.blacklist = kwargs.pop('blacklist', [])
         self.whitelist = kwargs.pop('whitelist', [])
+        # Filter params
+        self.modules = kwargs.pop('modules', [])
+        self.users = kwargs.pop('users', [])
         super(Auditor, self).__init__(*args, **kwargs)
-        print 'Reviewing about {}% of records'.format(self.percent_to_review)
+        print 'Reviewing around {}% of records'.format(self.percent_to_review)
         # Default values for the blacklist. Fields included here are not
         # printed in the HTML report.
         if not self.blacklist:
@@ -38,20 +42,119 @@ class Auditor(XMu):
                 'AdmDateModified',
                 'AdmModifiedBy',
                 'AdmTimeModified',
-                'DarDateLastModified'
+                'DarDateLastModified',
+                'ExiIfd_tab',
+                'ExiName_tab',
+                'ExiTag_tab',
+                'ExiValue_tab',
+                'ExtendedData',
+                'SummaryData'
                 ]
         self._container = AuditRecord
+        self.records = {}
         self._html = []  # results is a list of self.containers
 
 
     def iterate(self, element):
-        """Parses audit records into HTML"""
-        if (self.percent_to_review == 100
-            or randint(1, 100) <= self.percent_to_review):
-            rec = self.parse(element)
-            self._html.extend(rec.to_html(self.whitelist, self.blacklist))
-        else:
+        """Groups audit records by module and irn"""
+        rec = self.parse(element)
+        if rec('AudTable') == 'egroups':
             return True
+        key = '-'.join([rec('AudTable'), rec('AudKey')])
+        self.records.setdefault(key, []).append(rec)
+
+
+    def combine(self, records=None, keep_all=False):
+        """Parses audit records into HTML"""
+        if records is None:
+            records = self.records
+        combined = {}
+        for irn, recs in records.iteritems():
+            # Filter trails that don't include the specified users
+            if self.users:
+                if not [rec for rec in recs if rec('AudUser') in self.users]:
+                    continue
+            # Filter trails that don't include the specified modules
+            if self.modules:
+                if not [rec for rec in recs if rec('AudTable') in self.modules]:
+                    continue
+            # Filter trails that end in a delete
+            if [rec for rec in recs if rec('AudOperation') == 'delete']:
+                continue
+            # Get the audit trail
+            for rec in recs:
+                rec.parse_changes(self.whitelist, self.blacklist)
+            if len(recs) > 1:
+                # Sort from least to most recent modification time
+                recs.sort(key=lambda rec: 'T'.join([rec('AudDate'),
+                                                    rec('AudTime')]))
+                # Get the original values from the first record
+                changes = recs[0].changes
+                oldest = {fld: chg.old for fld, chg in changes.iteritems()}
+                newest = {fld: chg.new for fld, chg in changes.iteritems()}
+                for rec in recs[1:]:
+                    # Update original with values not modified in first audit
+                    old = {fld: chg.old for fld, chg in rec.changes.iteritems()}
+                    for key, val in old.iteritems():
+                        if oldest.get(key) is None:
+                            oldest[key] = val
+                    # Overwrite newest with new
+                    new = {fld: chg.new for fld, chg in rec.changes.iteritems()}
+                    newest.update(new)
+                # Summarize the oldest and newest dictionaries into one
+                # record combining the metadata of all the records
+                summarized = AuditRecord()
+                summarized['AudKey'] = rec('AudKey')
+                summarized['AudTable'] = rec('AudTable')
+                fields = ['irn', 'AudUser', 'AudOperation']
+                for fld in fields:
+                    items = '</li><li>'.join([rec(fld) for rec in recs])
+                    summarized[fld] = '<ul><li>{}</li></ul>'.format(items)
+                summarized.changes = {
+                    fld: Change(fld, oldest.get(fld), newest.get(fld))
+                    for fld in set(oldest.keys() + newest.keys())
+                    }
+                #summarized.pprint(True)
+                recs = [summarized]
+            combined[irn] = recs[0]
+        return combined
+
+
+    def finalize(self):
+        html = []
+        combined = self.combine()
+        print '{:,} distinct records were modified'.format(len(combined))
+        for irn, rec in combined.iteritems():
+            if (self.percent_to_review == 100
+                or randint(1, 100) <= self.percent_to_review):
+                html.extend(self.to_html(rec))
+        self._html = html
+        return html
+
+
+    def to_html(self, rec):
+        """Converts an audit record to HTML for display"""
+        html = ['<h1>{}: {}</h1>'.format(rec('AudTable'), rec('AudKey'))]
+        html.append(u'<table>')
+        keys = ['irn', 'AudUser', 'AudOperation']
+        for key in keys:
+            html.append('<tr><th>{}</th><td colspan="2">{}'
+                        '</td></tr>'.format(key, rec(key)))
+        if rec.changes is None:
+            rec.parse_changes(self.whitelist, self.blacklist)
+        for field in sorted(rec.changes):
+            change = rec.changes[field]
+            old = self.format_value(field, change.old)
+            new = self.format_value(field, change.new)
+            # Capture changes only
+            if old != new:
+                html.append(u'<tr>')
+                html.append(u'<th>{}</th>'.format(field))
+                html.append(u'<td>{}</td>'.format(old))
+                html.append(u'<td>{}</td>'.format(new))
+                html.append(u'</tr>')
+        html.append(u'</table>')
+        return html
 
 
     def write_html(self, fp, html=None):
@@ -76,3 +179,13 @@ class Auditor(XMu):
         html = header + self._html if html is None else html + footer
         with open(fp, 'wb') as f:
             f.write(''.join([s.encode('utf-8') for s in html]))
+
+
+    @staticmethod
+    def format_value(field, val):
+        """Formats values pulled from the old/new table for printing"""
+        if field.endswith(('0', '_nesttab', '_nesttab_inner', '_tab')):
+            vals = val if val is not None else []
+            vals = [u'<li>{}</li>'.format(val) for val in vals]
+            return u'<ol>' + u''.join(vals) + u'</ol>'
+        return val
