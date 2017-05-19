@@ -31,11 +31,12 @@ class XMuFields(object):
     """
 
     def __init__(self, schema_path=None, whitelist=None, blacklist=None,
-                 cache=False, verbose=False):
+                 cache=True, verbose=False):
         self.verbose = verbose
         self._fpath = os.path.join(os.path.dirname(__file__), 'files')
-        if blacklist is None:
-            blacklist = [
+        # Set defaults for blacklist
+        defaults = {
+            'blacklist': [
                 'eaccessionlots',
                 'edocuments',
                 'eevents',
@@ -56,32 +57,25 @@ class XMuFields(object):
                 'evaluations',
                 'ewebgroups',
                 'ewebusers',
-            ]
-        blacklist = set(blacklist)
+            ],
+            'schema_path': os.path.join(self._fpath, 'NMNH-schema.pl')
+        }
+        blacklist = set(defaults['blacklist'] if not blacklist else blacklist)
+        if not schema_path:
+            schema_path = defaults['schema_path']
         if cache:
-            cache_file = cache
-            cprint('Checking for cached XMuFields object...')
-            try:
-                with open(cache_file, 'rb') as f:
-                    fields = serialize.load(f)
-            except IOError:
-                cprint('No cache found!')
-                cache = None  # None is different than False
-            except KeyError:
-                cprint('Cache is not JSON!')
-                cache = None
-            else:
-                try:
-                    self.schema = fields['schema']
-                    self.tables = fields['tables']
-                    self.map_tables = fields['map_tables']
-                    self.hashed_tables = fields['hashed_tables']
-                    #self.aliases = fields['aliases']
-                except KeyError:
-                    print 'Could not read cache!'
-        if not cache:
-            if schema_path is None:
-                schema_path = os.path.join(self._fpath, 'NMNH-schema.pl')
+            cache_path = schema_path.rsplit('.', 1)[0] + '.json'
+        # Set params. These will be added to the cache file to determine
+        # if the cache request is valid.
+        params = {
+            'blacklist': list(blacklist) if blacklist else None,
+            'cache_path': cache_path,
+            'schema_path': schema_path,
+            'whitelist': list(whitelist) if whitelist else None
+        }
+        # Check cache
+        cached = self._check_cache(params) if cache else None
+        if cached is None:
             cprint('Reading EMu schema...')
             # Extend schema based on source file, if specified. This
             # tries to assure that any paths in the source file are included
@@ -93,24 +87,64 @@ class XMuFields(object):
             self.hashed_tables = {}       # maps hash of tables to tables
             self.tables = self._read_tables()
             self._map_fields_to_tables()  # adds table fields to schema dict
-        # Dump fields object as json
-        if cache is None:
-            cprint('Caching XMuFields object...')
-            fields = {
-                'schema': self.schema,
-                'tables': self.tables,
-                'map_tables': self.map_tables,
-                'hashed_tables': self.hashed_tables,
-                #'aliases': self.aliases,
-            }
-            with open(cache_file, 'wb') as f:
-                serialize.dump(fields, f)
-        cprint('Finished reading field data!')
+            # Cache fields object as JSON
+            if cache:
+                cprint('Caching XMuFields object...')
+                # Convert keys in map_tables to string
+                map_tables = {'|'.join(key): val for key, val
+                              in self.map_tables.iteritems()}
+                fields = {
+                    'params': params,
+                    'schema': self.schema,
+                    'tables': self.tables,
+                    'map_tables': map_tables,
+                    'hashed_tables': self.hashed_tables,
+                }
+                with open(cache_path, 'wb') as f:
+                    serialize.dump(fields, f)
 
 
     def __call__(self, *args):
         """Shorthand for :py:func:`~XMuFields.get(*args)`"""
         return self.get(*args)
+
+
+    def _check_cache(self, params):
+        """Check for cached XMuFields object"""
+        schema_path = params['schema_path']
+        cache_path = params['cache_path']
+        cached = None
+        # Check if JSON is newer than XML
+        try:
+            json_newer = os.path.getmtime(cache_path) > os.path.getmtime(schema_path)
+        except OSError:
+            json_newer = False
+        if json_newer:
+            cprint('Reading cached XMuFields object...')
+            try:
+                with open(cache_path, 'rb') as f:
+                    cached = serialize.load(f)
+            except IOError:
+                cprint('Cache file not found!')
+            except KeyError:
+                cprint('Cache file not JSON!')
+            else:
+                # Check logged in the cached file
+                if params != cached.get('params'):
+                    cached = None
+                else:
+                    try:
+                        map_tables = {tuple(key.split('|')): val for key, val
+                                      in cached['map_tables'].iteritems()}
+                        self.schema = cached['schema']
+                        self.tables = cached['tables']
+                        self.map_tables = map_tables
+                        self.hashed_tables = cached['hashed_tables']
+                    except KeyError:
+                        cprint('Cache file missing required keys!')
+                        cached = None
+        return cached
+
 
 
     def get(self, *args):
@@ -133,10 +167,14 @@ class XMuFields(object):
                 mapping = mapping[args[i]]
             except KeyError:
                 try:
+                    # Try jumping to a referenced module
                     mapping = self.schema[mapping['schema']['RefTable']]
                 except KeyError:
                     if args[0] is None:
-                        raise KeyError('Unrecognized module: {}'.format(args))
+                        raise KeyError('No module specified: {}'.format(args))
+                    elif not self.schema:
+                        # No error on bad path if the schema is not defined
+                        print 'No schema defined'
                     else:
                         raise KeyError('Illegal path: {}'.format(args))
             else:
@@ -162,7 +200,7 @@ class XMuFields(object):
             LookupParent: The name of next highest field in a lookup hierarchy.
 
         Returns:
-            Dictionary with information about the XML schema
+            DeepDict with information about the XML schema
         """
         # Regexes are used to split the .pl file into modules and fields
         re_module = re.compile(r'\te[a-z]+ =>.*?\{.*?\n\t\}', re.DOTALL)
@@ -172,7 +210,8 @@ class XMuFields(object):
             with open(fp, 'rb') as f:
                 modules = re_module.findall(f.read())
         except OSError:
-            raise Exception('{} not found'.format(fp))
+            #raise Exception('{} not found'.format(fp))
+            return DeepDict()
         schema = DeepDict()
         for module in sorted(list(modules)):
             module_name = module.split('\n')[0].strip().split(' ')[0]
@@ -445,7 +484,7 @@ class XMuFields(object):
 
 
 def is_table(*args):
-    """Assess whether a path points to a table
+    """Checks whether a path points to a table
 
     Args:
         path (str): period-delimited path to a given field
@@ -458,7 +497,7 @@ def is_table(*args):
 
 
 def is_reference(*args):
-    """Assess whether a path is a reference
+    """Checks whether a path is a reference
 
     Args:
         path (str): period-delimited path to a given field
