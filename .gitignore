@@ -19,12 +19,14 @@ README.rst
 # Other files to ignore
 minsci/.gitattributes
 minsci/.pylintrc
+*.json
 *.pl
 
 # Documentation
 /docs/_build
 /docs/_static
 /docs/_templates
+/docs/html
 /docs/make.bat
 /docs/Makefile
 /docs/*.log
