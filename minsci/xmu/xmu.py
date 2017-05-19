@@ -10,13 +10,13 @@ from datetime import datetime
 
 from lxml import etree
 
+from .constants import FIELDS
 from .containers import XMuRecord
-from .fields import XMuFields, is_table, is_reference
+from .fields import is_table, is_reference
 from ..exceptions import RowMismatch
 from ..helpers import cprint
 
 
-FIELDS = XMuFields()
 Grid = namedtuple('Grid', ['fields', 'operator'])
 
 
@@ -269,9 +269,6 @@ class XMu(object):
                     while '  ' in val:
                         val = val.replace('  ', ' ')
                     result.push(val.strip(), *keys)
-                # Pop the table name from an empty table
-                if child.tag == 'table':
-                    keys.pop()
             else:
                 result = self.read(child, keys, result)
             keys.pop()
@@ -416,7 +413,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
             parent.remove(root)
             root = parent
         try:
-            atom.set('name', path)
+            atom.set('name', path.rstrip('_'))
         except TypeError:
             parent = etree.tostring(root.getparent())
             raise ValueError('Path must be string. Got {} instead. Parent'
@@ -443,9 +440,9 @@ def _emuize(rec, root=None, path=None, handlers=None,
                 if group.operator == '+':
                     root.set('group', hashed)
                 group = None
-        elif is_table(path):
+        elif is_table(path.rstrip('_')):
             root = etree.SubElement(root, 'table')
-            root.set('name', path)
+            root.set('name', path.rstrip('_'))
         elif is_reference(path):
             root = etree.SubElement(root, 'tuple')
             root.set('name', path)
