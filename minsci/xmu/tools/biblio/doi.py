@@ -15,7 +15,8 @@ from nameparser import HumanName
 
 from .bibbot import BibBot
 from .ris import split_records, ris2dict
-from ....xmu import XMu, BiblioRecord, write, FIELDS
+from ....xmu.constants import FIELDS
+from ....xmu import XMu, BiblioRecord, write
 
 
 MODULE = 'ebibliography'

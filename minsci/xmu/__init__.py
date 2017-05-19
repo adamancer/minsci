@@ -8,3 +8,4 @@ from .containers.auditrecord import AuditRecord
 from .containers.bibliorecord import BiblioRecord
 from .containers.mediarecord import MediaRecord, EmbedFromEMu
 from .containers.minscirecord import MinSciRecord
+from .containers.taxonrecord import Taxon
