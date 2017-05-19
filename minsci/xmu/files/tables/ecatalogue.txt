@@ -16,6 +16,7 @@ CurrentLocation,LocLocationRef_tab
 CurrentLocation,LocMovementNotes_tab
 Movement,LocDateMoved0
 Movement,LocMovedByRef_tab
+Measurements,MeaOf_tab
 Measurements,MeaType_tab
 Measurements,MeaVerbatimValue_tab
 Measurements,MeaVerbatimUnit_tab
