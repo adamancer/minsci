@@ -26,12 +26,12 @@ class MongoBot(object):
                 'db': 'cs',
                 'collections': ['catalog', 'narrative']
                 },
-            'development': {
-                'host': 'nmnh-rcisdev2:27017',
-                'login_db': 'ms',
-                'db': 'ms',
-                'collections': ['catalog', 'narrative']
-                }
+            #'development': {
+            #    'host': 'nmnh-rcisdev2:27017',
+            #    'login_db': 'ms',
+            #    'db': 'ms',
+            #    'collections': ['catalog', 'narrative']
+            #    }
         }
         self.jsonpath = 'xmungo.json'
         self.connections = {}
@@ -189,6 +189,8 @@ class XMungo(MongoBot):
     def __init__(self, *args, **kwargs):
         self._skip = kwargs.pop('skip', 0)
         container = kwargs.pop('container', XMuRecord)
+        if container.geotree is None:
+            raise AttributeError('Set container.geotree = get_tree()')
         module = kwargs.pop('module')
         super(XMungo, self).__init__(*args, **kwargs)
         # Create a private xmudata attribute so XMungo can use write XML
@@ -346,8 +348,8 @@ def mongo2xmu(doc, container):
         'CatSuffix': doc.getpath('catnb.catsf'),
         'CatDivision': doc.getpath('catdv'),
         'CatCatalog': doc.getpath('catct'),
-        'CatCollectionName_tab': [doc.getpath('catcn')],
-        'CatSpecimentCount': doc.getpath('darin'),
+        'CatCollectionName_tab': doc.getpath('catcn', []),
+        'CatSpecimenCount': str(int(doc.getpath('darin'))),
         'MinName': doc.getpath('minnm'),
         'MinJeweleryType': doc.getpath('minjt'),
         'MetMeteoriteName': doc.getpath('metnm'),
@@ -393,10 +395,10 @@ def mongo2xmu(doc, container):
     # Map nested tables
     lat = doc.getpath('darlt')
     if lat:
-        cat['BioEventSiteRef']['LatLatitudeDecimal_nesttab'] = [lat]
+        cat['BioEventSiteRef']['LatLatitudeDecimal_nesttab'] = [[lat]]
     lng = doc.getpath('darln')
     if lng:
-        cat['BioEventSiteRef']['LatLongitudeDecimal_nesttab'] = [lng]
+        cat['BioEventSiteRef']['LatLongitudeDecimal_nesttab'] = [[lng]]
     # Map complex arrays
     for caton in doc.getpath('caton', []):
         catnt = caton.get('catnt', '')
@@ -431,10 +433,14 @@ def mongo2xmu(doc, container):
         zoopr = zoopp.get('zoopr', '')
         zoopc = zoopp.get('zoopc', '')
         cat.setdefault('ZooPreparation_tab', []).append(zoopr)
-        cat.setdefault('ZooPreparationCount_tab', []).append(zoopc)
+        cat.setdefault('ZooPreparationCount_tab', []).append(str(zoopc))
     for taxon in doc.getpath('ideil', []):
         cat.setdefault('IdeTaxonRef_tab', []).append(
-            container({'ClaSpecies': taxon.get('idetx')})
+            #container({'ClaSpecies': taxon.get('idetx')})
+            #container({'ClaOtherValue_tab': [{
+            #    'ClaOtherValue': taxon.get('idetx')
+            #}]})
+            container({'ClaScientificName': taxon.get('idetx')})
         )
     # Set collector(s)
     parties = doc.getpath('biopr', [])
@@ -445,4 +451,7 @@ def mongo2xmu(doc, container):
     modtime = doc.getpath('admdm')
     cat['AdmDateModified'] = modtime.strftime('%Y-%m-%d')
     cat['AdmTimeModified'] = modtime.strftime('%H:%M:%S')
-    return cat.expand()
+    #cat.pprint()
+    cat.expand()
+    #cat.pprint(True)
+    return cat
