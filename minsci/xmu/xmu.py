@@ -195,7 +195,7 @@ class XMu(object):
 
     def autoiterate(self, keep=None, **kwargs):
         """Automatically iterates over the source file and caches the result"""
-        if keep is None:
+        if keep is None and self.keep:
             keep = self.keep
         if keep is not None:
             self.keep = keep
