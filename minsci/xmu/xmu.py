@@ -69,7 +69,7 @@ class XMu(object):
             xpaths = []
         elif os.path.isdir(path):
             self._files = [fp for fp in glob.glob(os.path.join(path, '*.xml'))]
-            self._files.sort(os.path.getmtime, reverse=True)
+            self._files.sort(key=lambda fp: os.path.getmtime(fp), reverse=True)
             xpaths = []
             for fp in self._files:
                 xpaths.extend(self.fields.read_fields(fp))
@@ -78,7 +78,7 @@ class XMu(object):
             xpaths = self.fields.read_fields(path)
             self._files = [path]
         else:
-            raise Exception('Invalid path')
+            raise Exception('Invalid path: {}'.format(path))
         # Check that all xpaths are valid according to schema
         remove = []
         for xpath in xpaths:
@@ -98,7 +98,9 @@ class XMu(object):
 
     def parse(self, element):
         """Converts XML record to XMu dictionary"""
-        return self.read(element).unwrap()
+        rec = self.read(element).unwrap()
+        rec.finalize()
+        return rec
 
 
     def container(self, *args):
@@ -183,12 +185,27 @@ class XMu(object):
             del context
             if not keep_going:
                 break
-        print '{:,} records processed! ({:,} successful)'.format(n_total,
-                                                                 n_success)
+        print ('{:,} records processed!'
+               ' ({:,} successful)').format(n_total, n_success)
+        self.finalize()
         if callback is not None:
             callback()
-        self.finalize()
         return True
+
+
+    def autoiterate(self, keep=None, **kwargs):
+        """Automatically iterates over the source file and caches the result"""
+        if keep is None:
+            keep = self.keep
+        if keep is not None:
+            self.keep = keep
+            try:
+                self.load()
+            except (IOError, OSError, ValueError):
+                callback = kwargs.pop('callback', self.save)
+                self.fast_iter(callback=callback, **kwargs)
+        else:
+            self.fast_iter(**kwargs)
 
 
     def save(self, fp=None):
@@ -197,7 +214,7 @@ class XMu(object):
             fp = os.path.splitext(self.path)[0] + '.json'
         print 'Saving data to {}...'.format(fp)
         data = {key: getattr(self, key) for key in self.keep}
-        json.dump(data, open(fp, 'wb'))
+        json.dump(data, open(fp, 'wb'), cls=ABCEncoder)
 
 
     def load(self, fp=None):
@@ -219,7 +236,7 @@ class XMu(object):
         self.keep = fields
 
 
-    def read(self, root, keys=None, result=None, counter=None):
+    def read1(self, root, keys=None, result=None, counter=None):
         """Read an EMu XML record to a dictionary
 
         This is much faster than iterating through the XMu.xpaths list.
@@ -271,6 +288,80 @@ class XMu(object):
                     result.push(val.strip(), *keys)
             else:
                 result = self.read(child, keys, result)
+            keys.pop()
+        return result
+
+
+    def read(self, root, keys=None, result=None, counter=None):
+        """Read an EMu XML record to a dictionary
+
+        This is much faster than iterating through the XMu.xpaths list.
+
+        Args:
+            root (lxml.etree): an EMu XML record
+            keys (list): parents of the current key
+            result (XMuRecord): path-keyed representation of root updated as
+                the record is read
+            counter (dict): tracks row counts by path
+
+        Returns:
+            Path-keyed dictionary representing root
+        """
+        if keys is None:
+            keys = [self.module]
+        if counter is None:
+            counter = {}
+        if result is None:
+            result = self.container()
+            result[self.module] = self.container()
+            self.read(root, keys, result[self.module], counter)
+            return result
+        for child in root:
+            name = child.get('name')
+            # Check for unnamed tuples, which represent rows inside a table
+            if name is None:
+                path = tuple(keys)
+                try:
+                    counter[path] += 1
+                except KeyError:
+                    counter[path] = 0
+                name = counter[path]
+            keys.append(name)
+            if not len(child):
+                # lxml always returns ascii-encoded strings in Python 2, so
+                # so convert to unicode here
+                val = unicode(child.text) if child.text is not None else u''
+                if child.tag == 'table':
+                    # Handle empty tables. These happen with nested tables
+                    # and possibly elsewhere.
+                    result[name] = []
+                elif val == '\n      ' and isinstance(keys[-1], int):
+                    # Handle gaps in reference tables
+                    keys.append(None)
+                    try:
+                        result[name] = None
+                    except IndexError:
+                        # Catches error if tuple is completely empty
+                        result.append(self.container())
+                    keys.pop()
+                else:
+                    # Strip double spaces
+                    while '  ' in val:
+                        val = val.replace('  ', ' ')
+                    result[name] = val.strip()
+            else:
+                if isinstance(name, int):
+                    try:
+                        result.append(self.container())
+                    except IndexError:
+                        result = [self.container()]
+                    self.read(child, keys, result[-1])
+                elif name.endswith(('0', '_tab', '_inner', '_nesttab')):
+                    result[name] = []
+                    self.read(child, keys, result[name])
+                else:
+                    result[name] = self.container()
+                    self.read(child, keys, result[name])
             keys.pop()
         return result
 
@@ -336,6 +427,23 @@ class XMu(object):
             return new_val, False
 
 
+
+
+class ABCEncoder(json.JSONEncoder):
+
+    def __init__(self, *args, **kwargs):
+        super(ABCEncoder, self).__init__(*args, **kwargs)
+
+
+    def default(self, abc):
+        try:
+            return abc.obj
+        except AttributeError:
+            return json.JSONEncoder.default(self, abc)
+
+
+
+
 def check_table(rec, *args):
     """Check that the columns in a table are all the same length"""
     try:
@@ -381,6 +489,8 @@ def _emuize(rec, root=None, path=None, handlers=None,
     if fields is None:
         fields = rec.fields
     rec = rec[path]
+    if rec is None:
+        return root
     # Check if for append, prepend, and replacement operators. If found,
     # determines the necessary attributes and passes it to any immediate
     # children.
@@ -390,8 +500,8 @@ def _emuize(rec, root=None, path=None, handlers=None,
             table = fields.map_tables[(module, path)]
         except KeyError:
             # Check for tables that aren't being handled
-            if path.endswith('tab'):
-                print 'Unassigned column: {}'.format(path)
+            if path.endswith(('tab', '0')):
+                raise ValueError('Unassigned column: {}.{}'.format(module, path))
         except AttributeError:
             pass
         else:
