@@ -8,7 +8,8 @@ from pytz import timezone
 
 from dateparser import parse
 
-from ...deepdict import DeepDict
+from ..constants import FIELDS
+from ...dicts import DeepDict
 
 
 Row = namedtuple('Row', ['irn', 'field', 'row', 'val'])
@@ -19,17 +20,77 @@ class XMuRecord(DeepDict):
 
     def __init__(self, *args):
         super(XMuRecord, self).__init__(*args)
-        self.tabends = ('0', '_nesttab', '_nesttab_inner', '_tab')
-        self.refends = ('Ref', 'Ref_tab')
         self._attributes = ['fields', 'module']
         # Set defaults for carryover attributes
         for attr in self._attributes:
             setattr(self, attr, None)
+        self.tabends = ('0', '_nesttab', '_nesttab_inner', '_tab')
+        self.refends = ('Ref', 'Ref_tab')
+        self.fields = FIELDS
 
 
     def __call__(self, *args, **kwargs):
         """Shorthand for XMuRecord.smart_pull(*args)"""
         return self.smart_pull(*args)
+
+
+    '''
+    def __getattribute__(self, attr):
+        try:
+            val = super(XMuRecord, self).__getattribute__(attr)
+        except AttributeError:
+            if attr == 'fields':
+                self.fields = FIELDS
+                return FIELDS
+            raise
+        else:
+            if attr == 'fields' and val is None:
+                self.fields = FIELDS
+                return FIELDS
+            return val
+    '''
+
+
+    def finalize(self, *args, **kwargs):
+        pass
+
+
+    def add(self, path, val, delim='|'):
+        if isinstance(path, basestring):
+            path = path.split('/')
+        rec = self
+        for i, seg in enumerate(path):
+            is_tab = seg.endswith(self.tabends)
+            is_ref = seg.endswith(self.refends)
+            if is_tab and is_ref:
+                # This catches lists of irns
+                if isinstance(val, list) and all([v.isnumeric() for v in val]):
+                    rec.setdefault(seg, []).extend(val)
+                # This catches tables with values that don't work with this func
+                elif val and i == len(path) - 1:
+                    raise ValueError('{}: {}'.format(path, val))
+                else:
+                    rec.setdefault(seg, []).append(self.clone())
+                    rec = rec[seg]
+            elif is_ref:
+                rec = rec.setdefault(seg, self.clone())
+            elif path[-1] == seg:
+                vals = []
+                if val is not None:
+                    vals = [s.strip() for s in val.split(delim)]
+                else:
+                    val = u''
+                rec[seg] = vals if seg.endswith(self.tabends) else val
+            else:
+                raise ValueError('{}: {}'.format(path, val))
+
+
+    def setdefault(self, key, val, delim='|'):
+        if '/' in key:
+            raise KeyError('Illegal key: {}'.format(key))
+        if key.endswith(self.tabends) and not isinstance(val, list):
+            val = val.split(delim)
+        return super(XMuRecord, self).setdefault(key, val)
 
 
     def simple_pull(self, path):
@@ -63,6 +124,7 @@ class XMuRecord(DeepDict):
                 A reference table returns a list of XMuRecord objects
                 A nested table returns a list of lists
         """
+        assert self.module
         # Nested tables need to be handled very carefully
         nested = [arg for arg in args if arg.endswith('_nesttab')]
         if nested:
@@ -79,6 +141,8 @@ class XMuRecord(DeepDict):
             try:
                 retval = [row.get_rows(*inner_table, **kwargs)
                           for row in self.pull(*outer_table)]
+            except AttributeError:
+                retval = [[]]
             except KeyError:
                 retval = [[]]
         # Reference tables return a list of dictionaries, unless a field
@@ -93,12 +157,13 @@ class XMuRecord(DeepDict):
         # Atomic references return a single dictionary, whereas atomic
         # fields return a value
         else:
+            default = self.clone() if args[-1].endswith(self.refends) else u''
             try:
                 val = self.pull(*args, **kwargs)
             except KeyError:
-                retval = u''
+                retval = default
             else:
-                retval = val if val is not None else u''
+                retval = val if val is not None else default
         # Update module attribute for references/attachments
         if args[-1].endswith(self.refends):
             path = [self.module] + list(args)
@@ -109,7 +174,7 @@ class XMuRecord(DeepDict):
                         val.module
                     except AttributeError:
                         val = self.clone(val)
-                    val.module = field_data['schema']['RefTable']
+                    val.module = field_data['schema'].get('RefTable')
             else:
                 retval.module = field_data['schema']['RefTable']
         # Verify path against the schema if no value is returned. A failed
@@ -119,14 +184,47 @@ class XMuRecord(DeepDict):
             path = [self.module] + list(args)
             try:
                 self.fields.get(*path)
-            except AttributeError:
-                pass
             except KeyError:
                 raise KeyError('/'.join(args))
         # Last check
         if retval is None:
             raise TypeError
         return retval
+
+
+    def verify(self):
+        for path in self.get_paths():
+            path.insert(0, self.module)
+            path = [seg.rsplit('(', 1)[0].rstrip('_') for seg in path]
+            try:
+                self.fields.get(*path)
+            except KeyError:
+                if not [seg for seg in path if seg.startswith('_')]:
+                    raise KeyError('/'.join(path))
+
+
+    def get_paths(self, rec=None, path=None, paths=None):
+        if rec is None:
+            rec = self
+        if path is None:
+            path = []
+        if paths is None:
+            paths = []
+        for key in rec:
+            path.append(key)
+            try:
+                child = rec(key)
+            except IOError:
+                for child in rec:
+                    paths = self.get_paths(rec=child, path=path, paths=paths)
+            else:
+                if isinstance(child, dict):
+                    paths = self.get_paths(rec=child, path=path, paths=paths)
+                else:
+                    paths.append(path[:])
+            path.pop()
+        return paths
+
 
 
     '''
@@ -258,6 +356,26 @@ class XMuRecord(DeepDict):
         return [val for label, val in rows if standardize(label) == match]
 
 
+    def get_location(self, current=False, keyword=None):
+        """Returns the current or permanent location of a specimen"""
+        locs = self('LocLocationRef_tab' if current else 'LocPermanentLocationRef')
+        if not current:
+            locs = [locs]
+        for i, loc in enumerate(locs):
+            try:
+                locs[i] = loc['SummaryData']
+            except KeyError:
+                val = [loc('LocLevel{}'.format(x)) for x in xrange(1,9)]
+                locs[i] = ' - '.join([s for s in val if s]).upper()
+        # Filter multiple locations on keyword
+        if keyword:
+            try:
+                return [s for s in locs if keyword.lower() in s.lower()][0]
+            except IndexError:
+                pass
+        return locs[-1]
+
+
     def get_date(self, date_from, date_to=None, date_format='%Y-%m-%d'):
         """Returns dates and date ranges
 
@@ -278,6 +396,12 @@ class XMuRecord(DeepDict):
             if not parsed in date_range:
                 date_range.append(parsed)
         return ' to '.join(date_range)
+
+
+    def get_datetime(self, date_from, date_to=None, date_modifier=None,
+                     time_from=None, time_to=None, time_modifier=None,
+                     conjunction=' to ', format='%Y%m%dT%H%M%S'):
+            pass
 
 
     def get_note(self, kind):
@@ -372,7 +496,7 @@ class XMuRecord(DeepDict):
 
 
     def wrap(self, module):
-        """Wrap the XMuRecord with name of module
+        """Wraps the XMuRecord with name of module
 
         Args:
             module (str): name of module to use as key
@@ -385,7 +509,7 @@ class XMuRecord(DeepDict):
 
 
     def unwrap(self):
-        """Remove outermost level of XMuRecord
+        """Removes outermost level of XMuRecord
 
         This simplifies the paths needed to pull data from the record. The
         record will need to be wrapped again before writing to XML.
@@ -397,64 +521,83 @@ class XMuRecord(DeepDict):
         return self[self.keys()[0]]
 
 
-    def expand(self):
-        """Expand a flattened record"""
+    def expand(self, keep_empty=False):
+        """Expands and verifies a flattened record"""
+        self._expand(keep_empty=keep_empty)
+        self.verify()
+        return self
+
+
+    def _expand(self, keep_empty=False):
+        """Expands a flattened record"""
         # Clear pre/append logic if record is not an update
         try:
             self['irn']
         except KeyError:
-            update = False
+            pass
         else:
-            update = True
+            keep_empty = True
         # Empty atoms should be excluded from appends; they show up as empty
         # tags and will therefore erase any value currently in the table.
         # Also strips append markers from records that do not include an irn.
         for key in self.keys():
             if key.endswith(')') and not self[key]:
                 del self[key]
-            elif not update:
+            elif not keep_empty:
                 k = key.rsplit('(', 1)[0]
                 if k != key:
                     if self[key]:
                         self[k] = self[key]
                     del self[key]
+            elif key.startswith('_'):
+                del self[key]
         # Expand shorthand keys, including tables and simple references.
         # Keys pointing to other XMuRecord objects are left alone.
         for key in self.keys():
             val = self[key]
             k = key.rsplit('(', 1)[0]               # key stripped of row logic
-            base = key.split('_', 1)[0].rstrip('(0+)') # key without table info
+            base = key.rstrip('_').split('_', 1)[0].rstrip('(0+)') # strip _tab
             # Confirm that data type appears to be correct
-            if key.endswith(('0', 'tab', ')')) and not isinstance(val, list):
+            if (key.rstrip('_').endswith(('0', 'tab', ')'))
+                and not isinstance(val, list)):
                 raise ValueError('{} must be a list'.format(key))
             elif (val
                   and not key.startswith('_')
-                  and not key.endswith(('0', 'tab', ')', 'Ref'))
+                  and not key.rstrip('_').endswith(('0', 'tab', ')', 'Ref'))
                   and not isinstance(val, (basestring, int, long, float))):
                 raise ValueError('{} must be atomic'.format(key))
+            # Handle nested tables
             if k.endswith('_nesttab'):
                 # Test if the table has already been expanded by looking
                 # for a corresponding _nesttab_inner key
                 try:
-                    expanded = k + '_inner' in val[0].keys()
-                    #expanded = k + '_inner' in val.keys()
+                    expanded = any([k + '_inner' in v.keys() for v in val])
                 except (AttributeError, IndexError):
                     expanded = False
                 if not expanded and any(val):
                     if 'Ref_' in k:
                         base = 'irn'
-                    self[key] = [self.clone({
-                        k + '_inner': [self.clone({base: s}) for s in val]
-                        })]
+                    if isinstance(val[0], basestring):
+                        self[key] = [self.clone({
+                            k + '_inner': [self.clone({base: s}) for s in val]
+                            })]
+                    else:
+                        self[key] = []
+                        for s in val:
+                            self[key].append(self.clone({
+                                k + '_inner': [self.clone({base: s}) for s in s]
+                                }))
+                elif not expanded:
+                    self[key] = []
             elif (k.endswith('Ref')
                   and isinstance(val, (int, str, unicode))
                   and val):
                 self[key] = self.clone({'irn': val})
             elif k.endswith('Ref'):
                 try:
-                    self[key].expand()
+                    self[key]._expand(keep_empty=True)
                 except AttributeError:
-                    self[key] = self.clone(self[key]).expand()
+                    self[key] = self.clone(self[key])._expand(keep_empty=True)
             elif (k.endswith('Ref_tab')
                   and isinstance(val, list)
                   and any(val)
@@ -464,16 +607,17 @@ class XMuRecord(DeepDict):
             elif (k.endswith('Ref_tab')
                   and isinstance(val, list)
                   and any(val)):
-                try:
-                    self[key] = [self.clone(d).expand() for d in val]
-                except TypeError:
-                    raise
-            elif (k.endswith(self.tabends)
+                self[key] = [self.clone(d)._expand(keep_empty=True) for d in val]
+            elif (k.rstrip('_').endswith(self.tabends)
                   and isinstance(val, list)
                   and any(val)
                   and isinstance(val[0], (int, str, unicode))):
-                self[key] = [self.clone({base: s}) for s in self[key]]
-            elif (k.endswith(self.tabends)
+                try:
+                    self[key] = [self.clone({base: s}) if base not in s else s for s in self[key]]
+                except:
+                    print key
+                    raise
+            elif (k.rstrip('_').endswith(self.tabends)
                   and isinstance(val, list)
                   and not any(val)):
                 self[key] = []
@@ -550,8 +694,8 @@ class XMuRecord(DeepDict):
         return izip_longest(*[self(arg) for arg in args])
 
 
-
-
 def standardize(val):
     """Standardize the format of a value"""
+    if val is None:
+        val = u''
     return re.sub(r'[\W]', u'', val.upper()).upper()
