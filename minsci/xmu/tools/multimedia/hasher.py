@@ -58,8 +58,8 @@ def hash_image_data(path, output_dir='images'):
         # The derivatives can be compared to ensure that the image hasn't
         # been messed up. Requires ImageMagick.
         fn = os.path.basename(path)
-        jpeg = os.path.splitext(fn)[0] + '.jpg'
-        cmd = 'iconvert "{}" "{}"'.format(path, jpeg)
+        jpeg = os.path.splitext(fn)[0] + '_temp.jpg'
+        cmd = 'magick "{}" "{}"'.format(path, jpeg)
         return_code = subprocess.call(cmd, cwd=output_dir)
         if return_code:
             raise IOError('Hash failed: {}'.format(fn))
