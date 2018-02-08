@@ -728,16 +728,18 @@ def _fix_misidentified_suffixes(id_nums):
         except KeyError:
             pass
         except ValueError:
-            # Check for where suffix is itself a prefixed catalog number
+            # Check for where suffix is itself a prefixed catalog number.
+            # The delta used to assessed ranges is set to 9 because there
+            # are at least ten catalog numbers per page in MinSci's ledgers
             last_num = parse_catnum(id_num['CatSuffix'])
             if (len(last_num) == 1
-                    and (last_num[0]['CatNumber'] - id_num['CatNumber'] > 10)
+                    and (last_num[0]['CatNumber'] - id_num['CatNumber'] >= 9)
                     and (not last_num[0]['CatPrefix']
                          or last_num[0]['CatPrefix'] == id_num['CatPrefix'])):
                 id_num['CatSuffix'] = ''
                 id_nums = [id_num, last_num[0]]
         else:
-            if (suffix - id_num['CatNumber']) > 10:
+            if (suffix - id_num['CatNumber']) >= 9:
                 first_num = id_num
                 first_num['CatSuffix'] = u''
                 last_num = {key: '' for key in CATKEYS}
@@ -803,3 +805,20 @@ def read_unicode_text(fp, encoding='utf-16', skiplines=0):
                 vals = [s.strip().decode('utf-8') for s in row]
                 record = {key: val for key, val in zip(keys, vals)}
     return records
+
+
+def std(val):
+    """Standardizes the format of the given value"""
+    return unidecode(val).lower()
+
+
+def write_emu_search(mask, catnums, output='search.txt'):
+    nums = list(set([str(n).split('-')[0] for n in catnums]))
+    nums.sort(key=lambda n: int(n))
+    if mask.endswith('.txt'):
+        mask = open('mask.txt', 'rb').read()
+    search = ['\t(\n\t\tCatNumber = {}\n\t)'.format(cn) for cn in nums]
+    with open(output, 'wb') as f:
+        f.write(mask.format('\n\tor\n'.join(search)))
+    print 'The following catalog records were not found:'
+    print '\n'.join(sorted(nums))
