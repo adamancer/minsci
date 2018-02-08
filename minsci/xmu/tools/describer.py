@@ -58,6 +58,7 @@ Description = namedtuple('Description', ['object', 'caption',
 
 def summarize(rec):
     """Summarizes basic information about an object"""
+    rec.module = 'ecatalogue'  # force module to ecatalogue
     descriptors = get_descriptors(rec)
     caption = get_caption(descriptors=descriptors)
     keywords = get_keywords(descriptors=descriptors)
@@ -81,25 +82,31 @@ def get_descriptors(rec):
     if catnum.split('(')[0].strip() == 'USNM':
         catnum = name + ' (MET)'
     taxa = rec.get_classification()
+    try:
+        xname = rec.get_name(taxa=taxa, force_derived=True)
+    except KeyError:
+        xname = name
+    kind = rec('CatCatalog').split(' ')[0].rstrip('s')
     cut, setting = format_gems(rec)
     country, state, county = rec.get_political_geography()
     description = rec('BioLiveSpecimen').lower().rstrip('.').replace('"', "'")
     if description == name.lower():
         description = ''
+    weight = rec.get_current_weight() if kind == 'Meteorite' else ''
     descriptors = {
         'irn': rec('irn'),
         'catnum': catnum,
         'name': name,
-        'xname': rec.get_name(taxa=taxa, force_derived=True),
+        'xname': xname,
         'taxa': taxa,
-        'kind': rec('CatCatalog').split(' ')[0].rstrip('s'),
+        'kind': kind,
         'cut': cut,
         'setting': setting,
         'colors': format_colors(rec),
         'locality': format_locality(country, state, county),
         'country': country,
         'state': state,
-        'weight': rec.get_current_weight(),
+        'weight': weight,
         'description': description,
         'status': rec('SecRecordStatus').lower(),
         'url': rec.get_url()
