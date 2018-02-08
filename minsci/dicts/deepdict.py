@@ -73,7 +73,7 @@ class DeepDict(dict):
 
 
     def path(self, path, delimiter='/'):
-        """Calls DeepDict.pull() by passing the path as a delimtied string
+        """Calls DeepDict.pull() by passing the path as a delimited string
 
         Args:
             path: the path to a value in the dictionary, with one component
