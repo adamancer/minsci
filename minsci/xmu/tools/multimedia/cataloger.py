@@ -16,11 +16,7 @@ class Cataloger(XMu):
         super(Cataloger, self).__init__(*args, **kwargs)
         self.catalog = {}
         self.media = {}
-        self.keep = ['catalog', 'media']
-        try:
-            self.load()
-        except OSError:
-            self.fast_iter(report=25000, callback=self.save)
+        self.autoiterate(['catalog', 'media'], report=25000)
 
 
     def iterate(self, element):
@@ -43,16 +39,38 @@ class Cataloger(XMu):
             self.media.setdefault(irn, []).append(rec('irn'))
 
 
-    def get(self, identifier, default=None):
+    def get(self, identifier, default=None, ignore_suffix=False):
         """Retrieves catalog data matching a given identifier"""
         dct = self.catalog
-        for index in self.index_identifier(identifier):
+        indexed = self.index_identifier(identifier)
+        if not indexed:
+            return default
+        if ignore_suffix:
+            indexed.pop()
+        for index in indexed:
             try:
                 dct = dct[index]
             except KeyError:
                 return default
+        if ignore_suffix:
+            vals = []
+            for val in dct.values():
+                vals.extend(val)
+            dct = vals
         func = summarify if not self.summarize else descriptify
         return [func(rec) for rec in dct]
+
+
+    def get_one(self, identifier, default=None, ignore_suffix=False):
+        matches = self.get(identifier, default, ignore_suffix)
+        if matches is not None and len(matches) == 1:
+            return matches[0]
+        raise ValueError('Multiple matches found for {}'.format(identifier))
+
+
+    def is_attached(self, mul_irn, cat_irn):
+        """Tests if multimedia is already linked in a catalog record"""
+        return cat_irn in self.media.get(mul_irn, [])
 
 
     def pprint(self, pause=False):
@@ -70,8 +88,8 @@ class Cataloger(XMu):
         else:
             parsed = [identifier]
         if not parsed:
-            #print 'Could not parse {}'.format(identifier)
-            return None
+            print 'Could not parse "{}"'.format(identifier)
+            return []
         elif len(parsed) > 1:
             raise ValueError('Tried to index multiple catalog numbers: {}'.format(identifier))
         parsed = parsed[0]
@@ -86,7 +104,34 @@ class Cataloger(XMu):
         indexed = [parsed.get(key) for key in keys]
         # Force index to string and treat suffixes of 00 and None the same
         indexed = [str(ix) if ix and ix != '00' else 'null' for ix in indexed]
+        indexed = [ix.lstrip('0') for ix in indexed]
         return indexed
+
+
+
+
+class Mediator(XMu):
+
+    def __init__(self, *args, **kwargs):
+        super(Mediator, self).__init__(*args, **kwargs)
+        self._existing = {}
+        self.autoiterate(['_existing'], report=25000)
+
+
+    def iterate(self, element):
+        rec = self.parse(element)
+        self._existing.setdefault(rec('MulIdentifier'), []).append(rec('irn'))
+
+
+    def get(self, key):
+        return self.match_one(key)
+
+
+    def match_one(self, fn):
+        irns = self._existing.get(fn)
+        return None if irns is None or len(irns) != 1 else irns[0]
+
+
 
 
 def descriptify(summary):
