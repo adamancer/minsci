@@ -6,25 +6,19 @@ from itertools import izip_longest
 from .xmurecord import XMuRecord
 from ..tools.describer import get_caption, summarize
 from ...helpers import oxford_comma
-from ...geotaxa import GeoTaxa
 
 
-GEOTAXA = GeoTaxa()
-ANTMET = re.compile(r'([A-Z]{3} |[A-Z]{4})[0-9]{5,6}(,[A-z0-9]+)?')
 
 
 class MinSciRecord(XMuRecord):
     """Subclass of XMuRecord with methods specific to Mineral Sciences"""
-    geotaxa = GEOTAXA
-    antmet = ANTMET
+    geotree = None
+    antmet = re.compile(r'([A-Z]{3} |[A-Z]{4})[0-9]{5,6}(,[A-z0-9]+)?')
 
 
     def __init__(self, *args):
         super(MinSciRecord, self).__init__(*args)
-        # Add constants as attributes so they're available elsewhere
-        # without being explicitly imported
-        #self.geotaxa = GEOTAXA
-        #self.antmet = ANTMET
+        self.module = 'ecatalogue'
 
 
     def get_name(self, taxa=None, force_derived=False):
@@ -45,7 +39,7 @@ class MinSciRecord(XMuRecord):
             if taxa is None:
                 taxa = self.get_classification(True)
             setting = self('MinJeweleryType') if not force_derived else None
-            name = GEOTAXA.item_name(taxa, setting)
+            name = self.geotree.name_item(taxa, setting)
         return name
 
 
@@ -59,11 +53,11 @@ class MinSciRecord(XMuRecord):
         Returns:
             List of classification terms
         """
-        for key in ('IdeTaxonRef_tab/ClaOtherValue_tab', 'MetMeteoriteType'):
+        for key in ('IdeTaxonRef_tab/ClaScientificName', 'MetMeteoriteType'):
             taxa = self(*key.split('/'))
-            if taxa:
+            if any(taxa):
                 if isinstance(taxa[0], list):
-                    taxa = [taxon[0]['ClaOtherValue'] for taxon in taxa]
+                    taxa = [taxon[0]['ClaScientificName'] for taxon in taxa]
                 break
         else:
             taxa = []
@@ -73,10 +67,10 @@ class MinSciRecord(XMuRecord):
         taxa = [taxon if taxon else u'' for taxon in taxa]
         if standardized:
             try:
-                taxa = GEOTAXA.group_related_taxa(taxa)
-            except AttributeError:
+                taxa = self.geotree.group(taxa)
+            except (AttributeError, KeyError):
                 print taxa
-                raise
+                #raise
         return taxa
 
 
@@ -93,7 +87,7 @@ class MinSciRecord(XMuRecord):
         """
         metnum = self('MetMeteoriteName')
         suffix = self('CatSuffix')
-        if ANTMET.match(metnum) and not force_catnum:
+        if self.antmet.match(metnum) and not force_catnum:
             if suffix == metnum:
                 return metnum
             else:
@@ -225,7 +219,7 @@ class MinSciRecord(XMuRecord):
         """Checks if record is an Antarctic meteorite based on regex pattern"""
         if metname is None:
             metname = self('MetMeteoriteName')
-        return bool(ANTMET.match(metname))
+        return bool(self.antmet.match(metname))
 
 
     def describe(self):
