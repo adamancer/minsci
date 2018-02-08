@@ -72,7 +72,7 @@ class PLSS(object):
             match = sre_match.group(0)
             township = u'T' + match.strip('., ').upper().lstrip('TOWNSHIP. ')
             return ReturnValue(township, None)
-        return ReturnValue('', u'TOWNSHIP_ERROR'))
+        return ReturnValue('', u'TOWNSHIP_ERROR')
 
 
 

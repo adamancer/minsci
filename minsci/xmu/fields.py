@@ -5,7 +5,7 @@ import glob
 import os
 import re
 
-from ..deepdict import DeepDict
+from ..dicts import DeepDict
 from ..helpers import cprint
 
 
@@ -58,7 +58,7 @@ class XMuFields(object):
                 'ewebgroups',
                 'ewebusers',
             ],
-            'schema_path': os.path.join(self._fpath, 'NMNH-schema.pl')
+            'schema_path': os.path.join(self._fpath, 'schema.pl')
         }
         blacklist = set(defaults['blacklist'] if not blacklist else blacklist)
         if not schema_path:
