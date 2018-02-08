@@ -7,6 +7,7 @@ from collections import namedtuple
 from pprint import pprint
 
 from ..xmu import XMu
+from ..containers import MediaRecord
 from .groups import write_group
 
 
@@ -400,3 +401,42 @@ def verify_taxon(rec, orig):
 def verify_volcano(rec, orig):
     """Verifies volcano name against legacy data"""
     pass
+
+
+def create_receipt(fp, contents, creator, module, rec_id=None, title=None):
+    """Creates a receipt for a record
+
+    Args:
+        fp (str): the path to the receipt file
+        contents (list): a list of the form ['# File metadata', 'key: val', ...]
+        creator (str): the name of the cataloger/record creator
+        module (str): the name of the module
+        rec_id (str): the identifier of the record (usually a catalog number
+            or irn)
+        title (str): the title of the multimedia resource
+
+    """
+    assert rec_id is not None or title is not None
+    if title is None:
+        # If the rec_id is an irn, include the module
+        if rec_id.isdigit() and 7 <= len(str(rec_id)) <= 8:
+            rec_id = '{} record {}'.format(module, rec_id)
+        title = 'Verbatim data for {}'.format(rec_id)
+    # Write receipt file
+    with open(fp, 'wb') as f:
+        f.write('\n'.join([line.encode('utf-8') for line in contents]))
+    # Write and return EMu record
+    return MediaRecord({
+        'Multimedia': os.path.abspath(fp),
+        'MulCreator_tab': [creator],
+        'MulTitle': title,
+        'MulDescription': contents[0].strip('# '),
+        'DetResourceType': 'Documentation',
+        'DetCollectionName_tab': ['Documents and data (Mineral Sciences)'],
+        'DetRights': 'Internal use only',
+        'DetSubject_tab': ['Verbatim data', module],
+        'DetSource': 'Mineral Sciences, NMNH',
+        'NotNotes': '\n'.join(contents),
+        'AdmPublishWebPassword': 'No',
+        'AdmPublishWebNoPassword': 'No'
+    }).expand()
