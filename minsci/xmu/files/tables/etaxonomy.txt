@@ -7,3 +7,5 @@ Rank,ClaOtherValue_tab
 Validity,TaxValidityBiblioRef_tab
 Validity,TaxValidityComment_tab
 Validity,TaxValidityReason_tab
+Descriptions,DesLabel0
+Descriptions,DesDescription0

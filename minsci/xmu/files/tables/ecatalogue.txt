@@ -24,6 +24,7 @@ Measurements,MeaStandardizedValue_tab
 Measurements,MeaStandardizedUnit_tab
 Measurements,MeaRemarks_tab
 Measurements,MeaCurrent_tab
+Measurements,MeaVerbatimModifier_tab
 Color,MinColor_tab
 Multimedia,MulMultiMediaRef_tab
 Notes,NotNmnhText0
@@ -37,6 +38,7 @@ InventoryStatus,StaInventoryDate0
 InventoryStatus,StaInventoryRemarks_tab
 Preparations,ZooPreparation_tab
 Preparations,ZooPreparationCount_tab
+Preparations,ZooPreparationRemarks_tab
 Analysis,PetChemicalAnalysisRef_tab
 Related,RelObjectsRef_tab
 Related,RelRelationship_tab
