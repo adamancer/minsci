@@ -20,6 +20,8 @@ class BiblioRecord(XMuRecord):
                     ' {volume}({issue}): {pages}'),
             'Boo': (u'{authors}, {year}. {title}. In <i>{source}</i> '
                     ' (v. {volume}), {pages}p.'),
+            'Oth': u'{title}',
+            'Web': u'{title} <<a href="{identifier}">{identifier}</a>>'
         }
 
 
@@ -84,8 +86,13 @@ class BiblioRecord(XMuRecord):
         volume = self('ArtVolume')
         issue = self('ArtIssue')
         pages = self('ArtPages')
+        # Get website info
+        identifier = self('WebIdentifier')
         if not volume and month:
-            volume = pub_date.strftime('%b. %Y')
+            try:
+                volume = pub_date.strftime('%b. %Y')
+            except ValueError:
+                pass
         elif not volume and pub_date != year:
             volume = pub_date
         ref = self.masks[self.prefix].format(authors=authors,
@@ -94,7 +101,8 @@ class BiblioRecord(XMuRecord):
                                              source=source,
                                              volume=volume,
                                              issue=issue,
-                                             pages=pages)
+                                             pages=pages,
+                                             identifier=identifier)
         return self.clean_reference(ref)
 
 
@@ -115,7 +123,10 @@ class BiblioRecord(XMuRecord):
             'Boo': 'Bos',
             'Cha': 'Boo'
         }
-        return self('ArtParentRef', sources[self.prefix] + 'Title')
+        try:
+            return self('ArtParentRef', sources[self.prefix] + 'Title')
+        except KeyError:
+            return ''
 
 
     @staticmethod
@@ -128,6 +139,8 @@ class BiblioRecord(XMuRecord):
             ref = ref.replace(char, ' ')
         while '  ' in ref:
             ref = ref.replace('  ', ' ')
+        if ref.endswith('. In '):
+            ref = ref[:-4]
         return ref
 
 

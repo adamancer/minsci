@@ -1,5 +1,6 @@
 """Populates an ebibliography record based on RIS data in NotNotes"""
 
+import logging
 import pprint as pp
 import re
 from collections import namedtuple
@@ -21,7 +22,7 @@ USGS = {
     'Professional Paper': 'U. S. Geological Survey Professional Paper'
 }
 
-LISTS = ['AU', 'A2', 'A3', 'A4', 'ED', 'KW', 'N1', 'SN', 'UR']
+LISTS = ['AU', 'A1', 'A2', 'A3', 'A4', 'ED', 'KW', 'N1', 'SN', 'UR']
 
 PREFIXES = {
     'Book Series': 'Bos'
@@ -48,6 +49,7 @@ class FillFromRIS(XMu):
     def __init__(self, *args, **kwargs):
         super(FillFromRIS, self).__init__(*args, **kwargs)
         self.records = []
+        self.errors = []
 
 
     def iterate(self, element):
@@ -60,7 +62,12 @@ class FillFromRIS(XMu):
         # Check for RIS data
         if 'TY' in ris:
             irn = rec('irn')
-            formatted = emuize(ris)
+            try:
+                formatted = emuize(ris)
+            except (KeyError, ValueError) as e:
+                self.errors.append(e)
+                logging.exception('ris')
+                return True
             if len(formatted) == 1:
                 for rec in formatted:
                     if irn:
@@ -75,8 +82,8 @@ class FillFromRIS(XMu):
 def ris2emu(fp):
     """Parses RIS data in the notes field of an ebibliography export"""
     bib = FillFromRIS(fp, container=BiblioRecord)
-    bib.fast_iter(report=25)
-    return bib.records
+    bib.fast_iter(report=10)
+    return bib
 
 
 def split_records(ris):
@@ -115,33 +122,59 @@ def emuize(ris, customizer=None):
                     customizer = func
                     break
         if customizer is not None:
-            rec = customizer(rec)
+            try:
+                rec = customizer(rec)
+            except TypeError:
+                rec = generic(rec, customizer)
         else:
-            pass#pp.pprint(rec)
+            rec = generic(rec)
         source = get_type(rec)
-        parent_prefix = PREFIXES.get(source.parent_type, source.parent_type[:3])
+        if source.parent_type is not None:
+            parent_prefix = PREFIXES.get(source.parent_type, source.parent_type[:3])
+        else:
+            parent_prefix = None
         # Create a bibliography record
         bib = {}
         bib['BibRecordType'] = source.type
         bib['{}PublicationLanguage'] = rec.pop('LA', None)
         bib['{}Title'] = get_title(rec)
         bib['{}Volume'] = rec.pop('VL', None)
-        bib['{}Issue'] = rec.pop('IS', None)
         bib['{}Pages'] = get_pages(rec)
+        # Issue
+        issue = rec.pop('IS', None)
+        if source.type == 'Book' and not bib['{}Volume']:
+            bib['{}Volume'] = issue
+        else:
+            bib['{}Issue'] = issue
+        # Source title
         source_title = get_source(rec)
         if source_title is not None:
             bib['{}ParentRef'] = {
                 'BibRecordType': source.parent_type,
                 '{}Title'.format(parent_prefix): source_title
                 }
+            # Check for issn
+            issns = rec.pop('SN', [])
+            if len(issns) > 1:
+                raise ValueError('Too many ISSNs!')
+            if issns:
+                issn = issns[0]
+                if re.match('^\d{4}-\d{3}[\dX]$', issn, re.I):
+                    bib['{}ParentRef']['{}ISSN'.format(parent_prefix)] = issn
+                else:
+                    raise ValueError('Not an ISSN: {}'.format(issn))
         # Contributors
         contributors = get_contributors(rec)
         blank = {'NamPartyType': 'Person'}
         parties = [p for p in contributors if p.name != blank]
         if len(parties) != len(contributors):
             bib['{}AuthorsEtAl'] = 'Yes'
-        bib['{}AuthorsRef_tab'] = [p.name for p in parties]
-        bib['{}Role_tab'] = [p.role for p in parties]
+        # Special handling for authors of theses/dissertations
+        if bib.get('BibRecordType') == 'Thesis':
+            bib['{}AuthorsRef'] = [p.name for p in parties][0]
+        else:
+            bib['{}AuthorsRef_tab'] = [p.name for p in parties]
+            bib['{}Role_tab'] = [p.role for p in parties]
         # Publication date
         pub_date = get_date(rec)
         if pub_date is not None:
@@ -180,11 +213,24 @@ def emuize(ris, customizer=None):
         except:
             BiblioRecord(bib).pprint(True)
             raise
+        u1 = rec.pop('U1', None)
+        if u1:
+            print 'Info: {}'.format(u1)
+        rec = remove_duplicate_fields(rec, ris2dict(ris))
         if rec:
-            print sorted(rec.keys())
             pp.pprint(ris2dict(ris))
-            raw_input()
+            raise KeyError('Found unhandled keys: {}'.format(rec.keys()))
     return bibs
+
+
+def remove_duplicate_fields(rec, orig):
+    """Removes fields holding duplicate data"""
+    orig = {key: val for key, val in orig.iteritems() if not key in rec}
+    for key in rec.keys():
+        val = rec[key]
+        if val in orig.values():
+            del rec[key]
+    return rec
 
 
 def ris2dict(ris):
@@ -207,11 +253,27 @@ def get_type(rec):
     # Classify publication by type. Keys with a leading underscore are
     # assigned by customizer functions and are not official RIS types.
     types = {
+        'ABST': Source('Article', 'Journal'),
         'BOOK': Source('Book', 'Book Series'),
+        'CHAP': Source('Chapter', 'Book'),
+        'CPAPER': Source('Article', 'Journal'),
         'JOUR': Source('Article', 'Journal'),
         'RPRT': Source('Article', 'Journal'),
+        'THES': Source('Thesis', None),
         '_MONOGRAPH': Source('Book', 'Book Series')
     }
+    # Handle M3
+    work_type = rec.pop('M3', None)
+    if work_type is not None:
+        work_types = {
+            'ABST': ['Abstract'],
+            'BOOK': ['Proceedings'],
+            'CHAP': ['Book', 'Report'],
+            'CPAPER': ['Paper'],
+            'JOUR': ['Journal article', 'Paper', 'Report'],
+        }
+        if not work_type in work_types.get(bib_type, []):
+            raise ValueError('Work type {} (bib_type={})'.format(work_type, bib_type))
     return types[bib_type]
 
 
@@ -282,7 +344,7 @@ def get_ris(url):
 def usgs(ris):
     """Formats RIS records from the USGS"""
     # Remove keys containing info we don't want/need
-    keys = ['A3', 'CY', 'DB', 'ET', 'M3', 'UR']
+    keys = ['A3', 'CY', 'DB', 'ET', 'M3', 'N1', 'UR']
     for key in keys:
         ris.pop(key, None)
     ris['T2'] = USGS.get(ris['T2'], ris['T2'])
@@ -299,14 +361,6 @@ def usgs(ris):
     return ris
 
 
-def pnas(ris):
-    """Formats RIS records from PNAS"""
-    keys = ['AN', 'DB', 'SN', 'UR']
-    for key in keys:
-        ris.pop(key, None)
-    return ris
-
-
 def hathi(ris):
     """Formats RIS records from the Hathi Trust"""
     keys = ['ID', 'KW', 'M1', 'N1', 'TP', 'UR']
@@ -318,19 +372,24 @@ def hathi(ris):
     return ris
 
 
-def jstor(ris):
+def generic(ris, keys=None):
     """Formats RIS records from JSTOR"""
-    keys = ['AB', 'C1', 'PB', 'SN', 'UR']
-    for key in keys:
+    for key in keys if keys is not None else CUSTOMIZERS['default']:
         ris.pop(key, None)
     return ris
 
 
-
-
 CUSTOMIZERS = {
+    'default': ['CY', 'DB', 'N1', 'UR'],
     'catalog.hathitrust.org': hathi,
-    'jstor.org': jstor,
-    'ncbi.nlm.nih.gov/pmc': pnas,
-    'pubs.er.usgs.gov': usgs
+    'jstor.org': ['AB', 'C1', 'PB', 'SN', 'UR'],
+    'ncbi.nlm.nih.gov/pmc': ['UR'],
+    'pubs.er.usgs.gov': usgs,
+    'geoscienceworld.org': ['N2', 'UR'],
+    'books.google.com': ['UR'],
+    'canmin.org': [u'JO', u'N2', u'UR']
 }
+for key, fields in CUSTOMIZERS.iteritems():
+    if isinstance(fields, list) and not 'N1' in fields:
+        fields.append('N1')
+        CUSTOMIZERS[key] = fields

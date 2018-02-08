@@ -3,6 +3,7 @@
 
 import csv
 import io
+import logging
 import os
 import pprint as pp
 import re
@@ -21,10 +22,12 @@ from ....xmu import XMu, BiblioRecord, write
 
 MODULE = 'ebibliography'
 
-PREFIXES = {
+PUB_TYPES = {
     'article': 'Art',
     'book': 'Boo',
-    'incollection': 'Art'
+    'incollection': 'Art',
+    'techreport': 'Art',
+    'thes': 'The'
 }
 
 SOURCES = {
@@ -39,7 +42,9 @@ ENTITIES = {
     r'({IUCr})': u'(IUCr)',
     r'{\textdegree}': u'°' ,
     r'{\textquotesingle}': u"'",
-    r'\textendash': u'–'
+    r'\textendash': u'–',
+    r'St\u0e23\u0e16ffler': u'Stoffler',
+    r'{\'{a}}': 'a'
 }
 
 
@@ -52,6 +57,7 @@ class FillFromDOI(XMu):
     def __init__(self, *args, **kwargs):
         super(FillFromDOI, self).__init__(*args, **kwargs)
         self.records = []
+        self.errors = []
 
 
     def iterate(self, element):
@@ -66,17 +72,25 @@ class FillFromDOI(XMu):
             doi = ris.get('DO')
             if doi:
                 rec['AdmGUIDType_tab'] = 'DOI'
-                rec['AdmGUIDValue_tab'] = doi
+                rec['AdmGUIDValue_tab'] = clean_doi(doi)
         if doi:
             if 'bhl.title' in doi:
                 raise ValueError('BHL DOIs are forbidden: {}'.format(doi))
+            elif '/PANGAEA.' in doi:
+                raise ValueError('PANGAEA DOIs are forbidden: {}'.format(doi))
+            elif '/10.4095/' in doi:
+                raise ValueError('FastLink DOIS are forbidden: {}'.format(doi))
             try:
                 bibtex = doi2bib(doi)
             except ValueError as e:
+                logging.exception('doi')
                 bibtex = None
-                print e
             if bibtex is not None:
-                formatted = emuize(parse_bibtex(bibtex))
+                try:
+                    formatted = emuize(parse_bibtex(bibtex))
+                except ValueError as e:
+                    logging.exception('doi')
+                    self.errors.append(e)
                 formatted['irn'] = rec('irn')
                 # Remove DOIs, since these already exist in the source
                 # record and the existing values are already cased properly.
@@ -91,8 +105,8 @@ class FillFromDOI(XMu):
 def doi2emu(fp):
     """Parses BibTeX data for a DOI found in an ebibliography export"""
     bib = FillFromDOI(fp, container=BiblioRecord)
-    bib.fast_iter(report=25)
-    return bib.records
+    bib.fast_iter(report=10)
+    return bib
 
 
 def doi2bib(doi):
@@ -106,13 +120,14 @@ def doi2bib(doi):
     Returns:
         BibTeX record as a string
     """
-    url = 'http://dx.doi.org/' + doi
+    url = requests.compat.urljoin('http://dx.doi.org/', doi)
+    print 'Checking {}...'.format(url)
     headers = {'accept': 'application/x-bibtex'}
     response = bot.get(url, headers=headers)
     if response.text.startswith('@'):
         return response.text
     else:
-        raise ValueError('Could not resolve {}'.format(doi))
+        raise ValueError('  ERROR: Could not resolve {}'.format(doi))
     return None
 
 
@@ -188,7 +203,7 @@ def emuize(data):
     rec = clone()
     kind = data.pop('ENTRYTYPE')
     try:
-        prefix = PREFIXES[kind]
+        prefix = PUB_TYPES[kind]
     except KeyError:
         pp.pprint(data)
         raise Exception('Unrecognized publication type: {}'.format(kind))
@@ -198,8 +213,12 @@ def emuize(data):
     except KeyError:
         pass
     else:
-        rec[prefix + 'AuthorsRef_tab'] = authors
-        rec[prefix + 'Role_tab'] = ['Author'] * len(authors)
+        # Special handling for authors of theses/dissertations
+        if prefix == 'The':
+            rec[prefix + 'AuthorsRef'] = authors[0]
+        else:
+            rec[prefix + 'AuthorsRef_tab'] = authors
+            rec[prefix + 'Role_tab'] = ['Author'] * len(authors)
     # Editors
     try:
         editors = parse_authors(data.pop('editor'))
@@ -260,10 +279,11 @@ def emuize(data):
         rec[prefix + 'PublicationDate'] = actual_date
     # DOI
     try:
-        rec['AdmGUIDValue_tab'] = [data.pop('doi')]
+        doi = clean_doi(data.pop('doi'))
     except KeyError:
         pass
     else:
+        rec['AdmGUIDValue_tab'] = [doi]
         rec['AdmGUIDType_tab'] = ['DOI']
     # Source
     parent = clone()
@@ -336,6 +356,14 @@ def clone(*args):
     container.fields = FIELDS
     container.module = MODULE
     return container
+
+
+def clean_doi(doi):
+    prefix = '10.'
+    if not doi.startswith(prefix):
+        print 'WARNING: DOI looks funny: {}'.format(doi)
+        doi = '{}{}'.format(prefix, doi.split(prefix)[0])
+    return doi
 
 
 def process_file(fp):
