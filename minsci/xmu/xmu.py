@@ -128,7 +128,7 @@ class XMu(object):
 
 
     def fast_iter(self, func=None, report=0, skip=0, limit=0,
-                  callback=None, **kwargs):
+                  callback=None, callback_kwargs=None, **kwargs):
         """Use callback to iterate through an EMu export file
 
         Args:
@@ -189,7 +189,9 @@ class XMu(object):
                ' ({:,} successful)').format(n_total, n_success)
         self.finalize()
         if callback is not None:
-            callback()
+            if callback_kwargs is None:
+                callback_kwargs = {}
+            callback(**callback_kwargs)
         return True
 
 
@@ -200,7 +202,7 @@ class XMu(object):
         if keep is not None:
             self.keep = keep
             try:
-                self.load()
+                self.load(**kwargs.pop('callback_kwargs', {}))
             except (IOError, OSError, ValueError):
                 callback = kwargs.pop('callback', self.save)
                 self.fast_iter(callback=callback, **kwargs)
