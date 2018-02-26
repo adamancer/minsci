@@ -122,7 +122,7 @@ def get_caption(rec=None, descriptors=None):
         descriptors = get_descriptors(rec)
     lines = [format_caption(descriptors)]
     # Mark inactive records
-    if descriptors['status'] != 'active':
+    if descriptors['status'] and descriptors['status'] != 'active':
         status = descriptors['status']
         if status == 'inactive':
             status = 'made inactive'
