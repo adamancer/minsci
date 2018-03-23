@@ -404,11 +404,16 @@ class XMuRecord(DeepDict):
             pass
 
 
-    def get_note(self, kind):
+    def get_notes(self, kind):
         """Return the note matching the given kind"""
-        return self.get_matching_rows(kind,
-                                      'NotNmnhType_tab',
-                                      'NotNmnhText0')
+        fields = [
+            ('NotNmnhType_tab', 'NotNmnhText0'),
+            ('NteType_tab', 'NteText0')
+        ]
+        for note_kind, note_content in fields:
+            if note_kind in self and note_content in self:
+                return self.get_matching_rows(kind, note_kind, note_content)
+        return []
 
 
     def get_created_time(self, timezone_id='US/Eastern', mask=None):
