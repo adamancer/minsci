@@ -11,6 +11,7 @@ CATKEYS = (
     'CatNumber',
     'CatSuffix'
     )
+MINCATNUM = 1000
 
 class CatNum(object):
     _attributes = [
@@ -267,9 +268,13 @@ class CatNumList(list):
 
 def get_catnum(*args, **kwargs):
     catnums = parse_catnum(*args, **kwargs)
-    if len(catnums) == 1:
+    if any(catnums) and len(catnums) == 1:
         return CatNum(**catnums[0])
     return CatNumList(catnums)
+
+
+def get_catnums(*args, **kwargs):
+    return CatNumList(parse_catnum(*args, **kwargs))
 
 
 def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
@@ -297,7 +302,10 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
     # Regular expressions for use with catalog number functions
     p_pre = ur'(?:([A-Z]{3}[A ] ?)|(?:(NMNH |USNM )?(?:([BCGMRS])-?)?))?'
     p_num = ur'([0-9]{1,6})'  # this will pick up ANY number
-    p_suf = ur'\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
+    if MINCATNUM == 1:
+        p_suf = ur'\s?([-\.][A-z0-9\.\- ]+|[-/\.][0-9]{1,4}|[-/\.][A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
+    else:
+        p_suf = ur'\s?([-/\.][0-9]{1,4}|[-/\.][A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
     regex = re.compile(ur'\b(' + p_pre + p_num + p_suf + ur')\b', re.I)
     all_id_nums = []
     for substring in re.split(ur'\s(and|&)\s', val, flags=re.I):
@@ -312,7 +320,7 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
         id_nums = [id_num for id_num in id_nums
                    if id_num.get('CatPrefix')
                    or id_num.get('CatMuseumAcronym')
-                   or id_num.get('CatNumber', 0) > 999
+                   or id_num.get('CatNumber', 0) >= MINCATNUM
                    or id_num.get('MetMeteoriteName')]
         # Format results as tuple
         all_id_nums.extend(id_nums)
@@ -518,7 +526,10 @@ def _clean_suffixes(id_nums, attrs, default_suffix,
         id_nums[i].update(attrs)
         # Remove keys that do not correspond to EMu fields
         for key in ('FullNumber', 'MetPrefix'):
-            del id_nums[i][key]
+            try:
+                del id_nums[i][key]
+            except KeyError:
+                pass
     return id_nums
 
 
@@ -542,7 +553,7 @@ def _fix_misidentified_suffixes(id_nums):
                 id_num['CatSuffix'] = ''
                 id_nums = [id_num, last_num[0]]
         else:
-            if (suffix - id_num['CatNumber']) >= 9:
+            if (suffix - int(id_num['CatNumber'])) >= 9:
                 first_num = id_num
                 first_num['CatSuffix'] = u''
                 last_num = {key: '' for key in CATKEYS}
