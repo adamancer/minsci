@@ -11,6 +11,7 @@ from unidecode import unidecode
 from .xmurecord import XMuRecord
 from ..tools.multimedia.embedder import Embedder, EmbedField
 from ..tools.multimedia.hasher import hash_file
+from ...catnums import get_catnums
 from ...helpers import dedupe, format_catnums, oxford_comma, parse_catnum, lcfirst, sort_catnums
 
 
@@ -82,8 +83,8 @@ class MediaRecord(XMuRecord):
         super(MediaRecord, self).__init__(*args)
         self.module = 'emultimedia'
         self._attributes = ['cataloger', 'embedder', 'fields', 'module']
-        self.cataloger = None
-        self.embedder = None
+        #self.cataloger = None
+        #self.embedder = None
         self.image_data = {}
         # Attributes used with cataloger
         self.catnums = []
@@ -233,7 +234,7 @@ class MediaRecord(XMuRecord):
 
     def get_catalog_numbers(self, field='MulTitle', **kwargs):
         """Find catalog numbers in the given field"""
-        return parse_catnum(self(field), **kwargs)
+        return get_catnums(self(field), **kwargs)
 
 
     def get_photo_numbers(self):
@@ -373,14 +374,14 @@ class MediaRecord(XMuRecord):
 
     def match(self, ignore_suffix=False):
         """Returns list of catalog objects matching data in MulTitle"""
-        parsed = parse_catnum(self('MulTitle'))
+        parsed = get_catnums(self('MulTitle'))
         records = []
         for identifier in parsed:
             matches = self.cataloger.get(identifier, [], ignore_suffix)
             for match in matches:
                 if not match in records:
                     records.append(match)
-        self.catnums = format_catnums(parsed)
+        self.catnums = str(parsed)
         return records
 
 
@@ -410,6 +411,7 @@ class MediaRecord(XMuRecord):
             enhanced.whitelist = self.whitelist
             enhanced.masks = self.masks
             enhanced.object = match
+            enhanced.objects = [match]
             enhanced.catnums = self.catnums
             for key, func in enhanced.smart_functions.iteritems():
                 enhanced[key] = func() if func is not None else enhanced(key)
@@ -421,7 +423,7 @@ class MediaRecord(XMuRecord):
                                          ' Smithsonian Institution.')
             enhanced['DetRelation_tab'] = [rel.replace('(0/', '(1/') for rel
                                            in enhanced['DetRelation_tab']]
-            enhanced['_Objects'] = [match]
+            #enhanced['_Objects'] = [match]
             return enhanced.expand()
 
 
@@ -573,11 +575,11 @@ class EmbedFromEMu(Embedder):
     @staticmethod
     def get_objects(rec, field='MulTitle'):
         """Returns list of catalog numbers parsed from MulTitle"""
-        catnums = parse_catnum(rec(field), prefixed_only=True)
+        catnums = get_catnums(rec(field), prefixed_only=True)
         # FIXME: Only handles one catalog number for now
         if catnums:
-            catnums = [catnums[0]]
-        return format_catnums(catnums)
+            catnums = catnums.__class__(catnums[:1])
+        return catnums
 
 
     def get_caption(self, rec):
@@ -657,11 +659,15 @@ class EmbedFromEMu(Embedder):
         pass
 
 
-    def get_object_name(self, rec):
+    def get_object_name(self, rec, mask='include_code'):
         """Returns the photo identifier or list of pictured objects"""
         object_name = rec.get_guid('Photographer number')
         if object_name is None:
-            object_name = '; '.join(self.get_objects(rec))
+            objects = []
+            for obj in self.get_objects(rec):
+                obj.set_mask(mask)
+                objects.append(obj.from_mask())
+            object_name = '; '.join(objects)
         return object_name
 
 
@@ -705,20 +711,20 @@ class EmbedFromEMu(Embedder):
     def get_object_numbers(self, rec):
         """Returns list of catalog numbers"""
         obj_data = []
-        for obj in rec.get('_Objects', []):
+        for obj in rec.objects if hasattr(rec, 'objects') else []:
             obj_data.append(obj.object['catnum'])
         return obj_data
 
 
     def get_object_sources(self, rec, source='NMNH-Smithsonian Institution'):
         """Returns list with museum name"""
-        return [source] * len(rec.get('_Objects', []))
+        return [source] * len(rec.objects if hasattr(rec, 'objects') else [])
 
 
     def get_object_titles(self, rec):
         """Returns list of object titles"""
         obj_data = []
-        for obj in rec.get('_Objects', []):
+        for obj in rec.objects if hasattr(rec, 'objects') else []:
             obj_data.append(obj.object['xname'])
         return obj_data
 
@@ -727,6 +733,6 @@ class EmbedFromEMu(Embedder):
         """Returns list of object URLs"""
         """Returns list of object titles"""
         obj_data = []
-        for obj in rec.get('_Objects', []):
+        for obj in rec.objects if hasattr(rec, 'objects') else []:
             obj_data.append(obj.object['url'])
         return obj_data
