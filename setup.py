@@ -34,5 +34,19 @@ setup(name='minsci',
           'requests_cache',
           'unidecode'
       ],
+      setup_requires = [
+          'bibtexparser',
+          'dateparser',
+          'inflect',
+          'lxml',
+          'nameparser',
+          'pillow',
+          'pymongo',
+          'pyodbc',
+          'pytz',
+          'requests',
+          'requests_cache',
+          'unidecode'
+      ],
       include_package_data=True,
       zip_safe=False)
