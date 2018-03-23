@@ -4,14 +4,14 @@ import pprint as pp
 
 from ..describer import summarize, Description
 from ....xmu import XMu, MinSciRecord
-from ....helpers import parse_catnum
+from ....catnums import CatNum, get_catnums
 
 
 class Cataloger(XMu):
     """Contains methods to generate metadata for a set of catalog objects"""
 
     def __init__(self, *args, **kwargs):
-        self.summarize = kwargs.pop('summarize', False)
+        self.prepare = kwargs.pop('summarize', summarize)
         kwargs['container'] = MinSciRecord
         super(Cataloger, self).__init__(*args, **kwargs)
         self.catalog = {}
@@ -22,7 +22,8 @@ class Cataloger(XMu):
     def iterate(self, element):
         """Indexes the objects in an EMu export file"""
         rec = self.parse(element)
-        data = summarize(rec) if self.summarize else rec
+        # Create the smallest possible record
+        data = self.prepare(rec)
         # Add record to catalog index
         identifiers = [rec.get_catnum(include_code=False),
                        rec.get_identifier(include_code=False)]
@@ -57,8 +58,9 @@ class Cataloger(XMu):
             for val in dct.values():
                 vals.extend(val)
             dct = vals
-        func = summarify if not self.summarize else descriptify
-        return [func(rec) for rec in dct]
+        if self.prepare == summarize:
+            return [descriptify(rec) for rec in dct]
+        return dct
 
 
     def get_one(self, identifier, default=None, ignore_suffix=False):
@@ -83,25 +85,28 @@ class Cataloger(XMu):
     @staticmethod
     def index_identifier(identifier):
         """Indexes identification numbers from a catalog record"""
-        if not isinstance(identifier, dict):
-            parsed = parse_catnum(identifier)
+        if not isinstance(identifier, CatNum):
+            parsed = get_catnums(identifier)
         else:
             parsed = [identifier]
+        if not isinstance(parsed, list):
+            parsed = [parsed]
         if not parsed:
             print 'Could not parse "{}"'.format(identifier)
             return []
         elif len(parsed) > 1:
-            raise ValueError('Tried to index multiple catalog numbers: {}'.format(identifier))
+            #raise ValueError('Tried to index multiple catalog numbers: {}'.format(identifier))
+            print 'Tried to index multiple catalog numbers: {}'.format(identifier)
+            return []
         parsed = parsed[0]
         # Get Antarctic meteorites
-        metname = parsed.get('MetMeteoriteName')
+        metname = parsed.metname
         if metname:
             if not ',' in metname:
                 return [metname, None]
             return metname.split(',', 1)
         # Get everything else
-        keys = ('CatPrefix', 'CatNumber', 'CatSuffix')
-        indexed = [parsed.get(key) for key in keys]
+        indexed = [parsed.prefix, parsed.number, parsed.suffix]
         # Force index to string and treat suffixes of 00 and None the same
         indexed = [str(ix) if ix and ix != '00' else 'null' for ix in indexed]
         indexed = [ix.lstrip('0') for ix in indexed]
@@ -141,3 +146,14 @@ def descriptify(summary):
 
 def summarify(rec):
     return summarize(MinSciRecord(rec))
+
+
+def minimize(rec):
+    return {
+        'irn': rec('irn'),
+        'catnum': rec.get_catnum(include_code=False, include_div=True)
+        }
+
+
+def full(rec):
+    return rec
