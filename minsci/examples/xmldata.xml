@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE table
+[
+  <!ELEMENT table	(tuple)*>
+  <!ATTLIST table
+            name	CDATA #REQUIRED
+  >
+
+  <!ELEMENT tuple	(table|tuple|atom)*>
+  <!ATTLIST tuple
+            name	CDATA #IMPLIED
+  >
+
+  <!ELEMENT atom	(#PCDATA)*>
+  <!ATTLIST atom
+            name	CDATA #REQUIRED
+            type	CDATA "text"
+            size	CDATA "short"
+  >
+]
+>
+<?schema
+  table           ecatalogue
+    integer         irn
+    text short      CatPrefix
+    integer         CatNumber
+    text short      CatSuffix
+    text short      MinName
+    table           IdeTaxonRef_tab
+      integer         irn
+      text short      ClaScientificName
+    end
+    table           MeaType_tab
+      text short      MeaType
+    end
+    table           MeaVerbatimValue_tab
+      float           MeaVerbatimValue
+    end
+    table           MeaVerbatimUnit_tab
+      text short      MeaVerbatimUnit
+    end
+    table           MeaStandardizedValue_tab
+      float           MeaStandardizedValue
+    end
+    table           MeaStandardizedUnit_tab
+      text short      MeaStandardizedUnit
+    end
+    table           AdmGUIDType_tab
+      text short      AdmGUIDType
+    end
+    table           AdmGUIDValue_tab
+      text short      AdmGUIDValue
+    end
+  end
+?>
+<!-- Data -->
+<table name="ecatalogue">
+
+  <!-- Row 1 -->
+  <tuple>
+    <atom name="irn">1001299</atom>
+    <atom name="CatPrefix">G</atom>
+    <atom name="CatNumber">3551</atom>
+    <atom name="CatSuffix">00</atom>
+    <atom name="MinName">Hope Diamond</atom>
+    <table name="IdeTaxonRef_tab">
+      <tuple>
+        <atom name="irn">1004090</atom>
+        <atom name="ClaScientificName">Diamond</atom>
+      </tuple>
+    </table>
+    <table name="MeaType_tab">
+      <tuple>
+        <atom name="MeaType">Length</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaType">Width</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaType">Depth</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaType">Weight</atom>
+      </tuple>
+    </table>
+    <table name="MeaVerbatimValue_tab">
+      <tuple>
+        <atom name="MeaVerbatimValue">25.6</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaVerbatimValue">21.78</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaVerbatimValue">12</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaVerbatimValue">45.52</atom>
+      </tuple>
+    </table>
+    <table name="MeaVerbatimUnit_tab">
+      <tuple>
+        <atom name="MeaVerbatimUnit">mm</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaVerbatimUnit">mm</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaVerbatimUnit">mm</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaVerbatimUnit">ct</atom>
+      </tuple>
+    </table>
+    <table name="MeaStandardizedValue_tab">
+      <tuple>
+        <atom name="MeaStandardizedValue">25.6</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaStandardizedValue">21.78</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaStandardizedValue">12</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaStandardizedValue">45.52</atom>
+      </tuple>
+    </table>
+    <table name="MeaStandardizedUnit_tab">
+      <tuple>
+        <atom name="MeaStandardizedUnit">mm</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaStandardizedUnit">mm</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaStandardizedUnit">mm</atom>
+      </tuple>
+      <tuple>
+        <atom name="MeaStandardizedUnit">ct</atom>
+      </tuple>
+    </table>
+    <table name="AdmGUIDType_tab">
+      <tuple>
+        <atom name="AdmGUIDType">EZID</atom>
+      </tuple>
+    </table>
+    <table name="AdmGUIDValue_tab">
+      <tuple>
+        <atom name="AdmGUIDValue">ark:/65665/3985b643b-fb12-4268-9f1b-2a254447208f</atom>
+      </tuple>
+    </table>
+  </tuple>
+</table>

@@ -1,48 +1,59 @@
 MinSci Toolkit
 ==============
 
-A collection of tools written in Python 2.x for Mineral Sciences at NMNH.
-You can install the MinSci Toolkit from the command line using pip:
+A collection of tools written in Python 2.7 to wrangle data in Axiell EMu for
+Mineral Sciences at NMNH.
+
+
+Installation
+------------
+
+The minsci package exists on PyPI, but I don't do well keeping it up-to-date,
+so it's better to install directly from github. Python 2.7 and git are both
+required. Once you have those installed, run the following from your command
+prompt:
 
 ```
-pip install minsci
+cd /path/to/directory
+git clone https://github.com/adamancer/minsci
+cd minsci
+python setup.py install
 ```
 
-GeoTaxa
--------
+Once you've finished installing the package, there are a few clean up steps
+that you can do to better tailor things to your EMu:
 
-The GeoTaxa module contains a hierarchical taxonomy for geologic materials,
-including rocks, minerals, and meteorites. The hierarchy is based on schemes
-and species definitions published by the IUGS, the British Geological Survey,
-RRUFF, and Mindat. It is very much a work in progress.
++ Copy your institution's schema.pl file to minsci/xmu/files. This allows the
+  script to validate paths when reading and writing data.
++ Define grids in minsci/xmu/files/tables. This allows the script to verify
+  that all columns have the right number of rows. **The default grids are
+  NMNH-specific and should be deleted and replaced.** It's a good idea to
+  define any grids you'll be writing to.
 
-To use, first create an instance of the GeoTaxa class:
+
+Basic usage
+-----------
+
+Most common operations involved subclassing XMu to read an export file. A
+very basic framework for this operation is:
 
 ```python
-from minsci import geotaxa
-gt = geotaxa.GeoTaxa()
+from minsci import xmu
+
+class XMu(xmu.XMu):
+
+    def __init__(self, *args, **kwargs):
+        super(XMu, self).__init__(*args, **kwargs)
+        self.records = {}
+
+
+    def iterate(self, element):
+        rec = self.parse(element)
+        # Do stuff...
+
+xmudata = XMu('xmldata.xml')
+xmudata.fast_iter(report=1000)
 ```
 
-To get info about a rock, mineral, or meteorite, simply call the class itself:
-
-```python
-print gt('basalt')
-```
-
-If no match for a given taxon is found, the script will try to place the new
-taxon in the existing hierarchy.
-
-To find the preferred synonym for a deprecated species, use preferred_synonym:
-
-```python
-print gt.preferred_synonym('argentite')
-```
-
-To get the name of an object, use item_name. This function accepts as a taxa
-list, setting, and/or name as parameters. For example:
-
-```python
-print gt.item_name(['corundum, ruby, sapphire'])
-print gt.item_name(name='Hope Diamond')
-print gt.item_name('diamond', 'ring')
-```
+Examples of common operations, include a sample EMu export file, are provided
+in https://github.com/adamancer/minsci/tree/master/minsci/examples.
