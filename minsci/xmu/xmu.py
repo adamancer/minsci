@@ -202,7 +202,7 @@ class XMu(object):
         if keep is not None:
             self.keep = keep
             try:
-                self.load(**kwargs.pop('callback_kwargs', {}))
+                self.load(**kwargs.get('callback_kwargs', {}))
             except (IOError, OSError, ValueError):
                 callback = kwargs.pop('callback', self.save)
                 self.fast_iter(callback=callback, **kwargs)
