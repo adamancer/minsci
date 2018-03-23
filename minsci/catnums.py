@@ -24,7 +24,7 @@ class CatNum(object):
     def __init__(self, *args, **kwargs):
         if args and isinstance(args[0], basestring):
             self.parse(args[0], **kwargs)
-        elif 'CatNumber' in kwargs:
+        elif 'CatNumber' in kwargs or 'MetMeteoriteName' in kwargs:
             for key in ['FullNumber', 'MetPrefix']:
                 try:
                     del kwargs[key]
@@ -36,27 +36,33 @@ class CatNum(object):
             self.suffix = kwargs.pop('CatSuffix', None)
             self.division = kwargs.pop('CatDivision', None)
             self.delim = '-'
-        elif 'number' in kwargs:
+            self.metname = kwargs.pop('MetMeteoriteName', None)
+        elif 'number' in kwargs or 'metname' in kwargs:
             self.code = kwargs.pop('code', None)
             self.prefix = kwargs.pop('prefix', None)
             self.number = kwargs.pop('number', None)
             self.suffix = kwargs.pop('suffix', None)
             self.delim = kwargs.pop('delim', '-')
-            self.division = kwargs.pop('divisio', None)
+            self.division = kwargs.pop('division', None)
+            self.metname = kwargs.pop('metname', None)
         else:
             raise ValueError('Cannot parse arguments: {}'.format(args))
         # Raise an error if there are the kwargs dict still has values in it
         if kwargs:
             raise KeyError('Leftover kwargs: %s' % kwargs)
         # Enforce formatting for some fields
-        self.prefix = self.prefix.upper()
+        if self.prefix:
+            self.prefix = self.prefix.upper()
+        if self.suffix:
+            self.suffix = self.suffix.strip(self.delim)
         self._params = {
             'code': self.code,
             'prefix': self.prefix,
             'number': self.number,
             'suffix': self.suffix,
             'delim': self.delim,
-            'div': self.division[:3].upper() if self.division else None
+            'div': self.division[:3].upper() if self.division else None,
+            'metname': self.metname
         }
         self._masks = {
             'default': u'{prefix}{number}{delim}{suffix}',
@@ -82,12 +88,14 @@ class CatNum(object):
 
 
     def __str__(self):
+        if self.metname:
+            return self.metname
         return self.from_mask(self._mask)
 
 
-    def set_mask(key):
+    def set_mask(self, key):
         try:
-            self._mask = self.masks[key]
+            self._mask = self._masks[key]
         except KeyError:
             self._mask = key
 
@@ -102,6 +110,7 @@ class CatNum(object):
         self.suffix = result[0].get('CatSuffix')
         self.delim = result[0].get('CatDelimiter', '-')
         self.division = result[0].get('CatDivision')
+        self.metname = result[0].get('MetMeteoriteName')
         return self
 
 
@@ -111,13 +120,14 @@ class CatNum(object):
             'CatPrefix': self.prefix,
             'CatNumber': self.number,
             'CatSuffix': self.suffix,
-            'CatDivision': self.division
+            'CatDivision': self.division,
+            'MetMeteoriteName': self.metname
             }
 
 
     def for_filename(self, sortable=True, lower=False):
         number = self._to_num_string(sortable)
-        catnum = self.from_mask(number=number)
+        catnum = self.metname if self.metname else self.from_mask(number=number)
         return catnum.lower() if lower else catnum
 
 
