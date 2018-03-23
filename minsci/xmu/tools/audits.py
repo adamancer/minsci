@@ -15,6 +15,8 @@ class Auditor(XMu):
             will be ignored. The whitelist supersedes the blacklist.
         blacklist (list): list of fields to exclude from output. all
             other fields will be included.
+        modules (list): list of modules to include in the report
+        users (list): list of users to include in the report
 
     Attributes:
         keep (int): percent of records to include in the output
