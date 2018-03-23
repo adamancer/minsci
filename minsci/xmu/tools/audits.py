@@ -64,6 +64,11 @@ class Auditor(XMu):
         self.records.setdefault(key, []).append(rec)
 
 
+    def itermodified(self, element):
+        rec = self.parse(element)
+        self.records.setdefault(rec('AudTable'), []).append(rec('AudKey'))
+
+
     def combine(self, records=None, keep_all=False):
         """Parses audit records into HTML"""
         if records is None:
@@ -122,12 +127,16 @@ class Auditor(XMu):
 
     def finalize(self):
         html = []
-        combined = self.combine()
-        print '{:,} distinct records were modified'.format(len(combined))
-        for irn, rec in combined.iteritems():
-            if (self.percent_to_review == 100
-                or randint(1, 100) <= self.percent_to_review):
-                html.extend(self.to_html(rec))
+        try:
+            combined = self.combine()
+        except TypeError:
+            pass
+        else:
+            print '{:,} distinct records were modified'.format(len(combined))
+            for irn, rec in combined.iteritems():
+                if (self.percent_to_review == 100
+                    or randint(1, 100) <= self.percent_to_review):
+                    html.extend(self.to_html(rec))
         self._html = html
         return html
 
