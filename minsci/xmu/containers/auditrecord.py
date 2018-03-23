@@ -14,6 +14,7 @@ class AuditRecord(XMuRecord):
 
     def __init__(self, *args):
         super(AuditRecord, self).__init__(*args)
+        self.module = 'eaudits'
         self.changes = None
 
 
