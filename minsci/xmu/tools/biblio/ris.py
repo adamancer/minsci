@@ -15,15 +15,24 @@ from ....helpers import parse_names
 from ....xmu import XMu, BiblioRecord
 
 
-USGS = {
-    'Annual Report': 'U. S. Geological Survey Annual Report',
-    'Bulletin': 'U. S. Geological Survey Bulletin',
-    'Monograph': 'U. S. Geological Survey Monograph',
-    'Professional Paper': 'U. S. Geological Survey Professional Paper'
-}
 
-LISTS = ['AU', 'A1', 'A2', 'A3', 'A4', 'ED', 'KW', 'N1', 'SN', 'UR']
 
+# List of keys that can contain multiple values
+LISTS = [
+    'AU',
+    'A1',
+    'A2',
+    'A3',
+    'A4',
+    'ED',
+    'KW',
+    'N1',
+    'SN',
+    'UR'
+]
+
+# Dict mapping pub type to prefix. Only for cass where the prefix does not
+# equal the first three letters of the pub type.
 PREFIXES = {
     'Book Series': 'Bos'
 }
@@ -37,6 +46,7 @@ ROLES = {
     'ED': u'Editor'
 }
 
+
 Contributor = namedtuple('Contributor', ['name', 'role'])
 Source = namedtuple('Source', ['type', 'parent_type'])
 
@@ -47,9 +57,15 @@ class FillFromRIS(XMu):
     """Fill out skeleton bibliography records that have RIS data in notes"""
 
     def __init__(self, *args, **kwargs):
+        parsers = kwargs.pop('parsers', {})
+        if parsers is None:
+            parsers = {}
         super(FillFromRIS, self).__init__(*args, **kwargs)
         self.records = []
         self.errors = []
+        self.parsers = {'default': ['CY', 'DB', 'N1', 'UR']}
+        for key, handler in parsers.iteritems():
+            self.parsers[key] = handler
 
 
     def iterate(self, element):
@@ -63,7 +79,7 @@ class FillFromRIS(XMu):
         if 'TY' in ris:
             irn = rec('irn')
             try:
-                formatted = emuize(ris)
+                formatted = emuize(ris , self.parsers)
             except (KeyError, ValueError) as e:
                 self.errors.append(e)
                 logging.exception('ris')
@@ -79,11 +95,11 @@ class FillFromRIS(XMu):
 
 
 
-def ris2emu(fp):
+def ris2emu(fp, parsers=None):
     """Parses RIS data in the notes field of an ebibliography export"""
-    bib = FillFromRIS(fp, container=BiblioRecord)
+    bib = FillFromRIS(fp, container=BiblioRecord, parsers=parsers)
     bib.fast_iter(report=10)
-    return bib
+    return bib.records
 
 
 def split_records(ris):
@@ -106,7 +122,7 @@ def split_records(ris):
     return records
 
 
-def emuize(ris, customizer=None):
+def emuize(ris, parsers=None):
     """Converts RIS record to EMu ebibliography format"""
     records = split_records(ris)
     bibs = []
@@ -116,18 +132,17 @@ def emuize(ris, customizer=None):
         if rec.get('DO'):
             continue
         # Look for customizers based on UR
-        if customizer is None:
-            for key, func in CUSTOMIZERS.iteritems():
-                if [url for url in rec.get('UR', []) if key in url]:
-                    customizer = func
-                    break
-        if customizer is not None:
-            try:
-                rec = customizer(rec)
-            except TypeError:
-                rec = generic(rec, customizer)
+        parser = None
+        for key, func in parsers.iteritems():
+            if [url for url in rec.get('UR', []) if key in url]:
+                parser = func
+                break
         else:
-            rec = generic(rec)
+            parser = parsers['default']
+        try:
+            rec = parser(rec)
+        except TypeError:
+            rec = generic(rec, parser)
         source = get_type(rec)
         if source.parent_type is not None:
             parent_prefix = PREFIXES.get(source.parent_type, source.parent_type[:3])
@@ -271,6 +286,7 @@ def get_type(rec):
             'CHAP': ['Book', 'Report'],
             'CPAPER': ['Paper'],
             'JOUR': ['Journal article', 'Paper', 'Report'],
+            'RPRT': ['Report']
         }
         if not work_type in work_types.get(bib_type, []):
             raise ValueError('Work type {} (bib_type={})'.format(work_type, bib_type))
@@ -341,55 +357,8 @@ def get_ris(url):
     return url
 
 
-def usgs(ris):
-    """Formats RIS records from the USGS"""
-    # Remove keys containing info we don't want/need
-    keys = ['A3', 'CY', 'DB', 'ET', 'M3', 'N1', 'UR']
+def generic(ris, keys):
+    """Parses generic RIS records, excluding keys"""
     for key in keys:
         ris.pop(key, None)
-    ris['T2'] = USGS.get(ris['T2'], ris['T2'])
-    if ris.get('SN') and ris.get('TY') == 'RPRT':
-        if ris.get('VL'):
-            raise ValueError('Both VL and SN populated for USGS report')
-        ris['VL'] = ris.pop('SN')[0]
-    #if 'cont' in ris['VL']:
-    #    ris['VL'] = ris['VL'].split('cont', 1)[0].strip() + ' (cont.)'
-    # Identify monographs based on T2
-    series = ['U. S. Geological Survey Annual Report']
-    if ris.get('T2') in series:
-        ris['TY'] = '_MONOGRAPH'
     return ris
-
-
-def hathi(ris):
-    """Formats RIS records from the Hathi Trust"""
-    keys = ['ID', 'KW', 'M1', 'N1', 'TP', 'UR']
-    for key in keys:
-        ris.pop(key, None)
-    # Check for countries in author list
-    if ris['AU'][-1].endswith('.'):
-        ris['AU'].pop()
-    return ris
-
-
-def generic(ris, keys=None):
-    """Formats RIS records from JSTOR"""
-    for key in keys if keys is not None else CUSTOMIZERS['default']:
-        ris.pop(key, None)
-    return ris
-
-
-CUSTOMIZERS = {
-    'default': ['CY', 'DB', 'N1', 'UR'],
-    'catalog.hathitrust.org': hathi,
-    'jstor.org': ['AB', 'C1', 'PB', 'SN', 'UR'],
-    'ncbi.nlm.nih.gov/pmc': ['UR'],
-    'pubs.er.usgs.gov': usgs,
-    'geoscienceworld.org': ['N2', 'UR'],
-    'books.google.com': ['UR'],
-    'canmin.org': [u'JO', u'N2', u'UR']
-}
-for key, fields in CUSTOMIZERS.iteritems():
-    if isinstance(fields, list) and not 'N1' in fields:
-        fields.append('N1')
-        CUSTOMIZERS[key] = fields

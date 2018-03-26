@@ -106,7 +106,7 @@ def doi2emu(fp):
     """Parses BibTeX data for a DOI found in an ebibliography export"""
     bib = FillFromDOI(fp, container=BiblioRecord)
     bib.fast_iter(report=10)
-    return bib
+    return bib.records
 
 
 def doi2bib(doi):

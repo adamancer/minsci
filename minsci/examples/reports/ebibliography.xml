@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE table
+[
+  <!ELEMENT table	(tuple)*>
+  <!ATTLIST table
+            name	CDATA #REQUIRED
+  >
+
+  <!ELEMENT tuple	(table|tuple|atom)*>
+  <!ATTLIST tuple
+            name	CDATA #IMPLIED
+  >
+
+  <!ELEMENT atom	(#PCDATA)*>
+  <!ATTLIST atom
+            name	CDATA #REQUIRED
+            type	CDATA "text"
+            size	CDATA "short"
+  >
+]
+>
+<?schema
+  table           ebibliography
+    integer         irn
+    table           AdmGUIDType_tab
+      text short      AdmGUIDType
+    end
+    table           AdmGUIDValue_tab
+      text short      AdmGUIDValue
+    end
+    text long       NotNotes
+    text short      BibRecordType
+    date            ArtPublicationDate
+    text short      ArtPublicationDates
+    text short      BooPublicationDates
+    date            ChaPublicationDate
+    text short      ChaPublicationDates
+    date            ThePublicationDate
+    text short      BooAuthorsEtAl
+    text short      ChaAuthorsEtAl
+    text short      ArtAuthorsEtAl
+    table           ArtAuthorsRef_tab
+      text short      NamLast
+      text short      NamFirst
+      text short      NamMiddle
+    end
+    table           BooAuthorsRef_tab
+      text short      NamLast
+      text short      NamFirst
+      text short      NamMiddle
+    end
+    table           ChaAuthorsRef_tab
+      text short      NamLast
+      text short      NamFirst
+      text short      NamMiddle
+    end
+    tuple           TheAuthorsRef
+      text short      NamLast
+      text short      NamFirst
+      text short      NamMiddle
+    end
+  end
+?>
+<!-- Data -->
+<table name="ebibliography">
+
+  <!-- Row 1 -->
+  <tuple>
+    <atom name="irn">1000000</atom>
+    <table name="AdmGUIDType_tab">
+      <tuple>
+        <atom name="AdmGUIDType">DOI</atom>
+      </tuple>
+    </table>
+    <table name="AdmGUIDValue_tab">
+      <tuple>
+        <atom name="AdmGUIDValue">10.1093/petrology/egy003</atom>
+      </tuple>
+    </table>
+    <atom name="NotNotes"></atom>
+    <atom name="BibRecordType"></atom>
+    <atom name="ArtPublicationDate"></atom>
+    <atom name="ArtPublicationDates"></atom>
+    <atom name="BooPublicationDates"></atom>
+    <atom name="ChaPublicationDate"></atom>
+    <atom name="ChaPublicationDates"></atom>
+    <atom name="ThePublicationDate"></atom>
+    <atom name="BooAuthorsEtAl"></atom>
+    <atom name="ChaAuthorsEtAl"></atom>
+    <atom name="ArtAuthorsEtAl"></atom>
+    <table name="ArtAuthorsRef_tab"></table>
+    <tuple name="TheAuthorsRef">
+        <atom name="NamLast"></atom>
+        <atom name="NamFirst"></atom>
+        <atom name="NamMiddle"></atom>
+    </tuple>
+  </tuple>
+
+  <!-- Row 2 -->
+  <tuple>
+    <atom name="irn">1000001</atom>
+    <table name="AdmGUIDType_tab">
+      <tuple>
+        <atom name="AdmGUIDType">DOI</atom>
+      </tuple>
+    </table>
+    <table name="AdmGUIDValue_tab">
+      <tuple>
+        <atom name="AdmGUIDValue">10.1038/nature25446</atom>
+      </tuple>
+    </table>
+    <atom name="NotNotes"></atom>
+    <atom name="BibRecordType"></atom>
+    <atom name="ArtPublicationDate">2018</atom>
+    <atom name="ArtPublicationDates">2018</atom>
+    <atom name="BooPublicationDates"></atom>
+    <atom name="ChaPublicationDate"></atom>
+    <atom name="ChaPublicationDates"></atom>
+    <atom name="ThePublicationDate"></atom>
+    <atom name="BooAuthorsEtAl"></atom>
+    <atom name="ChaAuthorsEtAl"></atom>
+    <atom name="ArtAuthorsEtAl"></atom>
+    <table name="ArtAuthorsRef_tab">
+	    <tuple>
+			<atom name="NamLast">Jackson</atom>
+			<atom name="NamFirst">C</atom>
+			<atom name="NamMiddle"></atom>
+		</tuple>
+	</table>
+    <tuple name="TheAuthorsRef">
+        <atom name="NamLast"></atom>
+        <atom name="NamFirst"></atom>
+        <atom name="NamMiddle"></atom>
+    </tuple>
+  </tuple>
+
+
+  <!-- Row 3 -->
+  <tuple>
+    <atom name="irn">1000002</atom>
+    <table name="AdmGUIDType_tab">
+      <tuple>
+        <atom name="AdmGUIDType">DOI</atom>
+      </tuple>
+    </table>
+    <table name="AdmGUIDValue_tab">
+      <tuple>
+        <atom name="AdmGUIDValue">10.1093/petrology/egx072</atom>
+      </tuple>
+    </table>
+    <atom name="NotNotes"></atom>
+    <atom name="BibRecordType"></atom>
+    <atom name="ArtPublicationDate">2016</atom>
+    <atom name="ArtPublicationDates">2016</atom>
+    <atom name="BooPublicationDates"></atom>
+    <atom name="ChaPublicationDate"></atom>
+    <atom name="ChaPublicationDates"></atom>
+    <atom name="ThePublicationDate"></atom>
+    <atom name="BooAuthorsEtAl"></atom>
+    <atom name="ChaAuthorsEtAl"></atom>
+    <atom name="ArtAuthorsEtAl"></atom>
+    <table name="ArtAuthorsRef_tab">
+	    <tuple>
+			<atom name="NamLast">Birner</atom>
+			<atom name="NamFirst">S</atom>
+			<atom name="NamMiddle"></atom>
+		</tuple>
+	</table>
+    <tuple name="TheAuthorsRef">
+        <atom name="NamLast"></atom>
+        <atom name="NamFirst"></atom>
+        <atom name="NamMiddle"></atom>
+    </tuple>
+  </tuple>
+
+  <!-- Row 4 -->
+  <tuple>
+    <atom name="irn">1000004</atom>
+    <atom name="NotNotes">TY  - RPRT
+A2  - Poland, Michael P.
+A2  - Takahashi, T. Jane
+A2  - Landowski, Claire M.
+A3  - U.S. Geological Survey
+CY  - Reston, VA
+C6  -
+ET  -
+LA  - English
+M3  - Report
+SN  - 18016
+SP  - 237-292
+T2  - Professional Paper
+VL  -
+AU  - Helz, Rosalind L.
+AU  - Clague, David A.
+AU  - Sisson, Thomas W.
+AU  - Thornber, Carl R.
+TI  - Petrologic insights into basaltic volcanism at historically active Hawaiian volcanoes: Chapter 6 in Characteristics of Hawaiian volcanoes
+PY  - 2014
+DO  -
+DB  - USGS Publications Warehouse
+UR  - http://pubs.er.usgs.gov/publication/pp18016
+ER  -</atom>
+    <atom name="BibRecordType">Article</atom>
+    <atom name="ArtPublicationDate"></atom>
+    <atom name="ArtPublicationDates"></atom>
+    <atom name="BooPublicationDates"></atom>
+    <atom name="ChaPublicationDate"></atom>
+    <atom name="ChaPublicationDates"></atom>
+    <atom name="ThePublicationDate"></atom>
+    <atom name="BooAuthorsEtAl"></atom>
+    <atom name="ChaAuthorsEtAl"></atom>
+    <atom name="ArtAuthorsEtAl"></atom>
+    <table name="ArtAuthorsRef_tab"></table>
+    <tuple name="TheAuthorsRef">
+        <atom name="NamLast"></atom>
+        <atom name="NamFirst"></atom>
+        <atom name="NamMiddle"></atom>
+    </tuple>
+  </tuple>
+</table>

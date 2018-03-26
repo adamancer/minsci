@@ -40,10 +40,10 @@ class BibCheck(XMu):
 
 
 def compare_citations(authors, pub_date, existing, show_warnings=True):
-    """Check new author and publication date against existing record"""
+    """Checks new author and publication date against existing record"""
     # Test authors
     if not authors:
-        msg = ('E: No authors found: {}'.format(existing.irn))
+        msg = 'E: No authors found: {}'.format(existing.irn)
         print msg
         return False
     # Test first authors. These MUST match.
