@@ -1,5 +1,7 @@
 """Script to create or update a group via import"""
 
+import os
+
 from minsci import xmu
 from minsci.xmu.tools.groups import write_group
 
@@ -17,7 +19,7 @@ class XMu(xmu.XMu):
             self.irns.append(rec('irn'))
 
 
-xmudata = XMu('xmldata.xml')
+xmudata = XMu(os.path.join('reports', 'ecatalogue.xml'))
 xmudata.fast_iter()
 
 irns = list(set(xmudata.irns))

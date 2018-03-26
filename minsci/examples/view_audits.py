@@ -43,4 +43,4 @@ with open('modified.csv', 'wb') as f:
 # can be viewed from your web browser.
 xmudata.records = {}  # reset the records container
 xmudata.fast_iter(report=10000, callback=xmudata.finalize)
-xmudata.write_html('audit.htm')
+xmudata.write_html(os.path.join('reports', 'eaudits.htm'))

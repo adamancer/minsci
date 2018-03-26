@@ -1,5 +1,7 @@
 """Script to read data from an EMu export file"""
 
+import os
+
 from minsci import xmu
 
 
@@ -34,5 +36,5 @@ class XMu(xmu.XMu):
         print rec.get_guid('EZID')
 
 
-xmudata = XMu('xmldata.xml')
+xmudata = XMu(os.path.join('reports', 'ecatalogue.xml'))
 xmudata.fast_iter()
