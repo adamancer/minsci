@@ -69,7 +69,10 @@ class Taxon(dict):
 
 
     def __str__(self):
-        return self.name
+        try:
+            return self.name
+        except AttributeError:
+            return self.sci_name
 
 
     def pprint(self, wait=False):
@@ -224,19 +227,22 @@ class Taxon(dict):
         preferred = self
         while not preferred.is_current:
             preferred = self.tree[preferred.current.irn]
+            self.parent = preferred.parent
         return preferred
 
 
     def official(self, full_records=False):
-        if not self.is_official:
-            for parent in self.parents(full_records=True):
+        taxon = self.preferred()
+        if not taxon.is_official:
+            for parent in taxon.parents(full_records=True)[::-1]:
                 if parent.is_official:
                     return parent
+        return taxon
 
 
     def parents(self, include_self=False, full_records=False):
         parents = []
-        taxon = self
+        taxon = self.preferred()
         while taxon.parent:
             parents.insert(0, taxon.parent)
             taxon = self.tree[taxon.parent.irn]
@@ -292,7 +298,7 @@ class Taxon(dict):
         return TaxaParser(self.sci_name).indexed
 
 
-    def autoname(self, lcfirst=False, use_preferred=True):
+    def autoname(self, ucfirst=True, use_preferred=True):
         taxon = self if self.is_current or not use_preferred else self.preferred()
         name = taxon.name
         # Filter out codes
@@ -305,7 +311,7 @@ class Taxon(dict):
                     break
         if name.count(',') == 1:
             name = ' '.join([s.strip() for s in name.split(',') if s][::-1])
-        return self.tree.capped(name, lcfirst=lcfirst)
+        return self.tree.capped(name, ucfirst=ucfirst)
 
 
     def autoclassify(self, force=False):
@@ -331,8 +337,8 @@ class Taxon(dict):
         #        matches.sort(key=lambda m:len(m['name']))
         matches = [m for m in matches if m.sci_name != preferred.sci_name]
         match = matches[0] if matches else None
-        if match:
-            print '"{}" is a child of "{}"'.format(preferred.sci_name, match.sci_name)
+        #if match:
+        #    print '"{}" is a child of "{}"'.format(preferred.sci_name, match.sci_name)
         return match
 
 
