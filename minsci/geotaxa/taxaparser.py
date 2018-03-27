@@ -167,7 +167,7 @@ class TaxaParser(object):
         if '(var' in name:
             main = name.split('(var')[1].strip(' .)')
             stem = self.stem(main)
-            pos = 'noun' if main == stem else 'adj'
+            pos = 'noun' if main.rstrip('e') == stem else 'adj'
             return [Part(main, self.stem(main), 0, pos)]
         # FIXME: Handle Mineral-(Y) and Mineral-(AbCDe)
         # Split into parts, checking for hyphenates
@@ -178,7 +178,7 @@ class TaxaParser(object):
             mod = ''
             main = name
         stem = self.stem(main)
-        pos = 'noun' if main == stem else 'adj'
+        pos = 'noun' if main.rstrip('e') == stem else 'adj'
         parts = [Part(main, stem, 0, pos)]
         exclude = ['', 'var'] + self._modifiers + self._textures + self._colors
         words = [w for w in re.split('\W', mod) if not self.key(w) in exclude]
