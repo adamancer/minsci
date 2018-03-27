@@ -45,7 +45,7 @@ class TaxaNamer(TaxaTree):
             return u'{} with {}'.format(first, self.join(names, None, u'and'))
         else:
             last = names.pop()
-            return u'{}{}{}'.format(', '.join(names), conj, last)
+            return u'{},{}{}'.format(', '.join(names), conj, last)
 
 
     def name_item(self, taxa, setting=None):
@@ -63,5 +63,5 @@ class TaxaNamer(TaxaTree):
         return self.capped(name, ucfirst=True)
 
 
-    def name_group(self, taxa):
-        return self.join(taxa.names())
+    def name_group(self, taxa, ucfirst=False):
+        return self.join(TaxaList(taxa).names()).lower()
