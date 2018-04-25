@@ -116,6 +116,11 @@ class MinSciRecord(XMuRecord):
         return self.get_identifier(include_code, include_div, force_catnum=True)
 
 
+    def get_catalog_number(self, include_code=True, include_div=False):
+        """Returns the catalog number of the current object"""
+        return self.get_identifier(include_code, include_div, force_catnum=True)
+
+
     def get_age(self, pretty_print=True):
         """Gets geological age as string"""
         era = self('AgeGeologicAgeEra_tab')
