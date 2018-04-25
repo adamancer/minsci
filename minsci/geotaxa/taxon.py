@@ -166,9 +166,12 @@ class Taxon(dict):
 
 
     def from_emu(self, rec):
-        assert len(rec('ClaOtherValue_tab')) == 1
-        assert len(rec('ClaOtherRank_tab')) == 1
-        assert not rec('ClaSpecies')
+        try:
+            assert len(rec('ClaOtherValue_tab')) == 1
+            assert len(rec('ClaOtherRank_tab')) == 1
+            assert not rec('ClaSpecies')
+        except AssertionError:
+            raise AssertionError(rec('irn'))
 
         self['irn'] = int(rec('irn'))
         self['sci_name'] = rec('ClaScientificName')
