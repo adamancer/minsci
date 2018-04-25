@@ -108,12 +108,45 @@ class XMuRecord(DeepDict):
             return self(*path)
 
 
+    def _guess_module(self):
+        """Attempts to guess the module if no module attribute set"""
+        # FIXME: Fill out and move to a config file
+        keys = {
+            'ArtTitle': 'ebibliography',
+            'CatPrefix': 'ecatalogue',
+            'CatNumber': 'ecatalogue',
+            'CatSuffix': 'ecatalogue',
+            'LocCountry': 'ecollectionevents',
+            'LocStateProvinceTerritory': 'ecollectionevents',
+            'LocDistrictCountyShire': 'ecollectionevents',
+            'LocTownship': 'ecollectionevents',
+            'MulTitle': 'emultimedia',
+            'NamLast': 'eparties',
+            'NamOrganisation': 'eparties',
+            'NamRoles_tab': 'eparties',
+            'ShpContactRef': 'eshipments',
+            'TraNumber': 'enmnhtransactions'
+        }
+        try:
+            assert self.module
+        except AssertionError:
+            modules = []
+            for key, module in keys.iteritems():
+                if self.get(key) is not None:
+                    modules.append(module)
+            if len(set(modules)) == 1:
+                self.module = modules[0]
+            else:
+                raise
+
+
     def smart_pull(self, *args, **kwargs):
         """Pull data from the record, formatting the result based on the path
 
         Args:
             *args: the path to a value in the dictionary, with one component
-                of that path per arg
+                of that path per arg. If args[0] contains one or more dots,
+                the path will be expanded from that and ignore subsequent args.
 
         Returns:
             Value for the given path, formatted as follows:
@@ -124,7 +157,9 @@ class XMuRecord(DeepDict):
                 A reference table returns a list of XMuRecord objects
                 A nested table returns a list of lists
         """
-        assert self.module
+        self._guess_module()
+        if '.' in args[0]:
+            args = args[0].split('.')
         # Nested tables need to be handled very carefully
         nested = [arg for arg in args if arg.endswith('_nesttab')]
         if nested:
@@ -190,6 +225,29 @@ class XMuRecord(DeepDict):
         if retval is None:
             raise TypeError
         return retval
+
+
+    def is_new(self, found):
+        """Checks if current module:irn exists in found
+
+        Args:
+            found (dict): marks irns already found as True
+
+        Returns:
+            Boolean expressing if the current record has already been seen
+
+        This method can be invoked manually inside the XMu subclass when
+        reading XML exports from a directory containing multiple, potentially
+        overlapping record sets to prevent (a) the same record from being read
+        twice or (b) an older version of a record from overwriting a more
+        recent one.
+        """
+        key = ':'.join([self.module, self('irn')])
+        try:
+            return not found[key]
+        except KeyError:
+            found[key] = True
+            return True
 
 
     def verify(self):
