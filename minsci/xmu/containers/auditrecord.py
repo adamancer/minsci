@@ -55,7 +55,8 @@ class AuditRecord(XMuRecord):
         old = self.parse_field('AudOldValue_tab')
         new = self.parse_field('AudNewValue_tab')
         changes = {field: Change(field, old.get(field), new.get(field))
-                   for field in set(old.keys() + new.keys())}
+                   for field in set(old.keys() + new.keys())
+                   if old.get(field) != new.get(field)}
         # Limit fields based on whitelist/blacklist
         if whitelist:
             changes = {fld: changes[fld] for fld
