@@ -49,4 +49,9 @@ setup(name='minsci',
           'unidecode'
       ],
       include_package_data=True,
+      entry_points = {
+          'console_scripts' : [
+              'minsci = minsci.portal.__main__:main'
+          ]
+      },
       zip_safe=False)

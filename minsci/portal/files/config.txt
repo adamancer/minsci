@@ -1,0 +1,21 @@
+keyword	a general keyword search
+irn	the internal identification number for a specimen
+guid	the EZID for a specimen record
+sample_id	a sample identifier assigned to a specimen (catalog number, field number, IGSN, etc.)
+location_id	the internal identification number for a collection event record
+classification	the name of a type of rock, mineral, or meteorite
+country	the name of a country
+state	the name of a state, province, or territory
+mine	the name of a mine
+site	the site/station number for a locality
+volcano	the name of a volcano
+age	the name of a geologic time period
+unit	the name of a stratigraphic unit
+expedition	an expedition or survey
+collection	the name of a collection
+has_media	specifies whether returned records have associated media. One of true or false.
+schema	the abbreviation for an available schema. One of abcd, abcdefg, dwr, or simpledwr.
+limit	the number of records to return
+offset	the index of the first record to return
+format	the format in which to return the data. One of html, json, or xml.
+bcp	specifies whether to include the BioCASE protocol wrapper. Ignored for HTML requests. One of true or false.

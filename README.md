@@ -55,5 +55,25 @@ xmudata = XMu('xmldata.xml')
 xmudata.fast_iter(report=1000)
 ```
 
-Examples of common operations, include sample EMu export files, are provided
+Examples of common operations, including sample EMu export files, are provided
 in https://github.com/adamancer/minsci/tree/master/minsci/examples.
+
+
+Downloading data about NMNH geology specimens
+---------------------------------------------
+
+The minsci module also includes a command-line utility that can be used to
+download specimen data from the [NMNH Geology Collections Data Portal].
+Downloads are CSV files using the [Simple Darwin Core] data standard.
+
+Here is an example download command:
+
+`minsci download -classification basalt -state hawaii`
+
+Use the -h flag to see the available options:
+
+`minsci download -h`
+
+
+[NMNH Geology Collections Data Portal]: https://geogallery.si.edu/portal
+[Simple Darwin Core]: http://rs.tdwg.org/dwc/terms/simple/
