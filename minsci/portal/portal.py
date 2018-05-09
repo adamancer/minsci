@@ -22,7 +22,7 @@ def get(**kwargs):
     response = requests.get(url, params=params)
     print 'Retrieving {}...'.format(response.url)
     if not hasattr(response, 'from_cache') or not response.from_cache:
-        time.sleep(3)
+        time.sleep(2)
     if response.status_code == 200:
         data = response.json()
         if not params.get('offset'):
@@ -67,7 +67,7 @@ def download(**kwargs):
         for rec in records:
             keys.extend(rec.keys())
         keys = sorted(list(set(keys)))
-        fn = 'portal_{}.csv'.format(dt.datetime.now().strftime('%Y%m%dt%H%M%S'))
+        fn = filename('portal')
         with open(fn, 'wb') as f:
             writer = csv.writer(f)
             writer.writerow(keys)
@@ -97,3 +97,8 @@ def parse_config():
             arg['help'] = definition
             args.append(arg)
     return args
+
+
+def filename(stem='portal'):
+    """Creates a datestamped filename"""
+    return '{}_{}.csv'.format(stem, dt.datetime.now().strftime('%Y%m%dt%H%M%S'))

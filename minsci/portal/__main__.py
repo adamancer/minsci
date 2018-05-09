@@ -6,6 +6,7 @@ import sys
 import requests_cache
 
 import portal
+import reports
 
 
 requests_cache.install_cache('portal', expire_after=86400)
@@ -32,6 +33,11 @@ def main(args=None):
         del args['func']
         portal.download(**args)
 
+
+    def _report_callback(args):
+        getattr(reports, vars(args)['name'])()
+
+
     if args is None:
         args = sys.argv[1:]
 
@@ -40,7 +46,7 @@ def main(args=None):
     )
     subparsers = parser.add_subparsers(help='sub-command help')
 
-    # Subcommand for downloading
+    # Defines subcommand to download data from portal
     download_parser = subparsers.add_parser(
         'download',
         help='Download data from the NMNH Geology Collections Data Portal'
@@ -49,6 +55,21 @@ def main(args=None):
     for arg in MinSciParser.config:
         download_parser.add_argument('-' + arg['dest'], **arg)
     download_parser.set_defaults(func=_download_callback)
+
+    # Defines subcommand to report data from the portal
+    report_parser = subparsers.add_parser(
+        'report',
+        help=('Build predefined reports using data from the NMNH Geology'
+              ' Collections Data Portal')
+    )
+    report_parser.add_argument(
+        '-name',
+        dest='name',
+        type=str,
+        choices=['meteorites'],
+        help='the name of a predefined report'
+    )
+    report_parser.set_defaults(func=_report_callback)
 
     args = parser.parse_args(args)
     args.func(args)
