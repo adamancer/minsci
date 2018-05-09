@@ -5,7 +5,7 @@ from .portal import get_all, filename, encode_for_excel
 
 def meteorites():
     names = {}
-    records = get_all(keyword='meteorites')
+    records = get_all(collection='meteorites')
     for rec in records:
         name = rec['catalogNumber'].split('|')[0].rsplit(',', 1)[0].strip()
         names.setdefault(name, []).append(rec)
