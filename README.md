@@ -17,6 +17,7 @@ prompt:
 cd /path/to/directory
 git clone https://github.com/adamancer/minsci
 cd minsci
+pip install -r requirements.txt
 python setup.py install
 ```
 

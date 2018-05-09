@@ -19,8 +19,13 @@ setup(name='minsci',
       author='adamancer',
       author_email='mansura@si.edu',
       license='MIT',
-      packages=['minsci', 'minsci.geotaxa', 'minsci.xmu'],
-      install_requires = [
+      packages=[
+        'minsci',
+        'minsci.geotaxa',
+        'minsci.portal',
+        'minsci.xmu'
+        ],
+      install_requires=[
           'bibtexparser',
           'dateparser',
           'inflect',
@@ -34,7 +39,7 @@ setup(name='minsci',
           'requests_cache',
           'unidecode'
       ],
-      setup_requires = [
+      setup_requires=[
           'bibtexparser',
           'dateparser',
           'inflect',
@@ -49,7 +54,7 @@ setup(name='minsci',
           'unidecode'
       ],
       include_package_data=True,
-      entry_points = {
+      entry_points={
           'console_scripts' : [
               'minsci = minsci.portal.__main__:main'
           ]
