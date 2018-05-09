@@ -1,0 +1,12 @@
+bibtexparser
+dateparser
+inflect
+lxml
+nameparser
+pillow
+pymongo
+pyodbc
+pytz
+requests
+requests_cache
+unidecode
