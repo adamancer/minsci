@@ -105,6 +105,7 @@ def filename(stem='portal'):
     """Creates a datestamped filename"""
     return '{}_{}.csv'.format(stem, dt.datetime.now().strftime('%Y%m%dt%H%M%S'))
 
+
 def encode_for_excel(fp, encoding='utf-8'):
     """Re-encode a document for Excel"""
     with open(fp, 'rb') as f:

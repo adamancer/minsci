@@ -11,7 +11,7 @@ def meteorites():
         names.setdefault(name, []).append(rec)
     fn = filename('meteorites')
     with open(fn, 'wb') as f:
-        writer = csv.writer(f)
+        writer = csv.writer(f, dialect='excel-tab')
         writer.writerow(['Name', 'Count'])
         for row in [(name, len(names[name])) for name in sorted(names)]:
             writer.writerow([u'{}'.format(s).encode('utf-8') for s in row])

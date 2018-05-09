@@ -5,15 +5,15 @@ import sys
 
 import requests_cache
 
-import portal
-import reports
+from .portal import download, parse_config
+from .reports import meteorites
 
 
 requests_cache.install_cache('portal', expire_after=86400)
 
 
 class MinSciParser(argparse.ArgumentParser):
-    config = portal.parse_config()
+    config = parse_config()
 
     def error(self, message):
         """Return help text on error with command
@@ -31,11 +31,13 @@ def main(args=None):
         if not args['offset']:
             args['offset'] = 0
         del args['func']
-        portal.download(**args)
+        download(**args)
 
 
     def _report_callback(args):
-        getattr(reports, vars(args)['name'])()
+        return {
+            'meteorites': meteorites
+        }[vars(args)['name']]()
 
 
     if args is None:
