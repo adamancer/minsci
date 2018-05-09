@@ -1,5 +1,6 @@
 """Defines methods to request data from the NMNH Geology Collections Data Portal"""
 
+import codecs
 import csv
 import datetime as dt
 import os
@@ -73,6 +74,7 @@ def download(**kwargs):
             writer.writerow(keys)
             for rec in records:
                 writer.writerow([rec.get(key, '').encode('utf-8') for key in keys])
+        encode_for_excel(fn)
         print 'Results saved as {}'.format(fn)
     else:
         print 'No records found!'
@@ -102,3 +104,11 @@ def parse_config():
 def filename(stem='portal'):
     """Creates a datestamped filename"""
     return '{}_{}.csv'.format(stem, dt.datetime.now().strftime('%Y%m%dt%H%M%S'))
+
+def encode_for_excel(fp, encoding='utf-8'):
+    """Re-encode a document for Excel"""
+    with open(fp, 'rb') as f:
+        text = f.read().decode(encoding)
+    with open(fp, 'wb') as f:
+        f.write(codecs.BOM_UTF16_LE)
+        f.write(text.encode('utf-16-le'))

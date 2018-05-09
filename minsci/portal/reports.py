@@ -1,6 +1,6 @@
 import csv
 
-from .portal import get_all, filename
+from .portal import get_all, filename, encode_for_excel
 
 
 def meteorites():
@@ -15,6 +15,7 @@ def meteorites():
         writer.writerow(['Name', 'Count'])
         for row in [(name, len(names[name])) for name in sorted(names)]:
             writer.writerow([u'{}'.format(s).encode('utf-8') for s in row])
+    encode_for_excel(fn)
     print 'Found {:,} total meteorites ({:,} distinct)'.format(len(records),
                                                                len(names))
     print 'Results saved as {}'.format(fn)
