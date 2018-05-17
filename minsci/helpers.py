@@ -807,9 +807,19 @@ def read_unicode_text(fp, encoding='utf-16', skiplines=0):
     return records
 
 
-def std(val):
-    """Standardizes the format of the given value"""
-    return unidecode(val).lower()
+def std(val, aggressive=False):
+    """Standardizes the given value for string comparisons
+
+    Args:
+        aggressive (bool): if True, strips everything except letters and numbers
+
+    Returns:
+        Standardized value as unicode
+    """
+    val = unidecode(u'{}'.format(val)).lower()
+    if aggressive:
+        return re.sub('[^A-Za-z0-9]', '', val)
+    return val
 
 
 def write_emu_search(mask, catnums, output='search.txt'):
