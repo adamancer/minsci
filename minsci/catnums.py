@@ -13,6 +13,7 @@ CATKEYS = (
     )
 MINCATNUM = 1000
 
+
 class CatNum(object):
     _attributes = [
         'code',
@@ -23,7 +24,9 @@ class CatNum(object):
     ]
 
     def __init__(self, *args, **kwargs):
+        self.verbatim = None
         if args and isinstance(args[0], basestring):
+            self.verbatim = args[0]
             self.parse(args[0], **kwargs)
         elif 'CatNumber' in kwargs or 'MetMeteoriteName' in kwargs:
             for key in ['FullNumber', 'MetPrefix']:
@@ -99,6 +102,7 @@ class CatNum(object):
             self._mask = self._masks[key]
         except KeyError:
             self._mask = key
+        return self
 
 
     def parse(self, val, *args, **kwargs):
@@ -146,6 +150,9 @@ class CatNum(object):
     def from_mask(self, mask=None, **params):
         if mask is None:
             mask = self._mask
+        # Pad prefix with a space if more than one character
+        if len(self.prefix) > 1:
+            params['prefix'] = self.prefix + ' '
         defaults = {k: v for k, v in self._params.iteritems()}
         defaults.update(params)
         params = {k: v if v else '' for k, v in defaults.iteritems()}
@@ -296,11 +303,14 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
     """
     if attrs is None:
         attrs = {}
+    # Cull text we don't want
+    val = re.sub(r'(No\. |#|specimens? )', '', val, flags=re.I).replace('  ', ' ')
     # Catch code using the old syntax
     if not isinstance(default_suffix, basestring):
         raise Exception('Default suffix must be a string')
     # Regular expressions for use with catalog number functions
-    p_pre = ur'(?:([A-Z]{3}[A ] ?)|(?:(NMNH |USNM )?(?:([BCGMRS])-?)?))?'
+    #p_pre = ur'(?:([A-Z]{3}[A ] ?)|(?:(NMNH[ \-]|USNM[ \-])?(?:([BCGMRS])-?)?))?'
+    p_pre = ur'(?:([A-Z]{3}[A ] ?)|(?:(NMNH[ \-]+|USNM[ \-]+)?(?:([A-Z]{1,3})[ \-]?)?))?'
     p_num = ur'([0-9]{1,6})'  # this will pick up ANY number
     if MINCATNUM == 1:
         p_suf = ur'\s?([-\.][A-z0-9\.\- ]+|[-/\.][0-9]{1,4}|[-/\.][A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
@@ -460,11 +470,15 @@ def _parse_matches(matches, prefixed_only=False):
     id_nums = []
     for match in matches:
         id_num = dict(zip(CATKEYS, [val.rstrip('-, ') for val in match]))
+        # FIXME
+        if id_num['MetPrefix'] in ['PAL']:
+            id_num['CatNumber'] = id_num['CatNumber'].split(id_num['MetPrefix'])[-1].strip()
+            id_num['CatPrefix'] = id_num['MetPrefix']
+            id_num['MetPrefix'] = None
         # Handle meteorites
-        if id_num['MetPrefix'] or id_num['CatMuseumAcronym'] == 'USNM':
-            if id_num['MetPrefix']:
-                metname = id_num['FullNumber'].replace(', ', ',')
-                return [{'MetMeteoriteName': metname}]
+        if id_num['MetPrefix']:
+            metname = id_num['FullNumber'].replace(', ', ',')
+            return [{'MetMeteoriteName': metname}]
         # Handle catalog numbers from other departments
         else:
             # Exclude catalog numbers without a prefix
@@ -515,6 +529,7 @@ def _clean_suffixes(id_nums, attrs, default_suffix,
         if not id_num.get('CatSuffix'):
             continue
         # Clean suffixes
+        id_num['CatSuffix'] = id_num['CatSuffix'].strip('/')
         if min_suffix_length:
             suffix = id_num['CatSuffix']
             id_nums[i]['CatSuffix'] = suffix.zfill(min_suffix_length)
