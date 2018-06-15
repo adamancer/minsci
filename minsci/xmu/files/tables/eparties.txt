@@ -1,0 +1,2 @@
+# Tables (as Nickname, Field)
+Roles,NamRoles_tab
