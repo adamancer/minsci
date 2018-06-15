@@ -42,6 +42,7 @@ ENTITIES = {
     r'({IUCr})': u'(IUCr)',
     r'{\textdegree}': u'°' ,
     r'{\textquotesingle}': u"'",
+    r'\textemdash': u'—',
     r'\textendash': u'–',
     r'St\u0e23\u0e16ffler': u'Stoffler',
     r'{\'{a}}': 'a'
@@ -185,6 +186,7 @@ def parse_authors(author_string, parse_names=True):
                 'NamMiddle': fn.middle,
                 'NamLast': fn.last,
                 'NamSuffix': fn.suffix,
+                'SecRecordStatus': 'Unlisted'
             }))
         else:
             parsed.append(author)
