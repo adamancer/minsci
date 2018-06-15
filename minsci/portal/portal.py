@@ -3,12 +3,17 @@
 import codecs
 import csv
 import datetime as dt
+import glob
+import json
 import os
 import re
+import shutil
 import time
+import zipfile
 from collections import namedtuple
 
 import requests
+import requests_cache
 from lxml import etree
 
 
@@ -50,8 +55,7 @@ def get_simpledwr(response):
         return Results([rec['SimpleDarwinRecord'] for rec in records], last_id)
 
 
-def archive(**kwargs):
-    # FIXME: Update existing archive file
+def _archive(**kwargs):
     defaults = {
         'format': 'xml',
         'schema': 'abcdefg',
@@ -81,6 +85,92 @@ def archive(**kwargs):
                 if not count % 10000:
                     print 'Retrieved {:,} records!'.format(count)
         f.write(footer.encode('utf-8').rstrip())
+
+
+def archive(title, details, content_contact, technical_contact, **kwargs):
+    dsa = title.lower().replace(' ', '_')
+    try:
+        os.mkdir(dsa)
+    except OSError:
+        response = raw_input('Delete {} and all its contents?'
+                             ' (y/n) '.format(dsa))
+        if response  != 'y':
+            raise OSError('Cannot overwrite {}!'.format(dsa))
+        shutil.rmtree(dsa)
+        os.mkdir(dsa)
+    # Construct XML archive files
+    defaults = {
+        'format': 'xml',
+        'schema': 'abcdefg',
+        'limit': 1000
+    }
+    kwargs.update(defaults)
+    kwargs['dsa'] = dsa
+    i = 0
+    count = 0
+    last_id = 0
+    while True:
+        response = get(last_id=last_id, **kwargs)
+        if response is not None:
+            content = u'{}'.format(response.text)
+            try:
+                header, content = content.split('<abcd:Units>', 1)
+            except ValueError:
+                print 'Error: No content found'
+                break
+            else:
+                if not count:
+                    nmsp = re.compile('xmlns:{schema}="(.*?)"'.format(**kwargs))
+                    namespace = nmsp.search(header).group(1)
+                units, footer = content.rsplit('</abcd:Units>', 1)
+                # Update counters
+                count += content.count('<abcd:Unit>')
+                i += 1
+                # Write file
+                fp = os.path.join(dsa, 'response{}.xml'.format(i))
+                print 'Writing {}...'.format(fp)
+                with open(fp, 'wb') as f:
+                    f.write(units.encode('utf-8').rstrip().lstrip('\r\n'))
+                last_id = re.search('Last record: (\d{7,8})', footer).group(1)
+        else:
+            print 'Error: No response returned'
+            break
+    # Create zipped file
+    zp = '{}.zip'.format(os.path.basename(dsa))
+    print 'Writing {}...'.format(zp)
+    with zipfile.ZipFile(zp, 'w', zipfile.ZIP_DEFLATED) as f:
+        total = i
+        for i, fp in enumerate(glob.iglob(os.path.join(dsa, '*.xml'))):
+            f.write(fp, os.path.basename(fp))
+            i += 1
+            if i and not i % 100:
+                print '{:,}/{:,} files added!'.format(i, total)
+    print '{:,}/{:,} files added!'.format(i, total)
+    # Create a JSON file with metadata about the recordset
+    fp = 'datasets.json'
+    print 'Writing {}...'.format(fp)
+    dataset = {
+        'title': title,
+        'id': dsa,
+        'details': details,
+        'content_contact': content_contact,
+        'technical_contact': technical_contact,
+        'archives': [{
+            'namespace': namespace,
+            'modified': dt.datetime.now().strftime('%Y-%m-%dT%H:%M:%S'),
+            'filesize': os.path.getsize(zp),
+            'rcount': count
+        }]
+    }
+    with open(fp, 'rb+') as f:
+        try:
+            datasets = json.load(f)
+        except ValueError:
+            datasets = []
+        datasets.append(dataset)
+        f.seek(0)
+        json.dump(datasets, f, indent=4, sort_keys=True)
+    print 'Done!'
 
 
 def download(**kwargs):

@@ -9,9 +9,6 @@ from .portal import archive, download, parse_config
 from .reports import meteorites, plss
 
 
-requests_cache.install_cache('portal', expire_after=86400)
-
-
 class MinSciParser(argparse.ArgumentParser):
     config = parse_config()
 
@@ -72,6 +69,13 @@ def main(args=None):
     for arg in MinSciParser.config:
         archive_parser.add_argument('-' + arg['dest'], **arg)
     archive_parser.add_argument(
+        '-name',
+        dest='name',
+        type=str,
+        required=True,
+        help='the name of the dataset being archived'
+    )
+    archive_parser.add_argument(
         '-url',
         dest='url',
         type=str,
@@ -100,6 +104,7 @@ def main(args=None):
         '-string',
         dest='string',
         type=str,
+        required=True,
         help='a PLSS locality string'
     )
     plss_parser.add_argument(
@@ -131,4 +136,5 @@ def main(args=None):
 
 
 if __name__ == 'main':
+    requests_cache.install_cache('portal', expire_after=86400)
     main()
