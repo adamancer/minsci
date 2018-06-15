@@ -21,6 +21,7 @@ setup(name='minsci',
       license='MIT',
       packages=[
         'minsci',
+        'minsci.dicts',
         'minsci.geotaxa',
         'minsci.portal',
         'minsci.xmu'
