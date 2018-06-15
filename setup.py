@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 # Read long_description from file
 try:
@@ -19,13 +19,7 @@ setup(name='minsci',
       author='adamancer',
       author_email='mansura@si.edu',
       license='MIT',
-      packages=[
-        'minsci',
-        'minsci.dicts',
-        'minsci.geotaxa',
-        'minsci.portal',
-        'minsci.xmu'
-        ],
+      packages=find_packages(),
       install_requires=[
           'bibtexparser',
           'dateparser',
