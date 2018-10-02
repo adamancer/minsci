@@ -106,7 +106,7 @@ class CatNum(object):
 
 
     def parse(self, val, *args, **kwargs):
-        result = parse_catnum(val, *args, **kwargs)
+        result = _parse_catnum(val, *args, **kwargs)
         if len(result) != 1:
             raise ValueError('Could not parse catalog number from %s' % val)
         self.code = result[0].get('CatMuseumAcronym')
@@ -274,17 +274,17 @@ class CatNumList(list):
 
 
 def get_catnum(*args, **kwargs):
-    catnums = parse_catnum(*args, **kwargs)
+    catnums = _parse_catnum(*args, **kwargs)
     if any(catnums) and len(catnums) == 1:
         return CatNum(**catnums[0])
     return CatNumList(catnums)
 
 
 def get_catnums(*args, **kwargs):
-    return CatNumList(parse_catnum(*args, **kwargs))
+    return CatNumList(_parse_catnum(*args, **kwargs))
 
 
-def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
+def _parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
                  strip_suffix=False, prefixed_only=False):
     """Find and parse catalog numbers in a string
 
@@ -340,10 +340,10 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
 
 
 
-def parse_catnums(vals, **kwargs):
+def _parse_catnums(vals, **kwargs):
     """Parse a list of strings containing catalog numbers
 
-    See parse_catnums() for a description of the available arguments.
+    See _parse_catnum() for a description of the available arguments.
 
     Returns:
         A list of parsed catnums
@@ -351,7 +351,7 @@ def parse_catnums(vals, **kwargs):
     # Return list of parsed catalog numbers
     catnums = []
     for val in vals:
-        catnums.extend(parse_catnum(val, **kwargs))
+        catnums.extend(_parse_catnum(val, **kwargs))
     return catnums
 
 
@@ -436,7 +436,7 @@ def sort_catnums(catnums):
         the same way as they were in the original list.
     """
     try:
-        catnums = parse_catnums(catnums)
+        catnums = _parse_catnums(catnums)
     except IndexError:
         # Catalog numbers were given as dicts, so return them that way
         return sorted(catnums, key=catnum_keyer)
@@ -456,9 +456,9 @@ def catnum_keyer(catnum):
     """
     if isinstance(catnum, basestring):
         try:
-            catnum = parse_catnum(catnum)[0]
+            catnum = _parse_catnum(catnum)[0]
         except IndexError:
-            print 'Sort error: ' + catnum
+            print('Sort error: ' + catnum)
             raise
             return 'Z' * 63
     keys = ('CatPrefix', 'CatNumber', 'CatSuffix')
@@ -560,7 +560,7 @@ def _fix_misidentified_suffixes(id_nums):
             # Check for where suffix is itself a prefixed catalog number.
             # The delta used to assessed ranges is set to 9 because there
             # are at least ten catalog numbers per page in MinSci's ledgers
-            last_num = parse_catnum(id_num['CatSuffix'])
+            last_num = _parse_catnum(id_num['CatSuffix'])
             if (len(last_num) == 1
                     and (last_num[0]['CatNumber'] - id_num['CatNumber'] >= 9)
                     and (not last_num[0]['CatPrefix']
