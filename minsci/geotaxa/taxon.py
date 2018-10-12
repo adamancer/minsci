@@ -228,9 +228,13 @@ class Taxon(dict):
 
     def preferred(self):
         preferred = self
+        i = 0
         while not preferred.is_current:
             preferred = self.tree[preferred.current.irn]
             self.parent = preferred.parent
+            i += 1
+            if i > 100:
+                raise ValueError('Infinite loop: %s', self.name)
         return preferred
 
 
