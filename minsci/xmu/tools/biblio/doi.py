@@ -26,6 +26,7 @@ PUB_TYPES = {
     'article': 'Art',
     'book': 'Boo',
     'incollection': 'Art',
+    'misc': 'Art',
     'techreport': 'Art',
     'thes': 'The'
 }
@@ -68,12 +69,13 @@ class FillFromDOI(XMu):
         # Check for DOIs in the notes field if not found in the GUID table
         note = rec('NotNotes')
         ris = None
-        if not doi and 'DO' in note:
-            ris = ris2dict(split_records(note)[0])
-            doi = ris.get('DO')
-            if doi:
-                rec['AdmGUIDType_tab'] = 'DOI'
-                rec['AdmGUIDValue_tab'] = clean_doi(doi)
+        #if not doi and 'DO' in note:
+        #    print 'this?'
+        #    ris = ris2dict(split_records(note)[0])
+        #    doi = ris.get('DO')
+        #    if doi:
+        #        rec['AdmGUIDType_tab'] = 'DOI'
+        #        rec['AdmGUIDValue_tab'] = clean_doi(doi)
         if doi:
             if 'bhl.title' in doi:
                 raise ValueError('BHL DOIs are forbidden: {}'.format(doi))
@@ -121,7 +123,7 @@ def doi2bib(doi):
     Returns:
         BibTeX record as a string
     """
-    url = requests.compat.urljoin('http://dx.doi.org/', doi)
+    url = requests.compat.urljoin('https://doi.org/', doi)
     print 'Checking {}...'.format(url)
     headers = {'accept': 'application/x-bibtex'}
     response = bot.get(url, headers=headers)
