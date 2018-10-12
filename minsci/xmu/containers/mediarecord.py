@@ -372,22 +372,32 @@ class MediaRecord(XMuRecord):
                 print '-' * 60
 
 
-    def match(self, ignore_suffix=False):
+    def match(self, val=None, ignore_suffix=False):
         """Returns list of catalog objects matching data in MulTitle"""
-        parsed = get_catnums(self('MulTitle'))
+        if val is None:
+            val = self('MulTitle')
+        parsed = get_catnums(val)
         records = []
-        for identifier in parsed:
-            matches = self.cataloger.get(identifier, [], ignore_suffix)
-            for match in matches:
-                if not match in records:
-                    records.append(match)
-        self.catnums = str(parsed)
+        if len(parsed) > 1:
+            # Multiple catalog numbers found! Record them all
+            for catnum in parsed:
+                records.extend(self.match(str(catnum)))
+            self.catnums = [str(c) for c in parsed]
+        else:
+            for identifier in parsed:
+                matches = self.cataloger.get(identifier, [], ignore_suffix)
+                for match in matches:
+                    if not match in records:
+                        records.append(match)
+            self.catnums = str(parsed)
+        if isinstance(self.catnums, basestring):
+            self.catnums = [self.catnums]
         return records
 
 
-    def match_one(self):
+    def match_one(self, val=None):
         """Returns a matching catalog object if exactly one match found"""
-        matches = self.match()
+        matches = self.match(val)
         catnums = [m.object['catnum'] for m in matches]
         matches = [m for i, m in enumerate(matches)
                    if not m.object['catnum'] in catnums[:i]]
@@ -403,11 +413,28 @@ class MediaRecord(XMuRecord):
         try:
             match = self.match_one()
         except ValueError:
-            if strict:
-                raise
+            # The current record includes more than one object. Test if
+            # each object resolves, creating a modified enhanced record if so.
+            catnums = self.catnums[:]
+            matches = []
+            for catnum in self.catnums:
+                matches.append(self.match_one(catnum).object['irn'])
+            else:
+                enhanced = self.clone(self)
+                enhanced.matches = matches
+                enhanced.whitelist = self.whitelist
+                enhanced.masks = self.masks
+                enhanced.catnums = catnums
+                # Set keys for multiple objects
+                enhanced['DetResourceType'] = 'Specimen/Object'
+                enhanced.setdefault('DetCollectionName_tab', []).append('Collections objects (Mineral Sciences)')
+                enhanced['DetRelation_tab'] = ['NMNH {} (1/1)'.format(c)
+                                               for c in catnums]
+                return enhanced.expand()
         else:
             print 'Unique match found! Updating record...'
             enhanced = self.clone(self)
+            enhanced.matches = [match.object['irn']]
             enhanced.whitelist = self.whitelist
             enhanced.masks = self.masks
             enhanced.object = match
