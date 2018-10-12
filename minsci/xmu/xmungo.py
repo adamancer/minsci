@@ -1,4 +1,6 @@
 """Reads data from NMNH MongoDB collections database"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import time
 
@@ -51,15 +53,15 @@ class MongoBot(object):
         login_server = '/'.join([host.rstrip('/'), login_db.strip('/')])
         client = pymongo.MongoClient('mongodb://{}'.format(login_server))
         while True:
-            print 'Connecting to {}...'.format(login_server)
+            print('Connecting to {}...'.format(login_server))
             # User credentials
             if self.password is None:
-                print 'Username: ' + self.username
+                print('Username: ' + self.username)
                 self.password = getpass.getpass('Password: ')
             try:
                 client[login_db].authenticate(self.username, self.password)
             except (ValueError, pymongo.errors.OperationFailure):
-                print 'Invalid password!'
+                print('Invalid password!')
             else:
                 break
         client_db = client[instance['db']]
@@ -87,7 +89,7 @@ class MongoBot(object):
         """Synchronizes development server to production"""
         if sync_to == 'production' and sync_from == 'development':
             raise Exception('Sync is going the wrong way!')
-        print 'Syncing {} in {} to {}...'.format(collection, sync_to, sync_from)
+        print('Syncing {} in {} to {}...'.format(collection, sync_to, sync_from))
         src = self.connections[sync_from][collection]
         dst = self.connections[sync_to][collection]
         queue = []
@@ -99,8 +101,8 @@ class MongoBot(object):
         query.update({'catdp': 'ms'})
         # Update records based on changes in production
         cursor = src.find(query)
-        print (' {:,} records matching {} have'
-               ' been found!').format(cursor.count(), query)
+        print((' {:,} records matching {} have'
+               ' been found!').format(cursor.count(), query))
         for sdoc in cursor:
             irn = sdoc['_id']
             try:
@@ -115,19 +117,19 @@ class MongoBot(object):
                     queue = []
             checked += 1
             if not checked % 1000:
-                print (' {:,} records updated'
-                       ' ({:,} checked)').format(updated, checked)
+                print((' {:,} records updated'
+                       ' ({:,} checked)').format(updated, checked))
         if len(queue):
             dst.bulk_write(queue)
             updated += len(queue)
             queue = []
         # Look for records that have been deleted from production
         deleted = 0
-        print 'Looking for records deleted from {}...'.format(sync_from)
+        print('Looking for records deleted from {}...'.format(sync_from))
         sirns = [doc['_id'] for doc in src.find(query, [])]
-        print ' {:,} irns found in {}'.format(len(sirns), sync_from)
+        print(' {:,} irns found in {}'.format(len(sirns), sync_from))
         dirns = [doc['_id'] for doc in dst.find(query, [])]
-        print ' {:,} irns found in {}'.format(len(dirns), sync_to)
+        print(' {:,} irns found in {}'.format(len(dirns), sync_to))
         irns = set(dirns) -set(sirns)
         queue = []
         for irn in irns:
@@ -140,8 +142,8 @@ class MongoBot(object):
             dst.bulk_write(queue)
             deleted += len(queue)
             queue = []
-        print ' {:,} records deleted ({:,} checked)'.format(deleted,
-                                                            len(dirns))
+        print(' {:,} records deleted ({:,} checked)'.format(deleted,
+                                                            len(dirns)))
 
 
 class MongoDoc(dict):
@@ -233,12 +235,12 @@ class XMungo(MongoBot):
         if skip:
             self._skip = skip
         if self._skip:
-            print 'Skipping first {:,} records...'.format(self._skip)
+            print('Skipping first {:,} records...'.format(self._skip))
             cursor = self.collection.find(_query, skip=self._skip)
         else:
             cursor = self.collection.find(_query)
         cursor.batch_size(500)
-        print '{:,} matching records found!'.format(cursor.count())
+        print('{:,} matching records found!'.format(cursor.count()))
         # Process documents using func
         n_success = 0
         for doc in cursor:
@@ -252,13 +254,13 @@ class XMungo(MongoBot):
                 now = datetime.now()
                 elapsed = now - starttime
                 starttime = now
-                print ('{:,} records processed! ({:,}'
+                print(('{:,} records processed! ({:,}'
                        ' successful, t={}s)').format(self._skip, n_success,
-                                                     elapsed)
+                                                     elapsed))
             if limit and not self._skip % limit:
                 break
-        print '{:,} records processed! ({:,} successful)'.format(self._skip,
-                                                                 n_success)
+        print('{:,} records processed! ({:,} successful)'.format(self._skip,
+                                                                 n_success))
         if callback is not None:
             callback()
         self.finalize()
@@ -296,8 +298,8 @@ class XMungo(MongoBot):
                     raise
                 # Try to reconnect after backoff
                 backoff = 30 * 2 ** num_retries
-                print ('Cursor not found! Retrying'
-                       ' in {} seconds...').format(backoff)
+                print(('Cursor not found! Retrying'
+                       ' in {} seconds...').format(backoff))
                 time.sleep(backoff)
                 num_retries += 1
                 # Reset counter if additional records have been processed
@@ -307,14 +309,14 @@ class XMungo(MongoBot):
 
     def save(self):
         """Save attributes listed in the self.keep as json"""
-        print 'Saving data to {}...'.format(self.jsonpath)
+        print('Saving data to {}...'.format(self.jsonpath))
         data = {key: getattr(self, key) for key in self.keep}
         json.dump(data, open(self.jsonpath, 'wb'))
 
 
     def load(self):
         """Load data from json file created by self.save"""
-        print 'Reading data from {}...'.format(self.jsonpath)
+        print('Reading data from {}...'.format(self.jsonpath))
         data = json.load(open(self.jsonpath, 'rb'))
         for attr, val in data.iteritems():
             setattr(self, attr, val)

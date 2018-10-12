@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import unicode_literals
 from .site import Site
 from ..xmu import XMu
 
@@ -12,7 +14,7 @@ class Situate(XMu):
     def iterate(self, element):
         rec = self.parse(element)
         site = Site(rec)
-        print site
+        print(site)
 
 
 def get_sites(src=None):

@@ -1,4 +1,6 @@
 """Reads and returns information about EMu's schema"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import json as serialize
 import glob
@@ -174,7 +176,7 @@ class XMuFields(object):
                         raise KeyError('No module specified: {}'.format(args))
                     elif not self.schema:
                         # No error on bad path if the schema is not defined
-                        print 'No schema defined'
+                        print('No schema defined')
                     else:
                         raise KeyError('Illegal path: {}'.format(args))
             else:

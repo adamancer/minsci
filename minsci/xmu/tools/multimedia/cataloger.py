@@ -1,4 +1,6 @@
 """Summarizes and generates metadata for the objects in an ecatalogue export"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import pprint as pp
 
@@ -96,11 +98,11 @@ class Cataloger(XMu):
         if not isinstance(parsed, list):
             parsed = [parsed]
         if not parsed:
-            print 'Could not parse "{}"'.format(identifier)
+            print('Could not parse "{}"'.format(identifier))
             return []
         elif len(parsed) > 1:
             #raise ValueError('Tried to index multiple catalog numbers: {}'.format(identifier))
-            print 'Tried to index multiple catalog numbers: {}'.format(identifier)
+            print('Tried to index multiple catalog numbers: {}'.format(identifier))
             return []
         parsed = parsed[0]
         # Get Antarctic meteorites

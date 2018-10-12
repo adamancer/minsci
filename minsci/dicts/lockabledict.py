@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 class LockableDict(dict):
 
     def __init__(self, *args, **kwargs):

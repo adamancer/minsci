@@ -1,4 +1,5 @@
 """Alias handling for processing EMu data that doesn't use full paths"""
+from __future__ import unicode_literals
 
 import os
 

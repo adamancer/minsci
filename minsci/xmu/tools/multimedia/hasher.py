@@ -1,4 +1,5 @@
 """Contains methods to hash a file or image data from a file"""
+from __future__ import unicode_literals
 
 import hashlib
 import os

@@ -1,4 +1,5 @@
 """Custom exceptions for minsci module"""
+from __future__ import unicode_literals
 
 class MinSciException(Exception):
     """Root exception. Used only to except any error, never raised."""

@@ -1,4 +1,6 @@
 """Script to read data from an EMu export file"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import os
 
@@ -26,14 +28,14 @@ class XMu(xmu.XMu):
         #
         # Calling the record suppresses KeyError exceptions, which could be
         # a bug or a feature depending on your point of view.
-        print '--------\nSample data retrieval\n--------'
-        print 'irn:', rec('irn')                                # 1001299
-        print 'name:', rec('MinName')                           # Hope Diamond
-        print 'country:', rec('BioEventSiteRef', 'LocCountry')  # India
-        print 'measurements:', rec('MeaType_tab')               # list
+        print('--------\nSample data retrieval\n--------')
+        print('irn:', rec('irn'))                                # 1001299
+        print('name:', rec('MinName'))                           # Hope Diamond
+        print('country:', rec('BioEventSiteRef', 'LocCountry'))  # India
+        print('measurements:', rec('MeaType_tab'))               # list
         # Some common operations have shortcut methods. For example, the
         # get_guid method returns the value from the row with type EZID.
-        print rec.get_guid('EZID')
+        print(rec.get_guid('EZID'))
 
 
 xmudata = XMu(os.path.join('reports', 'ecatalogue.xml'))

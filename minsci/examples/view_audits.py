@@ -15,6 +15,7 @@ must be exported as XML and include the following fields:
     + AudOldValue_tab
     + AudNewValue_tab
 """
+from __future__ import unicode_literals
 
 import csv
 import os

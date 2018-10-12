@@ -1,4 +1,5 @@
 """Writes import for egroups based on a list of irns"""
+from __future__ import unicode_literals
 
 from ..xmu import XMu, write
 

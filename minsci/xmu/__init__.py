@@ -1,6 +1,8 @@
 """Provides tools to read, write, and otherwise process EMu XML files"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
-print 'Initializing xmu submodule...'
+print('Initializing xmu submodule...')
 from .xmu import XMu, write, FIELDS
 from .xmungo import XMungo, MongoBot
 from .fields import is_table, is_reference

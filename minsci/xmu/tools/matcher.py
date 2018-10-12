@@ -1,4 +1,6 @@
 """Tools to match EMu records for making attachments"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import copy
 import json
@@ -80,7 +82,7 @@ class Matcher(XMu):
     """
 
     def __init__(self, module, include=None, exclude=None):
-        print 'Creating attachment search for {}...'.format(module)
+        print('Creating attachment search for {}...'.format(module))
         fp = os.path.join('matcher', '{}'.format(module))
         super(Matcher, self).__init__(fp, module=module, container=MinSciRecord)
         self.keep = ['_records', '_fields']
@@ -100,7 +102,7 @@ class Matcher(XMu):
             fp = os.path.join('matcher', module)
             self.fast_iter(report=10000)
             self._fields = list(set(self._fields))
-            print self._fields
+            print(self._fields)
             self.save(json_path)
         self._fields.sort()
 

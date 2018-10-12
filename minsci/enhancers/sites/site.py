@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import unicode_literals
 import os
 import pprint as pp
 
@@ -193,7 +195,7 @@ class Site(dict):
             if match:
                 import re
                 key = re.sub('_([a-z])', lambda m: m.group(1).upper(), row['field'])
-                print key
+                print(key)
                 matches[key] = match
                 if row['field'] == 'country':
                     kwargs['countryCode'] = match.orig['countryCode']
@@ -208,7 +210,7 @@ class Site(dict):
             val1 = getattr(self, attr)
             val2 = getattr(other, attr)
             if val1 or val2 and val1 != val2:
-                print u'{}: {} <=> {}'.format(attr.ljust(n), val1, val2)
+                print(u'{}: {} <=> {}'.format(attr.ljust(n), val1, val2))
 
 
     def country_subdivision(self):

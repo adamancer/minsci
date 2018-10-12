@@ -1,4 +1,6 @@
 """Subclass of DeepDict with methods specific to eaudits"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 from collections import namedtuple
 
@@ -24,13 +26,13 @@ class AuditRecord(XMuRecord):
         for line in self(field):
             field, xml = line.split(': ', 1)
             if len(xml) >= 30000:
-                print 'Could not parse {}'.format(field)
+                print('Could not parse {}'.format(field))
                 vals[field] = 'PARSE_ERROR'
                 continue
             try:
                 tree = etree.fromstring(xml)
             except etree.XMLSyntaxError:
-                print xml
+                print(xml)
                 raise
             if xml.startswith('<atom'):
                 val = tree.text if isinstance(tree.text, unicode) else tree.text.decode('utf-8')

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Helper functions used throughout the minsci module"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import csv
 import io
@@ -146,7 +148,7 @@ def dict_from_odbc(cursor, tbl, row_id=None, cols=None, where=None,
             records_in_source += 1
         result = cursor.fetchmany()
     if error:
-        print error
+        print(error)
     if len(records) < records_in_source:
         cprint('Warning: Duplicate keys. Some data not included in dict.')
     return records
@@ -166,7 +168,7 @@ def _sorter(key, order):
         return [x for x in xrange(0, len(order))
                 if key.startswith(order[x])][0]
     except KeyError:
-        print 'Ordering error: {} does not exist in order list'.format(key)
+        print('Ordering error: {} does not exist in order list'.format(key))
         return -1
 
 
@@ -331,17 +333,17 @@ def prompt(text, validator, confirm=False,
         except UnboundLocalError:
             pass
         else:
-            print '-' * 60 + '\nOPTIONS\n-------'
+            print('-' * 60 + '\nOPTIONS\n-------')
             for option in options:
                 cprint(option)
-            print '-' * 60
+            print('-' * 60)
         # Prompt for value
         val = raw_input(text).decode(sys.stdin.encoding)
         if val.lower() == 'q':
-            print 'User exited prompt'
+            print('User exited prompt')
             sys.exit()
         elif val.lower() == '?':
-            print fill(helptext)
+            print(fill(helptext))
             loop = False
         elif isinstance(validator, list):
             try:
@@ -375,7 +377,7 @@ def prompt(text, validator, confirm=False,
             loop = prompt('Is this value correct: "{}"?'.format(result),
                           {'y' : False, 'n' : True}, confirm=False)
         elif loop:
-            print fill(errortext)
+            print(fill(errortext))
         num_loops += 1
     # Return value as unicode
     return result
@@ -558,7 +560,7 @@ def catnum_keyer(catnum):
         try:
             catnum = parse_catnum(catnum)[0]
         except IndexError:
-            print 'Sort error: ' + catnum
+            print('Sort error: ' + catnum)
             raise
             return 'Z' * 63
     keys = ('CatPrefix', 'CatNumber', 'CatSuffix')
@@ -591,7 +593,7 @@ def cprint(obj, show=True):
     if not isinstance(obj, basestring) and show:
         pprint(obj)
     elif obj and show:
-        print fill(obj, subsequent_indent='  ')
+        print(fill(obj, subsequent_indent='  '))
 
 
 def rprint(obj, show=True):
@@ -830,5 +832,5 @@ def write_emu_search(mask, catnums, output='search.txt'):
     search = ['\t(\n\t\tCatNumber = {}\n\t)'.format(cn) for cn in nums]
     with open(output, 'wb') as f:
         f.write(mask.format('\n\tor\n'.join(search)))
-    print 'The following catalog records were not found:'
-    print '\n'.join(sorted(nums))
+    print('The following catalog records were not found:')
+    print('\n'.join(sorted(nums)))

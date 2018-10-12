@@ -1,4 +1,6 @@
 """Tools to parse legacy data from an EMu export"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import csv
 import os
@@ -294,7 +296,7 @@ class Legacy(XMu):
             if func == skip:
                 skipped.append(field)
         if skipped:
-            print '\n'.join(sorted(skipped))
+            print('\n'.join(sorted(skipped)))
             raw_input()
         self.missing = []
         # Read legacy data automatically
@@ -327,7 +329,7 @@ class Legacy(XMu):
                                         r.emu_value, r.orig_value])
         # Kill iteration if any fields are missing from the function lookup
         if missing:
-            print '\n'.join(sorted(missing))
+            print('\n'.join(sorted(missing)))
             return False
 
 

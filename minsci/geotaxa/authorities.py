@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import unicode_literals
 import json
 import os
 from collections import namedtuple
@@ -57,7 +59,7 @@ def read_webminerals(url):
     try:
         codes = json.load(open(fp, 'rb'))
     except (IOError, OSError):
-        print 'Reading classification tree from {}...'.format(url)
+        print('Reading classification tree from {}...'.format(url))
         soup = BeautifulSoup(requests.get(url).text, 'html5lib')
         codes = {}
         # Get class codes and names
@@ -88,7 +90,7 @@ def read_webminerals(url):
                 try:
                     codes[autaxon.parent]
                 except KeyError:
-                    print 'Adding {}...'.format(autaxon.parent)
+                    print('Adding {}...'.format(autaxon.parent))
                     code = autaxon.parent
                     name = u''
                     parent = get_webmin_parent(code)
@@ -99,14 +101,14 @@ def read_webminerals(url):
 
 def read_bgs():
     """Parses BGS classification tree mirrored on Smithsonian site"""
-    print 'Reading BGS data...'
+    print('Reading BGS data...')
     url = 'http://mineralsciences.si.edu/_files/data/bgs.txt'
     fn = os.path.basename(url).rsplit('.', 1)[0] + '.json'
     fp = os.path.join(os.path.dirname(__file__), '..', 'files', 'taxa', fn)
     try:
         codes = json.load(open(fp, 'rb'))
     except (IOError, OSError):
-        print 'Reading classification tree from {}...'.format(url)
+        print('Reading classification tree from {}...'.format(url))
         f = requests.get(url).iter_lines()
         rows = csv.reader(f)
         keys = next(rows)

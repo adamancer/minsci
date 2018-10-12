@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import unicode_literals
 import pprint as pp
 import re
 from collections import MutableMapping
@@ -173,10 +175,10 @@ class TaxaTree(TaxaIndex):
         """Retrieves the index, creating it if it does not exist"""
         index = getattr(self, name)
         if index is None:
-            print 'Creating {}...'.format(name)
+            print('Creating {}...'.format(name))
             setattr(self, name, self.indexers[name]())
             index = getattr(self, name)
-            print 'Done!'
+            print('Done!')
         return index
 
 

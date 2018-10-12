@@ -1,4 +1,6 @@
 """Populates an ebibliography record based on RIS data in NotNotes"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import logging
 import pprint as pp
@@ -230,7 +232,7 @@ def emuize(ris, parsers=None):
             raise
         u1 = rec.pop('U1', None)
         if u1:
-            print 'Info: {}'.format(u1)
+            print('Info: {}'.format(u1))
         rec = remove_duplicate_fields(rec, ris2dict(ris))
         if rec:
             pp.pprint(ris2dict(ris))
@@ -349,11 +351,11 @@ def get_ris(url):
     """Retrieves RIS from a url"""
     if 'pubs.er.usgs.gov' in url or 'pubs.usgs.gov' in url:
         url = url.replace('pubs.usgs.gov', 'pubs.er.usgs.gov')
-        print url
+        print(url)
         result = bot.download(url.rstrip('/? \n\r') + '?mimetype=ris')
-        print result
+        print(result)
         return bot.download(url.rstrip('/? \n\r') + '?mimetype=ris')
-    print 'Failed to retrieve {}'.format(url)
+    print('Failed to retrieve {}'.format(url))
     return url
 
 

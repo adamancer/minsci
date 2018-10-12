@@ -1,4 +1,6 @@
 """Defines a requests session customized to interact with GeoNames"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import math
 import os
@@ -29,11 +31,11 @@ class Bot(requests_cache.CachedSession):
             except (requests.exceptions.ConnectionError,
                     requests.exceptions.Timeout):
                 seconds = 30 * 2 ** i
-                print 'Retrying in {:,} seconds...'.format(seconds)
+                print('Retrying in {:,} seconds...'.format(seconds))
                 time.sleep(seconds)
             else:
                 if not response.from_cache:
-                    print 'Resting up for the big push...'
+                    print('Resting up for the big push...')
                     time.sleep(self.wait)
                 return response
         raise Exception('Maximum retries exceeded')
@@ -84,7 +86,7 @@ class SiteBot(Bot):
         defaults.update(params)
         # Make and parse query
         response = self._retry(self.get, url, params=defaults)
-        print response.url
+        print(response.url)
         if response.status_code == 200:
             content = response.json()
             status = content.get('status')
@@ -94,14 +96,14 @@ class SiteBot(Bot):
                 # If bad response comes from cache, delete that entry and
                 # try again
                 if status.get('value') not in (15,):
-                    print response.url
-                    print '{message} (code={value})'.format(**status)
+                    print(response.url)
+                    print('{message} (code={value})'.format(**status))
                     self.cache.delete_url(response.url)
                     return self._query_geonames(url, **self._params)
             else:
                 # If bad response is live, kill the process
-                print response.url
-                print '{message} (code={value})'.format(**status)
+                print(response.url)
+                print('{message} (code={value})'.format(**status))
                 if status.get('value') in (18, 19, 20):
                     self.cache.delete_url(response.url)
                     raise RuntimeError('Out of credits')
@@ -205,7 +207,7 @@ class SiteBot(Bot):
             lat = mask.format(lat)
             lng = mask.format(lng)
         params = {'lat': lat, 'lng': lng}
-        print 'Populating geography for {}...'.format(params)
+        print('Populating geography for {}...'.format(params))
         return self._query_geonames(url, **params)
 
 

@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import unicode_literals
 import os
 import shutil
 
@@ -38,11 +40,11 @@ class TaXMu(XMu):
 
 
     def finalize(self):
-        print 'Assigning synonyms...'
+        print('Assigning synonyms...')
         self.tree._assign_synonyms()
-        print 'Assigning similar...'
+        print('Assigning similar...')
         self.tree._assign_similar()
-        print 'Assigning official...'
+        print('Assigning official...')
         self.tree._assign_official()
 
 

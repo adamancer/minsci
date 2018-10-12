@@ -1,4 +1,5 @@
 """Script to write an EMu update file"""
+from __future__ import unicode_literals
 
 from minsci import xmu
 

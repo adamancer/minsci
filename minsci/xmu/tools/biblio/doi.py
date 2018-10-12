@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 """Populates ebibliography records based on BibTeX records pulled using DOI"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import csv
 import io
@@ -124,7 +126,7 @@ def doi2bib(doi):
         BibTeX record as a string
     """
     url = requests.compat.urljoin('https://doi.org/', doi)
-    print 'Checking {}...'.format(url)
+    print('Checking {}...'.format(url))
     headers = {'accept': 'application/x-bibtex'}
     response = bot.get(url, headers=headers)
     if response.text.startswith('@'):
@@ -365,7 +367,7 @@ def clone(*args):
 def clean_doi(doi):
     prefix = '10.'
     if not doi.startswith(prefix):
-        print 'WARNING: DOI looks funny: {}'.format(doi)
+        print('WARNING: DOI looks funny: {}'.format(doi))
         doi = '{}{}'.format(prefix, doi.split(prefix)[0])
     return doi
 

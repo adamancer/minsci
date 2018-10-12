@@ -16,6 +16,8 @@ A searchable and browsable version of the hierarchy is available at
 http://adamancer.pythonanywhere.com/.
 
 """
+from __future__ import print_function
+from __future__ import unicode_literals
 
 from minsci.geotaxa import get_tree, Taxon, TaxaParser
 
@@ -30,7 +32,7 @@ tree = get_tree()
 Taxon.tree = tree
 
 # Run through some examples illustrating the basic functionality of the tree
-print '\n\nBASIC USE\n---------'
+print('\n\nBASIC USE\n---------')
 names = [
     'corundum',                       # a valid mineral species
     'aquamarine',                     # a gem variety
@@ -39,18 +41,18 @@ names = [
 ]
 for name in names:
     taxon = Taxon(name)  # a taxon can also be built from XMuRecord objects
-    print '\n{}\n{}'.format(name, '-' * len(name))
-    print 'Name:     ', taxon              # the verbatim name
-    print 'Preferred:', taxon.preferred()  # the preferred name
-    print 'Official: ', taxon.official()   # the closest official name
-    print 'Full name:', taxon.autoname()
-    print 'Parent:   ', taxon.parent       # the direct parent in the hierarchy
+    print('\n{}\n{}'.format(name, '-' * len(name)))
+    print('Name:     ', taxon)              # the verbatim name
+    print('Preferred:', taxon.preferred())  # the preferred name
+    print('Official: ', taxon.official())   # the closest official name
+    print('Full name:', taxon.autoname())
+    print('Parent:   ', taxon.parent)       # the direct parent in the hierarchy
 
 
 # You can also automatically format the name of an object
-print '\n\nOBJECT NAMES\n------------'
-print tree.name_item(['emerald', 'diamond'], 'necklace')
-print tree.name_item(['beryl (var. aquamarine)'], 'ring')
+print('\n\nOBJECT NAMES\n------------')
+print(tree.name_item(['emerald', 'diamond'], 'necklace'))
+print(tree.name_item(['beryl (var. aquamarine)'], 'ring'))
 
 
 # The TaxaParser class is used to parse complex rock names. Valid rock names
@@ -58,7 +60,7 @@ print tree.name_item(['beryl (var. aquamarine)'], 'ring')
 # which can make them difficult to wrangle into a manageable hierarchy. The
 # TaxaParser class tries to parse out the modifiers to leave a simple rock
 # name that can then be placed in the broader hierarchy.
-print '\n\nPARSING ROCK NAMES\n------------------'
+print('\n\nPARSING ROCK NAMES\n------------------')
 name = 'foliated muscovite glimmerite'
-print '{}\n{}'.format(name, '-' * len(name))
-print TaxaParser(name)
+print('{}\n{}'.format(name, '-' * len(name)))
+print(TaxaParser(name))

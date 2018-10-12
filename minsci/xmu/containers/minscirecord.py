@@ -1,4 +1,6 @@
 """Subclass of XMuRecord with methods specific to Mineral Sciences"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import re
 from itertools import izip_longest
@@ -74,7 +76,7 @@ class MinSciRecord(XMuRecord):
             try:
                 taxa = self.geotree.group(taxa)
             except (AttributeError, KeyError):
-                print taxa
+                print(taxa)
                 #raise
         return taxa
 

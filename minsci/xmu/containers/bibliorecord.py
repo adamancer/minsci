@@ -1,4 +1,6 @@
 """Subclass of XMuRecord with methods specific to emultimedia"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import re
 
@@ -32,7 +34,7 @@ class BiblioRecord(XMuRecord):
         try:
             return self.smart_pull(*args)
         except KeyError:
-            print 'Path not found:', args
+            print('Path not found:', args)
             return ''
 
 

@@ -1,4 +1,6 @@
 """Defines methods to request data from the NMNH Geology Collections Data Portal"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import codecs
 import csv
@@ -23,7 +25,7 @@ Results = namedtuple('Results', ['records', 'last_id'])
 def get(url='https://geogallery.si.edu/portal', callback=None, **kwargs):
     """Returns one page of records (<=1000 records)"""
     response = requests.get(url, params=kwargs)
-    print 'Retrieving {}...'.format(response.url)
+    print('Retrieving {}...'.format(response.url))
     if ('geogallery.si.edu' in url
         and (not hasattr(response, 'from_cache')
              or not response.from_cache)):
@@ -40,15 +42,15 @@ def get_simpledwr(response):
     if not attributes.get('recordStart'):
         total = attributes.get('totalSearchHits', 0)
         if total == -1:
-            print 'More than 1,000 records match this query'
+            print('More than 1,000 records match this query')
         else:
-            print '{:,} records match this query'.format(total)
+            print('{:,} records match this query'.format(total))
     try:
         records = data.get('response', {}) \
                       .get('content', {}) \
                       .get('SimpleDarwinRecordSet', [])
     except AttributeError:
-        print '\n'.join(['DIAGNOSTIC: ' + d['diagnostic'] for d in diagnostics])
+        print('\n'.join(['DIAGNOSTIC: ' + d['diagnostic'] for d in diagnostics]))
     else:
         # Get the last id
         last_id = [d.split(': ')[-1] for d in diagnostics if d.startswith('Last record:')]
@@ -83,7 +85,7 @@ def _archive(**kwargs):
                     last_id = re.search('Last record: (\d{7,8})', footer).group(1)
                 count += kwargs['limit']
                 if not count % 10000:
-                    print 'Retrieved {:,} records!'.format(count)
+                    print('Retrieved {:,} records!'.format(count))
         f.write(footer.encode('utf-8').rstrip())
 
 
@@ -116,7 +118,7 @@ def archive(title, details, content_contact, technical_contact, **kwargs):
             try:
                 header, content = content.split('<abcd:Units>', 1)
             except ValueError:
-                print 'Error: No content found'
+                print('Error: No content found')
                 break
             else:
                 if not count:
@@ -128,27 +130,27 @@ def archive(title, details, content_contact, technical_contact, **kwargs):
                 i += 1
                 # Write file
                 fp = os.path.join(dsa, 'response{}.xml'.format(i))
-                print 'Writing {}...'.format(fp)
+                print('Writing {}...'.format(fp))
                 with open(fp, 'wb') as f:
                     f.write(units.encode('utf-8').rstrip().lstrip('\r\n'))
                 last_id = re.search('Last record: (\d{7,8})', footer).group(1)
         else:
-            print 'Error: No response returned'
+            print('Error: No response returned')
             break
     # Create zipped file
     zp = '{}.zip'.format(os.path.basename(dsa))
-    print 'Writing {}...'.format(zp)
+    print('Writing {}...'.format(zp))
     with zipfile.ZipFile(zp, 'w', zipfile.ZIP_DEFLATED) as f:
         total = i
         for i, fp in enumerate(glob.iglob(os.path.join(dsa, '*.xml'))):
             f.write(fp, os.path.basename(fp))
             i += 1
             if i and not i % 100:
-                print '{:,}/{:,} files added!'.format(i, total)
-    print '{:,}/{:,} files added!'.format(i, total)
+                print('{:,}/{:,} files added!'.format(i, total))
+    print('{:,}/{:,} files added!'.format(i, total))
     # Create a JSON file with metadata about the recordset
     fp = 'datasets.json'
-    print 'Writing {}...'.format(fp)
+    print('Writing {}...'.format(fp))
     dataset = {
         'title': title,
         'id': dsa,
@@ -170,7 +172,7 @@ def archive(title, details, content_contact, technical_contact, **kwargs):
         datasets.append(dataset)
         f.seek(0)
         json.dump(datasets, f, indent=4, sort_keys=True)
-    print 'Done!'
+    print('Done!')
 
 
 def download(**kwargs):
@@ -202,9 +204,9 @@ def download(**kwargs):
             for rec in records:
                 writer.writerow([rec.get(key, '').encode('utf-8') for key in keys])
         encode_for_excel(fn)
-        print 'Results saved as {}'.format(fn)
+        print('Results saved as {}'.format(fn))
     else:
-        print 'No records found!'
+        print('No records found!')
 
 
 def parse_config():

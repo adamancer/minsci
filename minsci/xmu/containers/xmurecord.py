@@ -1,4 +1,6 @@
 """Subclass of DeepDict with methods specific to XMu"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import re
 from collections import namedtuple
@@ -678,7 +680,7 @@ class XMuRecord(DeepDict):
                 try:
                     self[key] = [self.clone({base: s}) if base not in s else s for s in self[key]]
                 except:
-                    print key
+                    print(key)
                     raise
             elif (k.rstrip('_').endswith(self.tabends)
                   and isinstance(val, list)
@@ -711,7 +713,7 @@ class XMuRecord(DeepDict):
                 # Excludes attachments
                 pass
             else:
-                print field, vals, type(val)
+                print(field, vals, type(val))
         return rows
 
 

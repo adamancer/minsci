@@ -8,6 +8,8 @@ If the record already contains information, the script checks the author and
 year to verify that the publication is correct. Be careful when overwriting
 existing records!
 """
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import glob
 import os
@@ -75,7 +77,7 @@ bibcheck = BibCheck(fp, container=xmu.BiblioRecord)
 bibcheck.fast_iter()
 
 # Get data from DOI stored in GUID table
-print 'Populating references...'
+print('Populating references...')
 doi = doi2emu(fp)
 ris = ris2emu(fp, parsers=parsers)
 
@@ -96,5 +98,5 @@ for rec in doi + ris:
     if compare_citations(authors, pub_date, existing):
         verified.append(rec)
 
-print '{:,}/{:,} records verified!'.format(len(verified), len(doi + ris))
+print('{:,}/{:,} records verified!'.format(len(verified), len(doi + ris)))
 xmu.write('update.xml', verified, 'ebibliography')

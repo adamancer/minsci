@@ -1,4 +1,6 @@
 """Subclass of XMuRecord with methods specific to emultimedia"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import os
 import re
@@ -136,7 +138,7 @@ class MediaRecord(XMuRecord):
         stem = re.sub(r'\((\d+)\)', r'_\1_', stem)
         stem = re.sub(r'[\s_]+', u'_', unidecode(stem))
         stem = re.sub(r'[^a-zA-Z0-9_]', '', stem)
-        print fn, '=>', stem.rstrip('_') + ext.lower()
+        print(fn, '=>', stem.rstrip('_') + ext.lower())
         return stem.rstrip('_') + ext.lower()
 
 
@@ -261,11 +263,11 @@ class MediaRecord(XMuRecord):
         try:
             open(dst, 'rb')
         except IOError:
-            print 'Copying {} to {}...'.format(primary.path, dst)
+            print('Copying {} to {}...'.format(primary.path, dst))
             shutil.copy2(primary.path, dst)
         else:
             if overwrite:
-                print 'Copying {} to {}...'.format(primary.path, dst)
+                print('Copying {} to {}...'.format(primary.path, dst))
                 os.remove(dst)
                 shutil.copy2(primary.path, dst)
         # Verify the copy if required
@@ -302,10 +304,10 @@ class MediaRecord(XMuRecord):
                 try:
                     rec['Supplementary_tab'][media.row - 1] = fp
                 except:
-                    print fp
-                    print rec['Supplementary_tab']
-                    print media.row
-                    print media
+                    print(fp)
+                    print(rec['Supplementary_tab'])
+                    print(media.row)
+                    print(media)
                     raise
 
         if rec:
@@ -338,7 +340,7 @@ class MediaRecord(XMuRecord):
                         try:
                             matches[i] = Image(im, hash_file(im))
                         except IOError:
-                            print 'File not found: {}'.format(im)
+                            print('File not found: {}'.format(im))
                 images[mm.filename] = matches
                 hashes = {im.hash: im.path for im in matches}
             # Delete if the filename and hash match (strict) or if
@@ -348,28 +350,28 @@ class MediaRecord(XMuRecord):
             if ok_to_delete:
                 fp = hashes[mm.hash] if mm.hash in hashes else matches[0]
             if ok_to_delete and test:
-                print 'Would delete: {}'.format(fp)
+                print('Would delete: {}'.format(fp))
             elif ok_to_delete:
-                print 'Deleting {}...'.format(fp)
+                print('Deleting {}...'.format(fp))
                 #os.unlink(paths[0])
             elif strict and mm.hash not in hashes:
-                print 'Hash mismatch: {}'.format(mm.filename)
+                print('Hash mismatch: {}'.format(mm.filename))
             elif not strict and len(matches) != 1:
-                print 'Non-unique match (n={}): {}'.format(len(matches), fp)
+                print('Non-unique match (n={}): {}'.format(len(matches), fp))
             elif not matches:
-                print 'File error: No matches found for {}'.format(mm.filename)
+                print('File error: No matches found for {}'.format(mm.filename))
             else:
-                print 'Unknown error: {}'.format(mm.filename)
+                print('Unknown error: {}'.format(mm.filename))
             # Provide additional info about hashes if strict
             if strict:
-                print ' File hash:\n      {}'.format(mm.hash)
-                print ' Ref hashes:'
+                print(' File hash:\n      {}'.format(mm.hash))
+                print(' Ref hashes:')
                 for i, md5 in enumerate(sorted(hashes)):
                     asterisk = ''
                     if md5 == mm.hash:
                         asterisk = '*'
-                    print '  {: >2d}. {}{}'.format(i + 1, md5, asterisk)
-                print '-' * 60
+                    print('  {: >2d}. {}{}'.format(i + 1, md5, asterisk))
+                print('-' * 60)
 
 
     def match(self, val=None, ignore_suffix=False):
@@ -408,7 +410,7 @@ class MediaRecord(XMuRecord):
 
     def match_and_fill(self, strict=True):
         """Updates record if unique match in catalog found"""
-        print 'Matching on identifiers in "{}"...'.format(self('MulTitle'))
+        print('Matching on identifiers in "{}"...'.format(self('MulTitle')))
         self.expand()
         try:
             match = self.match_one()
@@ -432,7 +434,7 @@ class MediaRecord(XMuRecord):
                                                for c in catnums]
                 return enhanced.expand()
         else:
-            print 'Unique match found! Updating record...'
+            print('Unique match found! Updating record...')
             enhanced = self.clone(self)
             enhanced.matches = [match.object['irn']]
             enhanced.whitelist = self.whitelist
@@ -455,7 +457,7 @@ class MediaRecord(XMuRecord):
 
 
     def _fill_on_match(self, match):
-        print 'Unique match found! Updating record...'
+        print('Unique match found! Updating record...')
         enhanced = self.clone(self)
         enhanced.whitelist = self.whitelist
         enhanced.masks = self.masks

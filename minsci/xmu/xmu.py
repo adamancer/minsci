@@ -1,4 +1,6 @@
 """Reads and writes XML formatted for Axiell EMu"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import glob
 import hashlib
@@ -175,18 +177,18 @@ class XMu(object):
                         now = datetime.now()
                         elapsed = now - starttime
                         starttime = now
-                        print ('{:,} records processed! ({:,}'
+                        print(('{:,} records processed! ({:,}'
                                ' successful, t={}s)').format(n_total,
                                                              n_success,
-                                                             elapsed)
+                                                             elapsed))
                     if limit and not n_total % limit:
                         keep_going = False
                         break
             del context
             if not keep_going:
                 break
-        print ('{:,} records processed!'
-               ' ({:,} successful)').format(n_total, n_success)
+        print(('{:,} records processed!'
+               ' ({:,} successful)').format(n_total, n_success))
         self.finalize()
         if callback is not None:
             if callback_kwargs is None:
@@ -214,7 +216,7 @@ class XMu(object):
         """Save attributes listed in the self.keep as json"""
         if fp is None:
             fp = os.path.splitext(self.path)[0] + '.json'
-        print 'Saving data to {}...'.format(fp)
+        print('Saving data to {}...'.format(fp))
         data = {key: getattr(self, key) for key in self.keep}
         json.dump(data, open(fp, 'wb'), cls=ABCEncoder)
 
@@ -226,7 +228,7 @@ class XMu(object):
         # Always recreate the JSON if XML is newer
         if os.path.getmtime(fp) <= os.path.getmtime(self.path):
             raise IOError
-        print 'Reading data from {}...'.format(fp)
+        print('Reading data from {}...'.format(fp))
         data = json.load(open(fp, 'rb'))
         for attr, val in data.iteritems():
             setattr(self, attr, val)
@@ -535,7 +537,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
         except UnicodeEncodeError:
             atom.text = rec
         except ValueError:
-            print rec
+            print(rec)
             raise
     else:
         try:
@@ -636,7 +638,7 @@ def _check(rec, module=None):
         except KeyError:
             # Check for tables that haven't been included as grids
             if key.endswith('tab'):
-                print 'Unassigned column: {}'.format(key)
+                print('Unassigned column: {}'.format(key))
             # Convert strings to XMuStrings
             #path, val = rec.smart_drill(key)[0]
             #rec.push(rec.pull(*path), *path)
@@ -683,7 +685,7 @@ def write(fp, records, module=None):
     if records:
         _writer(fp, emuize(records, module))
     else:
-        print 'xmu.write: No records found'
+        print('xmu.write: No records found')
 
 
 def _writer(fp, root):

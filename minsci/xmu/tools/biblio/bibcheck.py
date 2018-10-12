@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import unicode_literals
 import re
 from collections import namedtuple
 
@@ -44,13 +46,13 @@ def compare_citations(authors, pub_date, existing, show_warnings=True):
     # Test authors
     if not authors:
         msg = 'E: No authors found: {}'.format(existing.irn)
-        print msg
+        print(msg)
         return False
     # Test first authors. These MUST match.
     if existing.authors and authors[0] != existing.authors[0]:
         msg = ('E: First author mismatch: {}: {} =>'
                ' {}').format(existing.irn, existing.authors, authors)
-        print msg
+        print(msg)
         return False
     # Test full author list. This is only yields a warning because mismatches
     # here are common and to some extent expected (for example, if there is a
@@ -59,15 +61,15 @@ def compare_citations(authors, pub_date, existing, show_warnings=True):
         and authors != existing.authors
         and existing.authors[-1] != 'others'):
         if show_warnings:
-            print ('W: Author mismatch: {}: {} =>'
-                   ' {}').format(existing.irn, existing.authors, authors)
+            print(('W: Author mismatch: {}: {} =>'
+                   ' {}').format(existing.irn, existing.authors, authors))
     # Test publication year. This MUST match.
     new_year = get_year(pub_date)
     old_year = get_year(existing.pub_date)
     if old_year and old_year != new_year:
         msg = ('E: Pub. year mismatch: {}: {} =>'
                ' {}').format(existing.irn, existing.pub_date, pub_date)
-        print msg
+        print(msg)
         return False
     return True
 

@@ -1,6 +1,9 @@
 # Compiled python modules.
 *.pyc
 
+# Futurize backup files
+*.bak
+
 # Setuptools distribution folder.
 /.eggs/
 /build/

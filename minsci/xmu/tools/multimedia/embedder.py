@@ -1,4 +1,6 @@
 """Tools to embed metadata in image files"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import os
 import shutil
@@ -177,7 +179,7 @@ class Embedder(object):
         """
         # Copy and hash image data from original file
         fn = new_name if new_name else os.path.basename(path)
-        print 'Embedding metadata into {}...'.format(fn)
+        print('Embedding metadata into {}...'.format(fn))
         # Preserve directory structure
         dirpath = os.path.splitdrive(os.path.dirname(os.path.abspath(path)))[1].lstrip('/\\')
         output_dir = os.path.join(self.output_dir, dirpath)
@@ -196,10 +198,10 @@ class Embedder(object):
                 return dst
         # Verify original file
         if not fn.lower().endswith(('.jp2')):
-            print ' Hashing original image...'
+            print(' Hashing original image...')
             pre_embed_hash = hash_image_data(path, output_dir=output_dir)
         if path != dst:
-            print ' Copying file to {}...'.format(output_dir)
+            print(' Copying file to {}...'.format(output_dir))
             shutil.copy2(path, dst)
         # Use exiftool to embed metadata in file
         metadata = self.derive_metadata(rec.expand())
@@ -210,7 +212,7 @@ class Embedder(object):
             cmd.append('-{}={}'.format(key, val))
         cmd.append(dst)
         #print ' '.join(cmd)
-        print ' Writing metadata...'
+        print(' Writing metadata...')
         tmpfile = tempfile.NamedTemporaryFile()
         return_code = subprocess.call(cmd, cwd=os.getcwd(), stdout=tmpfile)
         if return_code:
@@ -223,7 +225,7 @@ class Embedder(object):
             return False
         # Verify modified file
         if not fn.lower().endswith(('.jp2')):
-            print ' Hashing image with embedded metadata...'
+            print(' Hashing image with embedded metadata...')
             post_embed_hash = hash_image_data(dst, output_dir=output_dir)
             if pre_embed_hash == post_embed_hash:
                 self.logfile.write('Info: {}: Embed succeeded\n'.format(dst))

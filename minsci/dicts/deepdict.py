@@ -1,4 +1,5 @@
 """Subclass of dictionary designed to read/store at depth"""
+from __future__ import unicode_literals
 import pprint as pp
 from collections import Mapping
 

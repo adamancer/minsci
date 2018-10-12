@@ -1,4 +1,6 @@
 """Defines a requests session customized to interact with EarthChem"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 import math
 import re
@@ -28,12 +30,12 @@ class Bot(requests.Session):
             except (requests.exceptions.ConnectionError,
                     requests.exceptions.Timeout):
                 seconds = 30 * 2 ** i
-                print 'Retrying in {:,} seconds...'.format(seconds)
+                print('Retrying in {:,} seconds...'.format(seconds))
                 time.sleep(seconds)
             else:
                 if not response.from_cache:
                     if not self.quiet:
-                        print 'Resting up for the big push...'
+                        print('Resting up for the big push...')
                     time.sleep(self.wait)
                 return response
         raise Exception('Maximum retries exceeded')
@@ -82,7 +84,7 @@ class ChemBot(Bot):
         # Make and parse query
         response = self._retry(self.get, url, params=defaults)
         if not self.quiet:
-            print 'url: {}'.format(response.url)
+            print('url: {}'.format(response.url))
         if response.status_code == 200:
             return ChemTable(response)
             status = content.get('status')
@@ -98,7 +100,7 @@ class ChemBot(Bot):
             #        return self._query_EarthChem(url, **self._params)
             else:
                 # If bad response is live, kill the process
-                print '{message} (code={value})'.format(**status)
+                print('{message} (code={value})'.format(**status))
                 if status.get('value') in (18, 19, 20):
                     #self.cache.delete_url(response.url)
                     raise RuntimeError('Out of credits')

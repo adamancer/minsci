@@ -1,4 +1,6 @@
 """Tools to parse audits data from EMu"""
+from __future__ import print_function
+from __future__ import unicode_literals
 
 from random import randint
 
@@ -36,7 +38,7 @@ class Auditor(XMu):
         self.modules = kwargs.pop('modules', [])
         self.users = kwargs.pop('users', [])
         super(Auditor, self).__init__(*args, **kwargs)
-        print 'Reviewing around {}% of records'.format(self.percent_to_review)
+        print('Reviewing around {}% of records'.format(self.percent_to_review))
         # Default values for the blacklist. Fields included here are not
         # printed in the HTML report.
         if not self.blacklist:
@@ -134,7 +136,7 @@ class Auditor(XMu):
         except TypeError:
             pass
         else:
-            print '{:,} distinct records were modified'.format(len(combined))
+            print('{:,} distinct records were modified'.format(len(combined)))
             for irn, rec in combined.iteritems():
                 if (self.percent_to_review == 100
                     or randint(1, 100) <= self.percent_to_review):

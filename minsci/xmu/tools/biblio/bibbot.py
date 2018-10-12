@@ -1,3 +1,5 @@
+from __future__ import print_function
+from __future__ import unicode_literals
 import time
 
 import requests
@@ -17,7 +19,7 @@ class BibBot(requests.Session):
     def download(self, url, path=None):
         # Verify url
         url = 'http' + url.split('http')[1]
-        print 'Checking {}...'.format(url)
+        print('Checking {}...'.format(url))
         try:
             # Steam is ignored when using requests_cache
             response = self.get(url, stream=True)
@@ -26,7 +28,7 @@ class BibBot(requests.Session):
         else:
             if response.status_code == 200:
                 if path is not None:
-                    print 'Writing to {}...'.format(path)
+                    print('Writing to {}...'.format(path))
                     with open(path, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=4096):
                             if chunk:
