@@ -3,6 +3,12 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import input
+from builtins import next
+from builtins import str
+from builtins import zip
+from builtins import range
+from past.builtins import basestring
 import csv
 import io
 import os
@@ -10,7 +16,7 @@ import re
 import string
 import sys
 from copy import copy, deepcopy
-from itertools import izip_longest
+from itertools import zip_longest
 from pprint import pprint
 from textwrap import fill
 
@@ -134,7 +140,7 @@ def dict_from_odbc(cursor, tbl, row_id=None, cols=None, where=None,
                                  'to text to prevent data loss.')
             row = [s if bool(s) else '' for s in row]
             row = [s.decode(encoding) if isinstance(s, str) else s for s in row]
-            rec = dict(izip_longest(cols, row))
+            rec = dict(zip_longest(cols, row))
             if row_id is not None:
                 key = '-'.join([u'{}'.format(rec[key]) for key in row_id])
             else:
@@ -165,7 +171,7 @@ def _sorter(key, order):
     Returns -1 if key not found.
     """
     try:
-        return [x for x in xrange(0, len(order))
+        return [x for x in range(0, len(order))
                 if key.startswith(order[x])][0]
     except KeyError:
         print('Ordering error: {} does not exist in order list'.format(key))
@@ -288,7 +294,7 @@ def parse_names(name_string, last_name_first=False):
                 overwrite['NamTitle'] = word
                 break
         parsed.update(overwrite)
-        results.append({key: val for key, val in parsed.iteritems() if val})
+        results.append({key: val for key, val in parsed.items() if val})
     return results
 
 
@@ -310,12 +316,12 @@ def prompt(text, validator, confirm=False,
     # Prepare string
     text = u'{} '.format(text.rstrip())
     # Prepare validator
-    if isinstance(validator, (str, unicode)):
+    if isinstance(validator, (str, str)):
         validator = re.compile(validator, re.U)
     elif isinstance(validator, dict) and sorted(validator.keys()) == ['n', 'y']:
-        text = u'{}({}) '.format(text, '/'.join(validator.keys()))
+        text = u'{}({}) '.format(text, '/'.join(list(validator.keys())))
     elif isinstance(validator, dict):
-        keys = validator.keys()
+        keys = list(validator.keys())
         keys.sort(key=lambda s: s.zfill(100))
         options = [u'{}. {}'.format(key, validator[key]) for key in keys]
     elif isinstance(validator, list):
@@ -338,7 +344,7 @@ def prompt(text, validator, confirm=False,
                 cprint(option)
             print('-' * 60)
         # Prompt for value
-        val = raw_input(text).decode(sys.stdin.encoding)
+        val = input(text).decode(sys.stdin.encoding)
         if val.lower() == 'q':
             print('User exited prompt')
             sys.exit()
@@ -371,7 +377,7 @@ def prompt(text, validator, confirm=False,
         # Confirm value, if required
         if confirm and not loop:
             try:
-                result = unicode(result)
+                result = str(result)
             except UnicodeEncodeError:
                 result = str(result)
             loop = prompt('Is this value correct: "{}"?'.format(result),
@@ -605,7 +611,7 @@ def rprint(obj, show=True):
     """
     if show:
         cprint(obj)
-        raw_input('Paused. Press any key to continue.')
+        input('Paused. Press any key to continue.')
 
 
 def read_file(path, success, error=None):
@@ -677,7 +683,7 @@ def _parse_matches(matches, prefixed_only=False):
     """Format catalog numbers from a parsed list"""
     id_nums = []
     for match in matches:
-        id_num = dict(zip(CATKEYS, [val.rstrip('-, ') for val in match]))
+        id_num = dict(list(zip(CATKEYS, [val.rstrip('-, ') for val in match])))
         # Handle meteorites
         if id_num['MetPrefix'] or id_num['CatMuseumAcronym'] == 'USNM':
             if id_num['MetPrefix']:
@@ -771,7 +777,7 @@ def _fill_range(id_nums, substring):
         # Fill range
         if is_range:
             id_nums = []
-            for i in xrange(first_num['CatNumber'], last_num['CatNumber'] + 1):
+            for i in range(first_num['CatNumber'], last_num['CatNumber'] + 1):
                 id_num = deepcopy(first_num)
                 id_num['CatNumber'] = i
                 id_num['FullNumber'] = format_catnum(id_num)
@@ -799,7 +805,7 @@ def read_unicode_text(fp, encoding='utf-16', skiplines=0):
     with io.open(fp, 'r', encoding=encoding) as f:
         contents = io.BytesIO(f.read().encode('utf-8'))
         rows = csv.reader(contents, dialect='excel-tab')
-        for i in xrange(skiplines+1):
+        for i in range(skiplines+1):
             keys = next(rows)
         keys = [s.strip().decode('utf-8') for s in keys]
         for row in rows:

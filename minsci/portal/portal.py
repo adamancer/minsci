@@ -2,6 +2,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import input
 import codecs
 import csv
 import datetime as dt
@@ -94,7 +95,7 @@ def archive(title, details, content_contact, technical_contact, **kwargs):
     try:
         os.mkdir(dsa)
     except OSError:
-        response = raw_input('Delete {} and all its contents?'
+        response = input('Delete {} and all its contents?'
                              ' (y/n) '.format(dsa))
         if response  != 'y':
             raise OSError('Cannot overwrite {}!'.format(dsa))
@@ -195,7 +196,7 @@ def download(**kwargs):
     if records:
         keys = []
         for rec in records:
-            keys.extend(rec.keys())
+            keys.extend(list(rec.keys()))
         keys = sorted(list(set(keys)))
         fn = timestamped('portal.csv')
         with open(fn, 'wb') as f:

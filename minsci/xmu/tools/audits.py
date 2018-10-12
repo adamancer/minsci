@@ -78,7 +78,7 @@ class Auditor(XMu):
         if records is None:
             records = self.records
         combined = {}
-        for irn, recs in records.iteritems():
+        for irn, recs in records.items():
             # Filter trails that don't include the specified users
             if self.users:
                 if not [rec for rec in recs if rec('AudUser') in self.users]:
@@ -99,16 +99,16 @@ class Auditor(XMu):
                                                     rec('AudTime')]))
                 # Get the original values from the first record
                 changes = recs[0].changes
-                oldest = {fld: chg.old for fld, chg in changes.iteritems()}
-                newest = {fld: chg.new for fld, chg in changes.iteritems()}
+                oldest = {fld: chg.old for fld, chg in changes.items()}
+                newest = {fld: chg.new for fld, chg in changes.items()}
                 for rec in recs[1:]:
                     # Update original with values not modified in first audit
-                    old = {fld: chg.old for fld, chg in rec.changes.iteritems()}
-                    for key, val in old.iteritems():
+                    old = {fld: chg.old for fld, chg in rec.changes.items()}
+                    for key, val in old.items():
                         if oldest.get(key) is None:
                             oldest[key] = val
                     # Overwrite newest with new
-                    new = {fld: chg.new for fld, chg in rec.changes.iteritems()}
+                    new = {fld: chg.new for fld, chg in rec.changes.items()}
                     newest.update(new)
                 # Summarize the oldest and newest dictionaries into one
                 # record combining the metadata of all the records
@@ -121,7 +121,7 @@ class Auditor(XMu):
                     summarized[fld] = '<ul><li>{}</li></ul>'.format(items)
                 summarized.changes = {
                     fld: Change(fld, oldest.get(fld), newest.get(fld))
-                    for fld in set(oldest.keys() + newest.keys())
+                    for fld in set(list(oldest.keys()) + list(newest.keys()))
                     }
                 #summarized.pprint(True)
                 recs = [summarized]
@@ -137,7 +137,7 @@ class Auditor(XMu):
             pass
         else:
             print('{:,} distinct records were modified'.format(len(combined)))
-            for irn, rec in combined.iteritems():
+            for irn, rec in combined.items():
                 if (self.percent_to_review == 100
                     or randint(1, 100) <= self.percent_to_review):
                     html.extend(self.to_html(rec))

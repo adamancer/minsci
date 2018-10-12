@@ -2,6 +2,10 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import str
+from builtins import range
+from past.builtins import basestring
+from builtins import object
 import glob
 import hashlib
 import json
@@ -230,7 +234,7 @@ class XMu(object):
             raise IOError
         print('Reading data from {}...'.format(fp))
         data = json.load(open(fp, 'rb'))
-        for attr, val in data.iteritems():
+        for attr, val in data.items():
             setattr(self, attr, val)
         self.from_json = True
 
@@ -275,7 +279,7 @@ class XMu(object):
             if not len(child):
                 # lxml always returns ascii-encoded strings in Python 2, so
                 # so convert to unicode here
-                val = unicode(child.text) if child.text is not None else u''
+                val = str(child.text) if child.text is not None else u''
                 if child.tag == 'table':
                     # Handle empty tables. These happen with nested tables
                     # and possibly elsewhere.
@@ -334,7 +338,7 @@ class XMu(object):
             if not len(child):
                 # lxml always returns ascii-encoded strings in Python 2, so
                 # so convert to unicode here
-                val = unicode(child.text) if child.text is not None else u''
+                val = str(child.text) if child.text is not None else u''
                 if child.tag == 'table':
                     # Handle empty tables. These happen with nested tables
                     # and possibly elsewhere.
@@ -386,7 +390,7 @@ class XMu(object):
         results = []
         for child in rec.xpath(xpath):
             if child.text:
-                text = unicode(child.text)
+                text = str(child.text)
                 results.append(text)
             else:
                 results.append(u'')
@@ -481,7 +485,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
         EMu-formatted XML
     """
     if root is None:
-        module = rec.keys()[0]
+        module = list(rec.keys())[0]
         root = etree.Element('table')
         root.set('name', module)
         root.addprevious(etree.Comment('Data'))
@@ -511,7 +515,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
         else:
             grid_flds = '|'.join(['|'.join(field) for field in sorted(table)])
             group = Grid(grid_flds, operator)
-    if isinstance(rec, (int, long, float, basestring)):
+    if isinstance(rec, (int, int, float, basestring)):
         atom = etree.SubElement(root, 'atom')
         # Set path to parent if is a row in a table
         if isinstance(path, int):
@@ -541,10 +545,10 @@ def _emuize(rec, root=None, path=None, handlers=None,
             raise
     else:
         try:
-            paths = rec.keys()
+            paths = list(rec.keys())
         except AttributeError:
-            paths = [i for i in xrange(len(rec))]
-        if isinstance(path, (int, long)):
+            paths = [i for i in range(len(rec))]
+        if isinstance(path, (int, int)):
             root = etree.SubElement(root, 'tuple')
             # Add append attributes if required
             if group is not None:
@@ -587,7 +591,7 @@ def _sort(paths):
         'OpeDateToRun': ['OpeExecutionTime', 'OpeDateToRun', 'OpeTimeToRun'],
         'ClaScientificName': ['ClaScientificNameAuto', 'ClaScientificName']
     }
-    for key, group in rules.iteritems():
+    for key, group in rules.items():
         if key in paths:
             keep = []
             for path in group:
@@ -632,7 +636,7 @@ def _check(rec, module=None):
     '''
     # Convert values to XMuStrings and add attributes as needed
     tables = []
-    for key in rec.keys():
+    for key in list(rec.keys()):
         try:
             table = rec.fields.map_tables[(module, key.strip('+'))]
         except KeyError:

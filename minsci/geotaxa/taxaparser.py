@@ -1,4 +1,9 @@
 from __future__ import unicode_literals
+from __future__ import division
+from builtins import str
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import os
 import re
 from collections import namedtuple
@@ -22,8 +27,8 @@ class TaxaParser(object):
 
 
     def __init__(self, name):
-        if not isinstance(name, unicode):
-            name = unicode(name)
+        if not isinstance(name, str):
+            name = str(name)
         if not name:
             name = u'Unidentified'
         self.verbatim = name.strip()
@@ -60,10 +65,10 @@ class TaxaParser(object):
             key = self.name
         if not key:
             return u''
-        if not isinstance(key, unicode):
-            key = unicode(key)
+        if not isinstance(key, str):
+            key = str(key)
         key = key.replace(' ', '-')
-        return unicode(re.sub(r'[^A-Za-z0-9\-]', u'', unidecode(key)).lower())
+        return str(re.sub(r'[^A-Za-z0-9\-]', u'', unidecode(key)).lower())
 
 
     def patternize(self, val):
@@ -225,7 +230,7 @@ class TaxaParser(object):
         other_words = [p.word for p in other.parts]
         count = float(len(set(re.split('\W', self.key(self.verbatim)) +
                               re.split('\W', other.key(other.verbatim)))))
-        score = len((set(self_words).intersection(other_words))) / count
+        score = old_div(len((set(self_words).intersection(other_words))), count)
         #print self.verbatim, 'vs.', other.verbatim, '=>', score
         return score
 
@@ -252,7 +257,7 @@ class TaxaParser(object):
             return parents
         total = len(re.split('\W', self.key(self.verbatim)))
         i_max = -1 if  total == len(parts) else None
-        for i in xrange(len(parts[1:i_max])):
+        for i in range(len(parts[1:i_max])):
             modifiers = '-'.join(parts[1:i + 2])
             parents.append(u'{} {}'.format(modifiers, parts[0]).strip())
         if total > 1:

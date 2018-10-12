@@ -66,7 +66,7 @@ class FillFromRIS(XMu):
         self.records = []
         self.errors = []
         self.parsers = {'default': ['CY', 'DB', 'N1', 'UR']}
-        for key, handler in parsers.iteritems():
+        for key, handler in parsers.items():
             self.parsers[key] = handler
 
 
@@ -135,7 +135,7 @@ def emuize(ris, parsers=None):
         #    continue
         # Look for customizers based on UR
         parser = None
-        for key, func in parsers.iteritems():
+        for key, func in parsers.items():
             if [url for url in rec.get('UR', []) if key in url]:
                 parser = func
                 break
@@ -224,7 +224,7 @@ def emuize(ris, parsers=None):
                 bib['BooPublicationCity'] = rec.pop('CY', None)
         # Apply prefix
         prefix = PREFIXES.get(bib['BibRecordType'], bib['BibRecordType'][:3])
-        bib = {key.format(prefix): val for key, val in bib.iteritems() if val}
+        bib = {key.format(prefix): val for key, val in bib.items() if val}
         try:
             bibs.append(BiblioRecord(bib).expand())
         except:
@@ -236,16 +236,16 @@ def emuize(ris, parsers=None):
         rec = remove_duplicate_fields(rec, ris2dict(ris))
         if rec:
             pp.pprint(ris2dict(ris))
-            raise KeyError('Found unhandled keys: {}'.format(rec.keys()))
+            raise KeyError('Found unhandled keys: {}'.format(list(rec.keys())))
     return bibs
 
 
 def remove_duplicate_fields(rec, orig):
     """Removes fields holding duplicate data"""
-    orig = {key: val for key, val in orig.iteritems() if not key in rec}
-    for key in rec.keys():
+    orig = {key: val for key, val in orig.items() if not key in rec}
+    for key in list(rec.keys()):
         val = rec[key]
-        if val in orig.values():
+        if val in list(orig.values()):
             del rec[key]
     return rec
 
@@ -261,7 +261,7 @@ def ris2dict(ris):
             if rec.get(key):
                 raise ValueError('{} is not listable'.format(key))
             rec[key] = val
-    return {key: val for key, val in rec.iteritems() if any(val)}
+    return {key: val for key, val in rec.items() if any(val)}
 
 
 def get_type(rec):
@@ -336,7 +336,7 @@ def get_pages(rec):
 def get_contributors(rec):
     """Returns parsed list of contributors"""
     contributors = []
-    for key, role in ROLES.iteritems():
+    for key, role in ROLES.items():
         names = rec.pop(key, [])
         if names:
             if not isinstance(names, list):

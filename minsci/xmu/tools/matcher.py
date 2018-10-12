@@ -2,6 +2,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import range
 import copy
 import json
 import os
@@ -24,7 +25,7 @@ def standardize_taxon(species):
 INCLUDE = {
     'ebibliography': ['ArtTitle', 'ArtParentRef', 'ArtVolume', 'ArtIssue'],
     'ecatalogue': ['CatPrefix', 'CatNumber', 'CatSuffix', 'CatDivision'],
-    'elocations': ['LocLevel{}'.format(x) for x in xrange(1, 9)],
+    'elocations': ['LocLevel{}'.format(x) for x in range(1, 9)],
     'eparties': ['NamFirst', 'NamMiddle', 'NamLast', 'NamOrganisation'],
     'etaxonomy': ['ClaSpecies']
 }
@@ -116,7 +117,7 @@ class Matcher(XMu):
             return True
         irn = rec.pop('irn')  # IRN will never be included in the match set
         key = self.keyer(rec)
-        self._fields.extend(rec.keys())
+        self._fields.extend(list(rec.keys()))
         if key:
             data = self.container({'irn': irn})
             self._records.setdefault(key, []).append(data)
@@ -137,7 +138,7 @@ class Matcher(XMu):
         # Prune a copy of the source record, then remove any key that does
         # not appear in the fields attribute.
         rec.prune()
-        for key in rec.keys():
+        for key in list(rec.keys()):
             if ((self.include and not key in self.include)
                     or key in self.exclude):
                 del rec[key]
@@ -212,7 +213,7 @@ class Matcher(XMu):
         if match_data:
             mapper.expand(match_data)
             if not root:
-                attach_field = match_data.keys()[0]
+                attach_field = list(match_data.keys())[0]
                 match_data = match_data[attach_field]
             else:
                 attach_field = 'irn'
@@ -258,7 +259,7 @@ class Matcher(XMu):
                     if not 'irn' in rec[field]:
                         rec[field]['SecRecordStatus'] = 'Active'
                 except TypeError:
-                    for i in xrange(len(rec[field])):
+                    for i in range(len(rec[field])):
                         if not 'irn' in rec[field][i]:
                             rec[field][i]['SecRecordStatus'] = 'Active'
         # Look for derivative fields. EMu includes a handful of groups of

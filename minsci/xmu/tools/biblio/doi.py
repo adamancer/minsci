@@ -145,7 +145,7 @@ def parse_bibtex(bib):
     Returns:
         Dict containing reference data
     """
-    for entity, repl in ENTITIES.iteritems():
+    for entity, repl in ENTITIES.items():
         bib = bib.replace(entity, repl)
     # Parse BibTeX using the handy dandy bibtexparser module
     import bibtexparser
@@ -156,7 +156,7 @@ def parse_bibtex(bib):
     parsed = bibtexparser.loads(bib, parser=parser).entries[0]
     # Miscellaneous clean up
     braces = re.compile(ur'\{([A-z_ \-]+|[\u0020-\uD7FF])\}', re.U)
-    for key, val in parsed.iteritems():
+    for key, val in parsed.items():
         val = braces.sub(r'\1', val)
         if '{' in val:
             raise Exception('Unhandled LaTeX: {}'.format(val.encode('cp1252')))

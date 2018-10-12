@@ -2,6 +2,8 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import input
+from builtins import str
 import pprint as pp
 
 from ..describer import summarize, Description
@@ -61,7 +63,7 @@ class Cataloger(XMu):
                 return default
         if ignore_suffix:
             vals = []
-            for val in dct.values():
+            for val in list(dct.values()):
                 vals.extend(val)
             dct = vals
         if self.prepare == summarize:
@@ -85,7 +87,7 @@ class Cataloger(XMu):
         """Pretty prints the catalog dictionary"""
         pp.pprint(self.catalog)
         if pause:
-            raw_input('Paused. Press ENTER to continue.')
+            input('Paused. Press ENTER to continue.')
 
 
     @staticmethod

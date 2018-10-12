@@ -1,7 +1,12 @@
 """Defines a requests session customized to interact with GeoNames"""
 from __future__ import print_function
 from __future__ import unicode_literals
+from __future__ import division
 
+from builtins import str
+from builtins import range
+from past.builtins import basestring
+from past.utils import old_div
 import math
 import os
 import time
@@ -25,7 +30,7 @@ class Bot(requests_cache.CachedSession):
 
     def _retry(self, func, *args, **kwargs):
         """Retries failed requests using a simple exponential backoff"""
-        for i in xrange(8):
+        for i in range(8):
             try:
                 response = func(*args, **kwargs)
             except (requests.exceptions.ConnectionError,
@@ -51,7 +56,7 @@ class SiteBot(Bot):
     """
 
     def __init__(self, username, user_id=None):
-        wait = 3600. / 2000.
+        wait = old_div(3600., 2000.)
         super(SiteBot, self).__init__(wait, cache_name='bot')
         self.username = username
         if user_id is None:
@@ -229,7 +234,7 @@ def distance_on_unit_sphere(lat1, long1, lat2, long2):
     """
 
     # Convert latitude and longitude to spherical coordinates in radians.
-    degrees_to_radians = math.pi / 180.0
+    degrees_to_radians = old_div(math.pi, 180.0)
     # phi = 90 - latitude
     phi1 = (90.0 - lat1) * degrees_to_radians
     phi2 = (90.0 - lat2) * degrees_to_radians

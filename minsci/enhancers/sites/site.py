@@ -1,5 +1,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
+from __future__ import division
+from past.utils import old_div
 import os
 import pprint as pp
 
@@ -69,7 +71,7 @@ class Site(dict):
         return {a: getattr(self, a) for a in self._attributes}
 
 
-    def __nonzero__(self):
+    def __bool__(self):
         for attr in self._attributes:
             if getattr(self, attr):
                 return True
@@ -92,8 +94,8 @@ class Site(dict):
         self.latitude = rec.get('lat')
         self.longitude = rec.get('lng')
         if self.bbox and not (self.latitude or self.longitude):
-            self.latitude = (self.bbox['east'] + self.bbox['west']) / 2.
-            self.longitude = (self.bbox['north'] + self.bbox['south']) / 2.
+            self.latitude = old_div((self.bbox['east'] + self.bbox['west']), 2.)
+            self.longitude = old_div((self.bbox['north'] + self.bbox['south']), 2.)
         elif self.latitude and self.longitude and not self.bbox:
             self.bbox = {
                 'north': float(self.latitude) + 0.1,

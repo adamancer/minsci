@@ -2,6 +2,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import object
 import os
 import shutil
 import subprocess
@@ -147,7 +148,7 @@ class Embedder(object):
     def derive_metadata(self, rec, include_empty=False):
         """Derives image metadata from source data"""
         metadata = []
-        for field in self.metadata_fields.values():
+        for field in list(self.metadata_fields.values()):
             vals = field.function(rec)
             if not isinstance(vals, list):
                 vals = [vals]
@@ -207,7 +208,7 @@ class Embedder(object):
         metadata = self.derive_metadata(rec.expand())
         cmd = ['exiftool', '-overwrite_original', '-v', '-m']
         for key, val in metadata:
-            if isinstance(val, unicode):
+            if isinstance(val, str):
                 val = unidecode(val)
             cmd.append('-{}={}'.format(key, val))
         cmd.append(dst)

@@ -21,7 +21,7 @@ def write_group(module, irns, fp='group.xml', irn=None, name=None):
 
     if irn is None and name is None:
         raise ValueError('Must provide either irn or name for the group')
-    if not module in GROUPS.fields.schema.keys():
+    if not module in list(GROUPS.fields.schema.keys()):
         raise ValueError('{} is not a valid module'.format(module))
     group = GROUPS.container({
         'GroupType': 'Static',

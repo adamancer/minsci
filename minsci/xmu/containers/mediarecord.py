@@ -2,11 +2,13 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import str
+from past.builtins import basestring
 import os
 import re
 import shutil
 from collections import namedtuple
-from itertools import izip_longest
+from itertools import zip_longest
 
 from unidecode import unidecode
 
@@ -159,7 +161,7 @@ class MediaRecord(XMuRecord):
             'primary': self.object.object['xname'].split(' with ')[0],
         }
         if for_filename:
-            return {k: v.replace(' ', '_') for k, v in params.iteritems()}
+            return {k: v.replace(' ', '_') for k, v in params.items()}
         return params
 
 
@@ -170,7 +172,7 @@ class MediaRecord(XMuRecord):
 
 
     def set_mask(self, key, mask):
-        assert isinstance(mask, unicode)
+        assert isinstance(mask, str)
         self.masks[key] = mask
 
 
@@ -215,7 +217,7 @@ class MediaRecord(XMuRecord):
         sizes = self('SupFileSize_tab')
         widths = self('SupWidth_tab')
         heights = self('SupWidth_tab')
-        supp_files = izip_longest(paths, files, hashes, sizes, widths, heights)
+        supp_files = zip_longest(paths, files, hashes, sizes, widths, heights)
         supplementary = []
         for i, supp_file in enumerate(supp_files):
             path, filename, hexhash, s, w, h = supp_file
@@ -442,7 +444,7 @@ class MediaRecord(XMuRecord):
             enhanced.object = match
             enhanced.objects = [match]
             enhanced.catnums = self.catnums
-            for key, func in enhanced.smart_functions.iteritems():
+            for key, func in enhanced.smart_functions.items():
                 enhanced[key] = func() if func is not None else enhanced(key)
             # Tweak rights statement for non-collections objects
             non_si_coll = 'Non-collections object (Mineral Sciences)'
@@ -464,7 +466,7 @@ class MediaRecord(XMuRecord):
         enhanced.object = match
         enhanced.objects = [match]
         enhanced.catnums = self.catnums
-        for key, func in enhanced.smart_functions.iteritems():
+        for key, func in enhanced.smart_functions.items():
             enhanced[key] = func() if func is not None else enhanced(key)
         # Tweak rights statement for non-collections objects
         non_si_coll = 'Non-collections object (Mineral Sciences)'
@@ -493,7 +495,7 @@ class MediaRecord(XMuRecord):
             'SupWidth_tab',
             'SupMD5Checksum_tab'
         ]
-        strip.extend([key for key in self.keys() if key.startswith('_')])
+        strip.extend([key for key in list(self.keys()) if key.startswith('_')])
         for key in strip:
             try:
                 del self[key]
@@ -544,7 +546,7 @@ class MediaRecord(XMuRecord):
             linked = 1 if obj.object['irn'] in cat_irns else 0
             related.setdefault(obj.object['catnum'], []).append(linked)
         related = sorted(['{} ({}/{})'.format(catnum, sum(links), len(links))
-                          for catnum, links in related.iteritems()])
+                          for catnum, links in related.items()])
         return related
 
 

@@ -1,4 +1,9 @@
 from __future__ import unicode_literals
+from __future__ import division
+from builtins import str
+from builtins import range
+from builtins import object
+from past.utils import old_div
 import re
 
 import requests
@@ -11,7 +16,7 @@ class Box(object):
         ys = [p[1] for p in points]
         self.x1, self.y1 = min(xs), min(ys)
         self.x2, self.y2 = max(xs), max(ys)
-        self.xc, self.yc =  (self.x1 + self.x2) / 2, (self.y1 + self.y2) / 2
+        self.xc, self.yc =  old_div((self.x1 + self.x2), 2), old_div((self.y1 + self.y2), 2)
         self.width = self.x2 - self.x1
         self.height = self.y2 - self.y1
         self.parents = []
@@ -33,16 +38,16 @@ class Box(object):
         # Get longitudes/x coordinates
         xs = self.x1, self.x2
         if direction[-1] == 'E':
-            xs = self.xc, self.xc + self.width / divisor
+            xs = self.xc, self.xc + old_div(self.width, divisor)
         elif direction [-1] == 'W':
-            xs = self.xc, self.xc - self.width / divisor
+            xs = self.xc, self.xc - old_div(self.width, divisor)
         x1, x2 = sorted(xs)
         # Get latitudes/y coordinates
         ys = self.y1, self.y2
         if direction[0] == 'N':
-            ys = self.yc, self.yc + self.height / divisor
+            ys = self.yc, self.yc + old_div(self.height, divisor)
         elif direction[0] == 'S':
-            ys = self.yc, self.yc - self.height / divisor
+            ys = self.yc, self.yc - old_div(self.height, divisor)
         y1, y2 = sorted(ys)
         # Create a new subclass of the current box based on the new points
         box = self.__class__((x1, y1), (x2, y2))
@@ -114,7 +119,7 @@ class PLSSBot(object):
                 " AND TWNSHPDIR='{twp_dir}'"
                 " AND RANGENO LIKE '%{rng_no}'"
                 " AND RANGEDIR='{rng_dir}'")
-        params = {k: v[:] for k, v in self.defaults.iteritems()}
+        params = {k: v[:] for k, v in self.defaults.items()}
         params.update({
             'where': mask.format(**sql_params),
             'outFields': 'PLSSID,STATEABBR,TWNSHPNO,TWNSHPDIR,RANGENO,RANGEDIR'
@@ -132,7 +137,7 @@ class PLSSBot(object):
         mask = ("PLSSID='{plss_id}'"
                 " AND FRSTDIVNO='{sec}'"
                 " AND FRSTDIVTYP='SN'")
-        params = {k: v[:] for k, v in self.defaults.iteritems()}
+        params = {k: v[:] for k, v in self.defaults.items()}
         params.update({
             'where': mask.format(**sql_params),
             'outFields': 'FRSTDIVNO',

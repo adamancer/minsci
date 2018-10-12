@@ -2,10 +2,13 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import str
+from builtins import range
+from past.builtins import basestring
 import re
 from collections import namedtuple
 from datetime import datetime
-from itertools import izip_longest
+from itertools import zip_longest
 from pytz import timezone
 
 from dateparser import parse
@@ -133,7 +136,7 @@ class XMuRecord(DeepDict):
             assert self.module
         except AssertionError:
             modules = []
-            for key, module in keys.iteritems():
+            for key, module in keys.items():
                 if self.get(key) is not None:
                     modules.append(module)
             if len(set(modules)) == 1:
@@ -347,7 +350,7 @@ class XMuRecord(DeepDict):
             List of values, one per row
         """
         # Clean up tables
-        for i in xrange(len(args)):
+        for i in range(len(args)):
             if args[-(i+1)].endswith(self.tabends):
                 if i:
                     args = args[:-i]
@@ -360,7 +363,7 @@ class XMuRecord(DeepDict):
             rows = []
             for row in table:
                 try:
-                    rows.extend(row.values())
+                    rows.extend(list(row.values()))
                 except AttributeError:
                     raise AttributeError('No values attribute found for {}. Try'
                                          ' expanding the record.'.format(args))
@@ -411,7 +414,7 @@ class XMuRecord(DeepDict):
         """
         labels = self.simple_pull(label_field)
         values = self.simple_pull(value_field)
-        rows = izip_longest(labels, values)
+        rows = zip_longest(labels, values)
         match = standardize(match)
         return [val for label, val in rows if standardize(label) == match]
 
@@ -425,7 +428,7 @@ class XMuRecord(DeepDict):
             try:
                 locs[i] = loc['SummaryData']
             except KeyError:
-                val = [loc('LocLevel{}'.format(x)) for x in xrange(1,9)]
+                val = [loc('LocLevel{}'.format(x)) for x in range(1,9)]
                 locs[i] = ' - '.join([s for s in val if s]).upper()
         # Filter multiple locations on keyword
         if keyword:
@@ -583,7 +586,7 @@ class XMuRecord(DeepDict):
             Unwrapped XMuRecord. In a typical use case, this means the paths
             used to retrieve data do not need to include the module name.
         """
-        return self[self.keys()[0]]
+        return self[list(self.keys())[0]]
 
 
     def expand(self, keep_empty=False):
@@ -605,7 +608,7 @@ class XMuRecord(DeepDict):
         # Empty atoms should be excluded from appends; they show up as empty
         # tags and will therefore erase any value currently in the table.
         # Also strips append markers from records that do not include an irn.
-        for key in self.keys():
+        for key in list(self.keys()):
             if key.endswith(')') and not self[key]:
                 del self[key]
             elif not keep_empty:
@@ -618,7 +621,7 @@ class XMuRecord(DeepDict):
                 del self[key]
         # Expand shorthand keys, including tables and simple references.
         # Keys pointing to other XMuRecord objects are left alone.
-        for key in self.keys():
+        for key in list(self.keys()):
             val = self[key]
             k = key.rsplit('(', 1)[0]               # key stripped of row logic
             base = key.rstrip('_').split('_', 1)[0].rstrip('(0+)') # strip _tab
@@ -629,14 +632,14 @@ class XMuRecord(DeepDict):
             elif (val
                   and not key.startswith('_')
                   and not key.rstrip('_').endswith(('0', 'tab', ')', 'Ref'))
-                  and not isinstance(val, (basestring, int, long, float))):
+                  and not isinstance(val, (basestring, int, int, float))):
                 raise ValueError('{} must be atomic'.format(key))
             # Handle nested tables
             if k.endswith('_nesttab'):
                 # Test if the table has already been expanded by looking
                 # for a corresponding _nesttab_inner key
                 try:
-                    expanded = any([k + '_inner' in v.keys() for v in val])
+                    expanded = any([k + '_inner' in list(v.keys()) for v in val])
                 except (AttributeError, IndexError):
                     expanded = False
                 if not expanded and any(val):
@@ -655,7 +658,7 @@ class XMuRecord(DeepDict):
                 elif not expanded:
                     self[key] = []
             elif (k.endswith('Ref')
-                  and isinstance(val, (int, str, unicode))
+                  and isinstance(val, (int, str, str))
                   and val):
                 self[key] = self.clone({'irn': val})
             elif k.endswith('Ref'):
@@ -666,7 +669,7 @@ class XMuRecord(DeepDict):
             elif (k.endswith('Ref_tab')
                   and isinstance(val, list)
                   and any(val)
-                  and isinstance(val[0], (int, str, unicode))):
+                  and isinstance(val[0], (int, str, str))):
                 self[key] = [self.clone({'irn': s}) if s
                              else self.clone() for s in val]
             elif (k.endswith('Ref_tab')
@@ -676,7 +679,7 @@ class XMuRecord(DeepDict):
             elif (k.rstrip('_').endswith(self.tabends)
                   and isinstance(val, list)
                   and any(val)
-                  and isinstance(val[0], (int, str, unicode))):
+                  and isinstance(val[0], (int, str, str))):
                 try:
                     self[key] = [self.clone({base: s}) if base not in s else s for s in self[key]]
                 except:
@@ -729,12 +732,12 @@ class XMuRecord(DeepDict):
                 self.delete_row(key, i)
         else:
             matches = {}
-            for field, condition in conditions.iteritems():
+            for field, condition in conditions.items():
                 for i, val in enumerate(self(field)):
                     if val == condition:
                         matches.setdefault(field, []).append(i)
-            if matches.values():
-                values = [set(val) for val in matches.values()]
+            if list(matches.values()):
+                values = [set(val) for val in list(matches.values())]
                 indexes = list(values[0].intersection(*values))
                 indexes.sort(reverse=True)
                 for i in indexes:
@@ -762,7 +765,7 @@ class XMuRecord(DeepDict):
 
     def zip(self, *args):
         """Zips the set of lists, padding each list to the max length"""
-        return izip_longest(*[self(arg) for arg in args])
+        return zip_longest(*[self(arg) for arg in args])
 
 
 def standardize(val):

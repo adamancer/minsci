@@ -1,8 +1,12 @@
 from __future__ import unicode_literals
+from builtins import zip
+from builtins import input
+from builtins import str
+from past.builtins import basestring
 import os
 import pprint as pp
 import re
-from itertools import izip_longest as zip
+from itertools import zip_longest as zip
 
 from unidecode import unidecode
 
@@ -79,14 +83,14 @@ class Taxon(dict):
     def pprint(self, wait=False):
         pp.pprint(self)
         if wait:
-            raw_input('Press ENTER to continue')
+            input('Press ENTER to continue')
 
 
     def key(self, key):
         """Returns a standardized form of the name"""
-        if not isinstance(key, unicode):
-            key = unicode(key)
-        return unicode(re.sub(r'[^A-Za-z0-9]', u'', unidecode(key)).lower())
+        if not isinstance(key, str):
+            key = str(key)
+        return str(re.sub(r'[^A-Za-z0-9]', u'', unidecode(key)).lower())
 
 
     def get_index(self, name):

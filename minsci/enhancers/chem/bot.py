@@ -2,6 +2,8 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import range
+from builtins import object
 import math
 import re
 import time
@@ -24,7 +26,7 @@ class Bot(requests.Session):
 
     def _retry(self, func, *args, **kwargs):
         """Retries failed requests using a simple exponential backoff"""
-        for i in xrange(8):
+        for i in range(8):
             try:
                 response = func(*args, **kwargs)
             except (requests.exceptions.ConnectionError,
@@ -179,7 +181,7 @@ class ChemTable(object):
         return iter(self.rows)
 
 
-    def __nonzero__(self):
+    def __bool__(self):
         return self.rows != []
 
 
@@ -238,7 +240,7 @@ class ChemTable(object):
         # Identify populated cells
         keys = []
         for row in self.rows:
-            for key, val in row.iteritems():
+            for key, val in row.items():
                 if val:
                     keys.append(key)
         keys = [k for k in self.keys if k in keys]
@@ -257,7 +259,7 @@ class ChemTable(object):
         for row in self.rows:
             row['as_'] = row['as']
             del row['as']
-            for key, val in row.iteritems():
+            for key, val in row.items():
                 if not val:
                     row[key] = None
             db_rows.append(Chemistry(**row))
@@ -267,7 +269,7 @@ class ChemTable(object):
 
 
     def match_samples(self, sample_ids):
-        sample_ids = {self.format_key(k): v for k, v in sample_ids.iteritems()}
+        sample_ids = {self.format_key(k): v for k, v in sample_ids.items()}
         rows = []
         for row in self.rows:
             sample_id = self.format_key(row['sample_id'])

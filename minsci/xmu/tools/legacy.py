@@ -2,6 +2,8 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import input
+from builtins import str
 import csv
 import os
 import re
@@ -283,7 +285,7 @@ class Legacy(XMu):
         }
         # FIXME: What the hell is this?
         self.field_lookup = {}
-        for field, func in self.function_lookup.iteritems():
+        for field, func in self.function_lookup.items():
             self.field_lookup.setdefault(func.__name__, []).append(field)
             if func.__name__ in ('verify_country',
                                  'verify_mine',
@@ -292,12 +294,12 @@ class Legacy(XMu):
                                  'verify_volcano'):
                 self.field_lookup.setdefault('verify_event', []).append(field)
         skipped = []
-        for field, func in self.function_lookup.iteritems():
+        for field, func in self.function_lookup.items():
             if func == skip:
                 skipped.append(field)
         if skipped:
             print('\n'.join(sorted(skipped)))
-            raw_input()
+            input()
         self.missing = []
         # Read legacy data automatically
         self.errors = []
@@ -313,7 +315,7 @@ class Legacy(XMu):
         lines = [re.split('[=:]', line, 1) for line in legacy.splitlines()]
         orig = {key.strip(): standardize(val) for key, val in lines}
         missing = []
-        for key, val in orig.iteritems():
+        for key, val in orig.items():
             # Check data in all fields
             try:
                 func = self.function_lookup[key]

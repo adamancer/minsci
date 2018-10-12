@@ -1,5 +1,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
+from builtins import next
+from builtins import zip
 import json
 import os
 from collections import namedtuple
@@ -18,14 +20,14 @@ class Authority(dict):
 
     def __init__(self, *args, **kwargs):
         super(AuthorityDict, self).__init__(*args, **kwargs)
-        self._species = {std(val[1]): key for key, val in self.iteritems() if val}
-        for key, val in self.iteritems():
+        self._species = {std(val[1]): key for key, val in self.items() if val}
+        for key, val in self.items():
             self[key] = AuthorityTaxon(*val)
 
 
     def __getattr__(self, key):
         if key in ('_species'):
-            val ={std(val): key for key, val in self.iteritems()}
+            val ={std(val): key for key, val in self.items()}
             self.__setattr__(key, val)
             return val
         raise AttributeError(key)
@@ -83,7 +85,7 @@ def read_webminerals(url):
             else:
                 codes[code] = AuthorityTaxon(code, name, parent)
         # Fill in missing parents
-        for autaxon in codes.values():
+        for autaxon in list(codes.values()):
             # Proceed only if the code has no children
             children = [c for c in codes if c.startswith(autaxon.code)]
             if len(children) > 1:
@@ -114,7 +116,7 @@ def read_bgs():
         keys = next(rows)
         codes = {}
         for row in rows:
-            data = dict(zip(keys, [s.decode('utf-8') for s in row]))
+            data = dict(list(zip(keys, [s.decode('utf-8') for s in row])))
             if data:
                 code = data['Code']
                 name = data['Translation']

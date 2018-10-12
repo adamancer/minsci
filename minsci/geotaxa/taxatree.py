@@ -1,5 +1,6 @@
 from __future__ import print_function
 from __future__ import unicode_literals
+from builtins import str
 import pprint as pp
 import re
 from collections import MutableMapping
@@ -66,9 +67,9 @@ class TaxaIndex(MutableMapping):
 
     def key(self, key):
         """Returns a standardized form of the name"""
-        if not isinstance(key, unicode):
-            key = unicode(key)
-        return unicode(re.sub(r'[^A-Za-z0-9]', u'', unidecode(key)).lower())
+        if not isinstance(key, str):
+            key = str(key)
+        return str(re.sub(r'[^A-Za-z0-9]', u'', unidecode(key)).lower())
 
 
     def one(self, key):
@@ -112,11 +113,11 @@ class TaxaTree(TaxaIndex):
 
     def create_name_index(self):
         index = self.__class__()
-        for key, taxon in self.iteritems():
+        for key, taxon in self.items():
             index.setdefault(taxon.sci_name, []).append(taxon.irn)
             if taxon.sci_name != taxon.name:
                 index.setdefault(taxon.name, []).append(taxon.irn)
-        index = self.__class__({k: sorted(list(set(v))) for k, v in index.iteritems()})
+        index = self.__class__({k: sorted(list(set(v))) for k, v in index.items()})
         #duped = {k: v for k, v in index.iteritems() if len(v) > 1}
         #if duped:
         #    print duped
@@ -127,7 +128,7 @@ class TaxaTree(TaxaIndex):
 
     def create_stem_index(self):
         index = self.__class__()
-        for key, taxon in self.iteritems():
+        for key, taxon in self.items():
             index.setdefault(taxon.indexed(), []).append(taxon)
         return index
 
@@ -161,7 +162,7 @@ class TaxaTree(TaxaIndex):
                 taxon['irn'] = self.key(name)
                 self.new[self.key(name)] = taxon
             # Create a copy and add the parsed name
-            taxon = Taxon({k: v for k, v in taxon.iteritems()})
+            taxon = Taxon({k: v for k, v in taxon.items()})
             taxon[u'parsed'] = parsed
         taxon[u'qualifier'] = qualifier
         return taxon
@@ -183,7 +184,7 @@ class TaxaTree(TaxaIndex):
 
 
     def _assign_synonyms(self):
-        for key, taxon in self.iteritems():
+        for key, taxon in self.items():
             if not taxon.is_current:
                 try:
                     current = self[taxon.current.irn]
@@ -199,13 +200,13 @@ class TaxaTree(TaxaIndex):
 
     def _assign_similar(self):
         similar = {}
-        for key, taxon in self.iteritems():
+        for key, taxon in self.items():
             if taxon.gen_name:
                 similar.setdefault(tuple(taxon.gen_name), []).append({
                     'irn': taxon.irn,
                     'sci_name': taxon.sci_name
                 })
-        for key, taxa in similar.iteritems():
+        for key, taxa in similar.items():
             if len(taxa) > 1:
                 for taxon in taxa:
                     matches = [t for t in taxa if t['irn'] != taxon['irn']]
@@ -214,7 +215,7 @@ class TaxaTree(TaxaIndex):
 
 
     def _assign_official(self):
-        for key, taxon in self.iteritems():
+        for key, taxon in self.items():
             if not taxon.is_official:
                 parent = taxon
                 while parent.parent:

@@ -2,6 +2,10 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import input
+from builtins import str
+from builtins import range
+from builtins import object
 import time
 
 import getpass
@@ -178,10 +182,10 @@ class MongoDoc(dict):
         if isinstance(obj, dict):
             if not isinstance(obj, MongoDoc):
                 MongoDoc(obj)
-            for key in obj.keys():
+            for key in list(obj.keys()):
                 self._convert_children(obj[key])
         elif isinstance(obj, list):
-            for i in xrange(len(obj)):
+            for i in range(len(obj)):
                 self._convert_children(obj[i])
 
 
@@ -318,7 +322,7 @@ class XMungo(MongoBot):
         """Load data from json file created by self.save"""
         print('Reading data from {}...'.format(self.jsonpath))
         data = json.load(open(self.jsonpath, 'rb'))
-        for attr, val in data.iteritems():
+        for attr, val in data.items():
             setattr(self, attr, val)
         self.from_json = True
 
@@ -389,7 +393,7 @@ def mongo2xmu(doc, container):
         })
     })
     if doc.getpath('biopr') and '(' in doc.getpath('biopr'):
-        raw_input(doc.getpath('biopr'))
+        input(doc.getpath('biopr'))
     # Format EZID
     guid = doc['admuu']  # this HAS to be present, so use the basic lookup
     guid = '-'.join([guid[:8], guid[8:12], guid[12:16], guid[16:20], guid[20:]])

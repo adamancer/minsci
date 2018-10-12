@@ -55,7 +55,7 @@ class BiblioRecord(XMuRecord):
             for key in self:
                 prefixes.setdefault(key[:3], 0)
                 prefixes[key[:3]] += 1
-            prefix = [key for key, val in prefixes.iteritems()
+            prefix = [key for key, val in prefixes.items()
                       if val == max(prefixes.values())][0]
         return prefix
 

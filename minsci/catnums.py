@@ -1,6 +1,11 @@
 from __future__ import division, print_function
 from __future__ import unicode_literals
 
+from builtins import zip
+from builtins import str
+from builtins import range
+from past.builtins import basestring
+from builtins import object
 import pprint as pp
 import re
 from copy import deepcopy
@@ -156,9 +161,9 @@ class CatNum(object):
         # Pad prefix with a space if more than one character
         if len(self.prefix) > 1:
             params['prefix'] = self.prefix + ' '
-        defaults = {k: v for k, v in self._params.iteritems()}
+        defaults = {k: v for k, v in self._params.items()}
         defaults.update(params)
-        params = {k: v if v else '' for k, v in defaults.iteritems()}
+        params = {k: v if v else '' for k, v in defaults.items()}
         return mask.format(**params).strip(' -,()')
 
 
@@ -472,7 +477,7 @@ def _parse_matches(matches, prefixed_only=False):
     """Format catalog numbers from a parsed list"""
     id_nums = []
     for match in matches:
-        id_num = dict(zip(CATKEYS, [val.rstrip('-, ') for val in match]))
+        id_num = dict(list(zip(CATKEYS, [val.rstrip('-, ') for val in match])))
         # FIXME
         if id_num['MetPrefix'] in ['PAL']:
             id_num['CatNumber'] = id_num['CatNumber'].split(id_num['MetPrefix'])[-1].strip()
@@ -518,7 +523,7 @@ def _fill_range(id_nums, substring):
         # Fill range
         if is_range:
             id_nums = []
-            for i in xrange(first_num['CatNumber'], last_num['CatNumber'] + 1):
+            for i in range(first_num['CatNumber'], last_num['CatNumber'] + 1):
                 id_num = deepcopy(first_num)
                 id_num['CatNumber'] = i
                 id_num['FullNumber'] = format_catnum(id_num)

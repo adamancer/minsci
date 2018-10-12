@@ -3,7 +3,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import re
-from itertools import izip_longest
+from itertools import zip_longest
 
 from .xmurecord import XMuRecord
 from ..tools.describer import get_caption, summarize
@@ -134,7 +134,7 @@ class MinSciRecord(XMuRecord):
         system = self('AgeGeologicAgeSystem_tab')
         series = self('AgeGeologicAgeSeries_tab')
         stage = self('AgeGeologicAgeStage_tab')
-        ages = izip_longest(era, system, series, stage)
+        ages = zip_longest(era, system, series, stage)
         if not pretty_print:
             return ages
         ages = [' > '.join([s for s in period if s]) for period in ages]
@@ -149,7 +149,7 @@ class MinSciRecord(XMuRecord):
         group = self('AgeStratigraphyGroup_tab')
         formation = self('AgeStratigraphyFormation_tab')
         member = self('AgeStratigraphyMember_tab')
-        strat = izip_longest(group, formation, member)
+        strat = zip_longest(group, formation, member)
         if not pretty_print:
             return strat
         strat = [' > '.join([s for s in unit if s]) for unit in strat]

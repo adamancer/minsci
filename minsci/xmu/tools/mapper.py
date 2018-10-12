@@ -1,6 +1,8 @@
 """Alias handling for processing EMu data that doesn't use full paths"""
 from __future__ import unicode_literals
 
+from past.builtins import basestring
+from builtins import object
 import os
 
 from ...xmu import XMu, MinSciRecord, is_table, is_reference
@@ -211,7 +213,7 @@ class FieldMapper(object):
         Args:
             rec (dict): record data
         """
-        for field in rec.keys():
+        for field in list(rec.keys()):
             if rec[field]:
                 path = self(field)
                 if isinstance(path, list) and len(path) > 1:

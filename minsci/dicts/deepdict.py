@@ -1,10 +1,13 @@
 """Subclass of dictionary designed to read/store at depth"""
 from __future__ import unicode_literals
+from builtins import input
+from builtins import range
+from past.builtins import basestring
 import pprint as pp
 from collections import Mapping
 
 
-ENDPOINTS = basestring, int, long, float
+ENDPOINTS = basestring, int, int, float
 
 
 class DeepDict(dict):
@@ -101,7 +104,7 @@ class DeepDict(dict):
         mapping = self
         i = 0
         while i < (len(args) - 1):
-            if isinstance(args[i+1], (int, long)):
+            if isinstance(args[i+1], (int, int)):
                 mapping = mapping.setdefault(args[i], [])
                 try:
                     mapping = mapping[args[i+1]]
@@ -135,7 +138,7 @@ class DeepDict(dict):
                 # empty containers are deleted until a populated one is found.
                 mapping.pop(last)
                 first = False
-            elif isinstance(last, (int, long)) and any(mapping):
+            elif isinstance(last, (int, int)) and any(mapping):
                 # Lists with any true-like values are left intact
                 pass
             elif not _any(mapping[last]):
@@ -166,17 +169,17 @@ class DeepDict(dict):
                 self.pluck(*path)
             else:
                 return True
-        elif isinstance(mapping, (int, long, float)):
+        elif isinstance(mapping, (int, int, float)):
             # Any number-like value is considered true (so zeroes are kept)
             return True
         elif not mapping:
             self.pluck(*path)
         else:
             try:
-                keys = mapping.keys()
+                keys = list(mapping.keys())
                 is_list = False
             except AttributeError:
-                keys = range(len(mapping))[::-1]  # reverse order, see below
+                keys = list(range(len(mapping)))[::-1]  # reverse order, see below
                 is_list = True
             for key in keys:
                 # DeepDict.pluck() is aggressive, so keys can disappear
@@ -203,7 +206,7 @@ class DeepDict(dict):
         """
         pp.pprint(self)
         if pause:
-            raw_input('Paused. Press ENTER to continue.')
+            input('Paused. Press ENTER to continue.')
 
 
 def _any(val):

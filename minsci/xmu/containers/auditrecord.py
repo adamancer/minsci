@@ -35,7 +35,7 @@ class AuditRecord(XMuRecord):
                 print(xml)
                 raise
             if xml.startswith('<atom'):
-                val = tree.text if isinstance(tree.text, unicode) else tree.text.decode('utf-8')
+                val = tree.text if isinstance(tree.text, str) else tree.text.decode('utf-8')
             else:
                 atoms = [tuple.find('atom') for tuple in tree.findall('tuple')]
                 val = [atom.text if atom is not None else '' for atom in atoms]
@@ -57,7 +57,7 @@ class AuditRecord(XMuRecord):
         old = self.parse_field('AudOldValue_tab')
         new = self.parse_field('AudNewValue_tab')
         changes = {field: Change(field, old.get(field), new.get(field))
-                   for field in set(old.keys() + new.keys())
+                   for field in set(list(old.keys()) + list(new.keys()))
                    if old.get(field) != new.get(field)}
         # Limit fields based on whitelist/blacklist
         if whitelist:

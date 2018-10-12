@@ -2,6 +2,8 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import range
+from builtins import object
 import json as serialize
 import glob
 import os
@@ -94,7 +96,7 @@ class XMuFields(object):
                 cprint('Caching XMuFields object...')
                 # Convert keys in map_tables to string
                 map_tables = {'|'.join(key): val for key, val
-                              in self.map_tables.iteritems()}
+                              in self.map_tables.items()}
                 fields = {
                     'params': params,
                     'schema': self.schema,
@@ -137,7 +139,7 @@ class XMuFields(object):
                 else:
                     try:
                         map_tables = {tuple(key.split('|')): val for key, val
-                                      in cached['map_tables'].iteritems()}
+                                      in cached['map_tables'].items()}
                         self.schema = cached['schema']
                         self.tables = cached['tables']
                         self.map_tables = map_tables
@@ -282,7 +284,7 @@ class XMuFields(object):
                 elif not (val.endswith('Ref') and key == 'ItemName'):
                     path.append(val)
         # Reworked dedupe function to check against preceding value
-        keep = [i for i in xrange(len(path)) if not i or path[i] != path[i-1]]
+        keep = [i for i in range(len(path)) if not i or path[i] != path[i-1]]
         return tuple([path[i] for i in keep])
 
 
@@ -303,9 +305,9 @@ class XMuFields(object):
                         table += 'Inner'
                         column = (column[0], column[1], column[1] + '_inner')
                         _tables.setdefault(table, []).append(column)
-            for table in _tables.values():
+            for table in list(_tables.values()):
                 self.add_table(table)
-            tables[module_name] = [tuple(sorted(t)) for t in _tables.values()]
+            tables[module_name] = [tuple(sorted(t)) for t in list(_tables.values())]
         return tables
 
 

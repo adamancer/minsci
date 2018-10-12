@@ -70,7 +70,7 @@ def summarize(rec):
     summary = u'{}: {} [{}]'.format(catnum, caption, tags).rstrip('[] ')
     # Cull unneeded keys from descriptors
     keep = ['irn', 'catnum', 'status', 'xname', 'url']
-    obj = {key: val for key, val in descriptors.iteritems() if key in keep}
+    obj = {key: val for key, val in descriptors.items() if key in keep}
     obj['xname'] = ucfirst(obj['xname'])
     return Description(object=obj, caption=caption,
                        keywords=keywords, summary=summary)
