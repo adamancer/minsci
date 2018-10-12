@@ -127,6 +127,26 @@ class Mediator(XMu):
         self.autoiterate(['_existing'], report=25000)
 
 
+    def __getattr__(self, attr):
+        try:
+            return getattr(XMu, attr)
+        except AttributeError:
+            return getattr(self._existing, attr)
+
+
+    def __repr__(self):
+        import pprint as pp
+        return pp.pformat(self._existing)
+
+
+    def add(self, fn, irns):
+        assert isinstance(irns, list)
+        try:
+            self._existing[fn]
+        except KeyError:
+            self._existing[fn] = irns
+
+
     def iterate(self, element):
         rec = self.parse(element)
         self._existing.setdefault(rec('MulIdentifier'), []).append(rec('irn'))
