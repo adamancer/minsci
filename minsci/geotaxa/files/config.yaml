@@ -31,9 +31,11 @@ modifiers:
     - weakly
 textures:
     - altered
+    - anhedral
     - apophysis
     - baked
     - banded
+    - blocks?
     - botryoidal
     - boudins?
     - brecciated
@@ -44,6 +46,7 @@ textures:
     - digested
     - disseminated
     - equigranular
+    - euhedral
     - fibrous
     - fine
     - float
@@ -56,6 +59,8 @@ textures:
     - grained
     - granular
     - granulated
+    - grit
+    - gritty
     - inequigranular
     - lacy
     - laminated
@@ -69,6 +74,7 @@ textures:
     - microfolded
     - microfractured
     - monomict
+    - pebbles?
     - phenocrystic
     - phenocrysts?
     - platy
@@ -77,12 +83,14 @@ textures:
     - porphyroblastic
     - porphyroblasts?
     - schistose
+    - schlieren
     - shatter ?cones?
     - sheared
     - shocked
     - shock-fractured
     - slicken-?sided
     - slicken-?sides?
+    - synhedral
     - variegated
     - vitrified
     - weathered
