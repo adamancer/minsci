@@ -38,9 +38,14 @@ class MinSciRecord(XMuRecord):
         else:
             if taxa is None:
                 taxa = self.get_classification(True)
-            setting = self('MinJeweleryType') if not force_derived else None
-            name = self.geotree.name_item(taxa, setting)
+            name = self.geotree.name_item(taxa, self('MinJeweleryType'))
         return name
+
+
+    def get_classification_string(self, taxa=None, standardized=True):
+        if taxa is None:
+            taxa = self.get_classification(True)
+        return self.geotree.name_item(taxa)
 
 
     def get_classification(self, standardized=True):
