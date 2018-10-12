@@ -256,7 +256,7 @@ class Taxon(dict):
         if include_self:
             parents.append(Taxon({'irn': self.irn, 'sci_name': self.sci_name}))
         if full_records:
-            parents = [self.tree[p.irn] for p in parents]
+            parents = [self.tree[p.irn] for p in parents if p.irn is not None]
         return TaxaList(parents)
 
 
