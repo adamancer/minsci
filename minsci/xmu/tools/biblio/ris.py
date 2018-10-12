@@ -69,7 +69,7 @@ class FillFromRIS(XMu):
 
 
     def iterate(self, element):
-        """Pulls reference information from BibTex based on DOI in EMu record"""
+        """Pulls reference information from BibTex based on RIS in EMu record"""
         rec = self.parse(element)
         ris = rec('NotNotes').strip()
         # Check for urls in notes field
@@ -129,8 +129,8 @@ def emuize(ris, parsers=None):
     for ris in records:
         rec = ris2dict(ris)
         # Anything with a DOI should be handled using doi.py
-        if rec.get('DO'):
-            continue
+        #if rec.get('DO'):
+        #    continue
         # Look for customizers based on UR
         parser = None
         for key, func in parsers.iteritems():
