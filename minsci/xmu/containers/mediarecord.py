@@ -454,6 +454,29 @@ class MediaRecord(XMuRecord):
             return enhanced.expand()
 
 
+    def _fill_on_match(self, match):
+        print 'Unique match found! Updating record...'
+        enhanced = self.clone(self)
+        enhanced.whitelist = self.whitelist
+        enhanced.masks = self.masks
+        enhanced.object = match
+        enhanced.objects = [match]
+        enhanced.catnums = self.catnums
+        for key, func in enhanced.smart_functions.iteritems():
+            enhanced[key] = func() if func is not None else enhanced(key)
+        # Tweak rights statement for non-collections objects
+        non_si_coll = 'Non-collections object (Mineral Sciences)'
+        if non_si_coll in enhanced.get('DetCollectionName_tab', []):
+            enhanced['DetRights'] = ('One or more objects depicted in this'
+                                     ' image are not owned by the'
+                                     ' Smithsonian Institution.')
+        enhanced['DetRelation_tab'] = [rel.replace('(0/', '(1/') for rel
+                                       in enhanced['DetRelation_tab']]
+        #enhanced['_Objects'] = [match]
+        return enhanced.expand()
+
+
+
     def strip_derived(self):
         """Strips fields derived by EMu from the record"""
         strip = [
