@@ -1,3 +1,5 @@
+from __future__ import division, print_function
+
 import pprint as pp
 import re
 from copy import deepcopy
@@ -505,7 +507,9 @@ def _fill_range(id_nums, substring):
             ((substring.count('-') > 0 and substring.count('-') != 2)
              or substring.count('through') == 1
              or substring.count('thru') == 1)
-            and first_num['CatPrefix'] == last_num['CatPrefix']
+            and (
+              first_num['CatPrefix'] == last_num['CatPrefix']
+              or not last_num['CatPrefix'])
             and last_num['CatNumber'] > first_num['CatNumber']
             and not first_num['CatSuffix'] and not last_num['CatSuffix']
             and first_num['CatNumber'] > 10
