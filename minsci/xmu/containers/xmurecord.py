@@ -684,6 +684,12 @@ class XMuRecord(DeepDict):
                   and isinstance(val, list)
                   and not any(val)):
                 self[key] = []
+            elif (isinstance(val, list)
+                  and any([v for v in val if isinstance(v, dict)])
+                  and any([v for v in val if not isinstance(v, dict)])):
+                # Catches mixtures of expanded and unexpanded keys
+                self[key] = [val if isinstance(val, dict) else {base: val}
+                             for val in self[key]]
         return self
 
 
