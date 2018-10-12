@@ -83,9 +83,10 @@ def get_descriptors(rec):
         catnum = name + ' (MET)'
     taxa = rec.get_classification()
     try:
-        xname = rec.get_name(taxa=taxa, force_derived=True)
+        xname = rec.get_name(taxa=taxa)
     except KeyError:
         xname = name
+    taxa_string = lcfirst(rec.get_classification_string(taxa))
     kind = rec('CatCatalog').split(' ')[0].rstrip('s')
     cut, setting = format_gems(rec)
     country, state, county = rec.get_political_geography()
@@ -99,6 +100,7 @@ def get_descriptors(rec):
         'name': name,
         'xname': xname,
         'taxa': taxa,
+        'tname': taxa_string,
         'kind': kind,
         'cut': cut,
         'setting': setting,
@@ -145,6 +147,7 @@ def get_keywords(rec=None, descriptors=None):
     keywords.append(descriptors['country'])
     if descriptors['country'].lower() == 'united states':
         keywords.append(descriptors['state'])
+    keywords = [kw for i, kw in enumerate(keywords) if not kw in keywords[:i]]
     return [ucfirst(s) for s in keywords if s and not 'unknow' in s.lower()]
 
 
@@ -192,23 +195,32 @@ def format_caption(descriptors):
             and not working['cut'] in ('carved', 'intarsia')
             and not 'beads' in working['cut']):
         working['cut'] = format_modifier(working['cut']) + '-cut'
-    if working['setting'].lower() in OBJECTS:
+    if (working['setting'].lower() in working['xname'].lower()
+        and working['tname'].lower() in working['xname'].lower()
+        and not (working['locality'] or working['cut'] or working['colors'])):
+        mask = u''
+    elif working['setting'].lower() in OBJECTS:
         working['colors'] = format_modifier(oxford_comma(working['colors']))
-        mask = u'{cut}, {colors} {xname} {setting}'
+        mask = u'{cut}, {colors} {tname} {setting}'
     elif working['setting'] and 'beads' in working['cut']:
         working['setting'] = add_article(working['setting'])
         working['colors'] = format_modifier(oxford_comma(working['colors']))
-        mask = u'{setting} featuring {colors} {xname} {cut}'
+        mask = u'{setting} featuring {colors} {tname} {cut}'
+    elif (working['setting']
+          and working['locality']
+          and not (working['cut'] or working['colors'])):
+        working['xname'] = add_article(working['xname'])
+        mask = u'{setting} featuring {tname} from {locality}'
     elif working['setting']:
         working['setting'] = add_article(working['setting'])
         working['colors'] = format_modifier(oxford_comma(working['colors']))
-        mask = u'{setting} featuring {cut}, {colors} {xname}'
+        mask = u'{setting} featuring {cut}, {colors} {tname}'
     elif working['cut'] and len(working['colors']) <= 2:
         working['colors'] = format_modifier(oxford_comma(working['colors']))
-        mask = u'{cut}, {colors} {xname} from {locality}'
+        mask = u'{cut}, {colors} {tname} from {locality}'
     elif working['cut']:
         working['colors'] = oxford_comma(working['colors'])
-        mask = u'{cut} {xname} colored {colors} from {locality}'
+        mask = u'{cut} {tname} colored {colors} from {locality}'
     elif working['name'] and not working['locality']:
         mask = u''
     else:
@@ -243,8 +255,10 @@ def format_locality(country, state, county):
         return ''
     if country == 'United States':
         return ', '.join([s for s in [county, state] if s])
-    return ', '.join([s for s in [county, state, country] if s])
-
+    locality = ', '.join([s for s in [county, state, country] if s])
+    if 'Ca.' in locality:
+        locality = 'near ' + locality.replace(' Ca.', '')
+    return locality
 
 
 def format_gems(rec):
