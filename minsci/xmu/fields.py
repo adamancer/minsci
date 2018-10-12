@@ -37,7 +37,7 @@ class XMuFields(object):
         # Set defaults for blacklist
         defaults = {
             'blacklist': [
-                'eaccessionlots',
+                #'eaccessionlots',
                 'edocuments',
                 'eevents',
                 'eexhibitobjects',
