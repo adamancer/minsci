@@ -30,7 +30,10 @@ class TaxaIndex(MutableMapping):
 
 
     def __getitem__(self, key):
-        return self.obj[self.key(key)]
+        try:
+            return self.obj[self.key(key)]
+        except KeyError:
+            return self.new[self.key(key)]
 
 
     def __setitem__(self, key, val):
@@ -141,6 +144,10 @@ class TaxaTree(TaxaIndex):
 
 
     def place(self, name):
+        """Places a name in the taxonomic hierarchy, adding it if needed"""
+        assert name.strip()
+        qualifier = u'uncertain' if name.endswith('?') else u''
+        name = name.rstrip('?')
         try:
             taxon = self.find_one(name)
         except KeyError:
@@ -149,10 +156,12 @@ class TaxaTree(TaxaIndex):
                 taxon = self.find_one(parsed.name)
             except KeyError:
                 taxon = Taxon(name)
+                taxon['irn'] = self.key(name)
                 self.new[self.key(name)] = taxon
             # Create a copy and add the parsed name
             taxon = Taxon({k: v for k, v in taxon.iteritems()})
-            taxon['parsed'] = parsed
+            taxon[u'parsed'] = parsed
+        taxon[u'qualifier'] = qualifier
         return taxon
 
 
@@ -167,6 +176,7 @@ class TaxaTree(TaxaIndex):
             print 'Creating {}...'.format(name)
             setattr(self, name, self.indexers[name]())
             index = getattr(self, name)
+            print 'Done!'
         return index
 
 
