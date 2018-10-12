@@ -50,6 +50,7 @@ def hash_image_data(path, output_dir='images'):
     Returns:
         Hash of image data as string
     """
+    path = os.path.abspath(path)
     try:
         return hashlib.md5(Image.open(path).tobytes()).hexdigest()
     except IOError:
