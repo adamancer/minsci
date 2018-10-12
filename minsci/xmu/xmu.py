@@ -534,6 +534,9 @@ def _emuize(rec, root=None, path=None, handlers=None,
             atom.text = str(rec)
         except UnicodeEncodeError:
             atom.text = rec
+        except ValueError:
+            print rec
+            raise
     else:
         try:
             paths = rec.keys()
@@ -631,7 +634,7 @@ def _check(rec, module=None):
         try:
             table = rec.fields.map_tables[(module, key.strip('+'))]
         except KeyError:
-            # Check for tables that aren't being handled
+            # Check for tables that haven't been included as grids
             if key.endswith('tab'):
                 print 'Unassigned column: {}'.format(key)
             # Convert strings to XMuStrings
