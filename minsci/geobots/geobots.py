@@ -83,25 +83,30 @@ class GeoNamesBot(GeoBot):
         # Make and parse query
         response = self._retry(self.get, url, params=defaults)
         if response.status_code == 200:
-            print response.url
             content = response.json()
             status = content.get('status')
             if status is None:
-                return GeoList(content.get('geonames', content), **self._params)
+                return content.get('geonames', content)
             elif response.from_cache:
                 # If bad response comes from cache, delete that entry and
                 # try again
-                self.cache.delete_url(response.url)
-                return self._query_geonames(url, **self._params)
+                if status.get('value') not in (15,):
+                    print response.url
+                    print '{message} (code={value})'.format(**status)
+                    self.cache.delete_url(response.url)
+                    return self._query_geonames(url, **self._params)
             else:
                 # If bad response is live, kill the process
-                self.cache.delete_url(response.url)
+                print response.url
                 print '{message} (code={value})'.format(**status)
                 if status.get('value') in (18, 19, 20):
+                    self.cache.delete_url(response.url)
                     raise RuntimeError('Out of credits')
                 # If not a credit error, try again in 30 seconds
-                time.sleep(30)
-                return self._query_geonames(url, **self._params)
+                if status.get('value') not in (15,):
+                    self.cache.delete_url(response.url)
+                    time.sleep(30)
+                    return self._query_geonames(url, **self._params)
 
 
     def get_by_id(self, geoname_id):
@@ -124,8 +129,7 @@ class GeoNamesBot(GeoBot):
         Args:
             query (str): query string
             countries (mixed): a list or pipe-delimited string of countries
-            featureClass (list)
-            featureCode (list)
+            features (list): a list of GeoNames feature classes and codes
 
         Returns:
             JSON representation of matching locations
@@ -140,9 +144,11 @@ class GeoNamesBot(GeoBot):
                 codes = [code for code in codes if code is not None]
                 if len(codes) == len(countries):
                     params['country'] = codes
+            params['featureClass'] = [c for c in params['features'] if len(c) == 1]
+            params['featureCodes'] = [c for c in params['features'] if len(c) > 1]
             return self._query_geonames(url, **params)
         else:
-            return GeoList([], **self._params)
+            return []
 
 
     def find_nearby(self, lat, lng, dec_places=None):
@@ -188,6 +194,10 @@ class GeoNamesBot(GeoBot):
             JSON representation of point
         """
         if dec_places is not None:
+            if not isinstance(lat, float):
+                lat = float(lat)
+            if not isinstance(lng, float):
+                lng = float(lng)
             mask = '{0:.' + str(dec_places) + 'f}'
             lat = mask.format(lat)
             lng = mask.format(lng)
