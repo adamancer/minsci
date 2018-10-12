@@ -38,14 +38,14 @@ class TaxaParser(object):
 
     def __str__(self):
         return pformat({
-            'verbatim': self.verbatim,
-            'name': self.name,
-            'host': self.host,
-            'textures': self.textures,
-            'colors': self.colors,
-            'parts': self.parts,
-            'keywords': self.keywords,
-            'indexed': self.indexed
+            u'verbatim': self.verbatim,
+            u'name': self.name,
+            u'host': self.host,
+            u'textures': self.textures,
+            u'colors': self.colors,
+            u'parts': self.parts,
+            u'keywords': self.keywords,
+            u'indexed': self.indexed
         })
 
 
