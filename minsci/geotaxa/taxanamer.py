@@ -51,12 +51,12 @@ class TaxaNamer(TaxaTree):
     def name_item(self, taxa, setting=None):
         taxalist = TaxaList()
         for taxon in [t for t in taxa if t]:
-            matches = self.find(taxon)
-            taxalist.append(TaxaList(matches).best_match(taxon, True))
+            matches = self.place(taxon)  # place always returns one
+            taxalist.append(TaxaList([matches]).best_match(taxon, True))
         taxalist = taxalist.unique()
         if setting:
             name = u'{} {}'.format(self.join(taxalist.names()[:2]), setting)
-        elif len(taxa) == 1:
+        elif len(taxa) == 1 or len(set(taxalist.names())) == 1:
             name = taxalist[0].sci_name
         else:
             name = self.join(taxalist.names(), conj=u'with')
