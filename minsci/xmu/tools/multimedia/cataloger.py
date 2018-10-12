@@ -5,6 +5,7 @@ import pprint as pp
 from ..describer import summarize, Description
 from ....xmu import XMu, MinSciRecord
 from ....catnums import CatNum, get_catnums
+from ....geotaxa import get_tree
 
 
 class Cataloger(XMu):
@@ -12,11 +13,14 @@ class Cataloger(XMu):
 
     def __init__(self, *args, **kwargs):
         self.prepare = kwargs.pop('summarize', summarize)
+        report = kwargs.pop('report', 25000)
         kwargs['container'] = MinSciRecord
         super(Cataloger, self).__init__(*args, **kwargs)
         self.catalog = {}
         self.media = {}
-        self.autoiterate(['catalog', 'media'], report=25000)
+        if MinSciRecord.geotree is None:
+            MinSciRecord.geotree = get_tree()
+        self.autoiterate(['catalog', 'media'], report=report)
 
 
     def iterate(self, element):
