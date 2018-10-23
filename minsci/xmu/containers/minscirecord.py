@@ -3,7 +3,10 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import re
-from itertools import zip_longest
+try:
+    from itertools import zip_longest
+except ImportError as e:
+    from itertools import izip_longest as zip_longest
 
 from .xmurecord import XMuRecord
 from ..tools.describer import get_caption, summarize

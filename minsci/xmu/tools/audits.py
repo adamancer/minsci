@@ -190,7 +190,7 @@ class Auditor(XMu):
         footer = ['</body>'
                   '</html>']
         html = header + self._html if html is None else html + footer
-        with open(fp, 'wb') as f:
+        with open(fp, 'w') as f:
             f.write(''.join([s.encode('utf-8') for s in html]))
 
 

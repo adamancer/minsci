@@ -155,7 +155,7 @@ def parse_bibtex(bib):
     parser.customization = convert_to_unicode
     parsed = bibtexparser.loads(bib, parser=parser).entries[0]
     # Miscellaneous clean up
-    braces = re.compile(ur'\{([A-z_ \-]+|[\u0020-\uD7FF])\}', re.U)
+    braces = re.compile(r'\{([A-z_ \-]+|[\u0020-\uD7FF])\}', re.U)
     for key, val in parsed.items():
         val = braces.sub(r'\1', val)
         if '{' in val:
@@ -337,7 +337,7 @@ def emuize(data):
         multimedia = clone({
             'Multimedia': fp,
             'MulTitle': rec[prefix + 'Title'],
-            'MulCreator_tab': ['Adam Mansur'],#fullnames,
+            'MulCreator_tab': ['Adam Mansr'],#fullnames,
             'DetResourceType': u'Publication/Manuscript',
             'DetCollectionName_tab': ['Documents and data (Mineral Sciences)'],
             'DetPublisher': publisher,
@@ -403,13 +403,13 @@ def process_file(fp):
     write('import.xml', records, 'ebibliography')
     # Update the DOI file
     keys = ['DOI', 'Filename', 'IRN']
-    with open('doi.txt', 'wb') as f:
+    with open('doi.txt', 'w') as f:
         writer = csv.writer(f, delimiter=',', quotechar='"')
         writer.writerow([s.encode('utf-8') for s in keys])
         for ref in updated:
             writer.writerow([ref[key].encode('utf-8') for key in keys])
     # Re-encode the DOI file to UTF-16-LE
-    with open('doi.txt', 'rb') as f:
+    with open('doi.txt', 'r') as f:
         data = f.read().decode('utf-8')
     with io.open('doi.txt', 'w', encoding='utf-16', newline='\n') as f:
         f.write(data)

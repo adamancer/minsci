@@ -18,7 +18,7 @@ Part = namedtuple('Part', ['word', 'stem', 'rank', 'pos'])
 
 class TaxaParser(object):
     """Analyzes and segments a rock name"""
-    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'rb'))
+    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'r'))
     _colors = sorted(config['colors'], key=len, reverse=True)
     _modifiers = sorted(config['modifiers'], key=len, reverse=True)
     _textures = sorted(config['textures'], key=len, reverse=True)
@@ -230,7 +230,7 @@ class TaxaParser(object):
         other_words = [p.word for p in other.parts]
         count = float(len(set(re.split('\W', self.key(self.verbatim)) +
                               re.split('\W', other.key(other.verbatim)))))
-        score = old_div(len((set(self_words).intersection(other_words))), count)
+        score = len((set(self_words).intersection(other_words))) / count
         #print self.verbatim, 'vs.', other.verbatim, '=>', score
         return score
 

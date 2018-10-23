@@ -6,7 +6,6 @@ from __future__ import division
 from builtins import str
 from builtins import range
 from past.builtins import basestring
-from past.utils import old_div
 import math
 import os
 import time
@@ -56,7 +55,7 @@ class SiteBot(Bot):
     """
 
     def __init__(self, username, user_id=None):
-        wait = old_div(3600., 2000.)
+        wait = 3600 / 2000
         super(SiteBot, self).__init__(wait, cache_name='bot')
         self.username = username
         if user_id is None:
@@ -234,10 +233,9 @@ def distance_on_unit_sphere(lat1, long1, lat2, long2):
     """
 
     # Convert latitude and longitude to spherical coordinates in radians.
-    degrees_to_radians = old_div(math.pi, 180.0)
-    # phi = 90 - latitude
-    phi1 = (90.0 - lat1) * degrees_to_radians
-    phi2 = (90.0 - lat2) * degrees_to_radians
+    degrees_to_radians = math.pi / 180.
+    phi1 = (90. - lat1) * degrees_to_radians
+    phi2 = (90. - lat2) * degrees_to_radians
     # theta = longitude
     theta1 = long1 * degrees_to_radians
     theta2 = long2 * degrees_to_radians
@@ -299,7 +297,7 @@ def _read_countries(fn):
     """
     abbr_to_name = CaseInsensitiveDict()
     name_to_abbr = CaseInsensitiveDict()
-    with open(os.path.join(os.path.dirname(__file__), 'files', fn), 'rb') as f:
+    with open(os.path.join(os.path.dirname(__file__), 'files', fn), 'r') as f:
         for line in f:
             row = line.split('\t')
             country = row[4]
@@ -321,7 +319,7 @@ def _read_states(fn):
     """
     abbr_to_name = CaseInsensitiveDict()
     name_to_abbr = CaseInsensitiveDict()
-    with open(os.path.join(os.path.dirname(__file__), 'files', fn), 'rb') as f:
+    with open(os.path.join(os.path.dirname(__file__), 'files', fn), 'r') as f:
         for line in f:
             row = line.split('\t')
             state = row[0]

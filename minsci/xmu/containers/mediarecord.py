@@ -8,7 +8,10 @@ import os
 import re
 import shutil
 from collections import namedtuple
-from itertools import zip_longest
+try:
+    from itertools import zip_longest
+except ImportError as e:
+    from itertools import izip_longest as zip_longest
 
 from unidecode import unidecode
 

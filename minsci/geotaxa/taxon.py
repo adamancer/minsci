@@ -1,12 +1,14 @@
 from __future__ import unicode_literals
-from builtins import zip
 from builtins import input
 from builtins import str
 from past.builtins import basestring
 import os
 import pprint as pp
 import re
-from itertools import zip_longest as zip
+try:
+    from itertools import zip_longest
+except ImportError as e:
+    from itertools import izip_longest as zip_longest
 
 from unidecode import unidecode
 
@@ -211,10 +213,10 @@ class Taxon(dict):
                                and rec('ClaCurrentlyAccepted') == 'Yes')
         # Set authorities
         self['authorities'] = []
-        for kind, val in zip(rec('DesLabel0'), rec('DesDescription0')):
+        for kind, val in zip_longest(rec('DesLabel0'), rec('DesDescription0')):
             self.authorities.append({'kind': kind, 'val': val})
         '''
-        for src, code, ref in zip(rec('TaxValidityComment_tab'),
+        for src, code, ref in zip_longest(rec('TaxValidityComment_tab'),
                                   rec('TaxValidityReason_tab'),
                                   rec('TaxValidityBiblioRef_tab')):
             refs = {

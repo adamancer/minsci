@@ -317,16 +317,16 @@ def _parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
     if not isinstance(default_suffix, basestring):
         raise Exception('Default suffix must be a string')
     # Regular expressions for use with catalog number functions
-    #p_pre = ur'(?:([A-Z]{3}[A ] ?)|(?:(NMNH[ \-]|USNM[ \-])?(?:([BCGMRS])-?)?))?'
-    p_pre = ur'(?:([A-Z]{3}[A ] ?)|(?:(NMNH[ \-]+|USNM[ \-]+)?(?:([A-Z]{1,3})[ \-]?)?))?'
-    p_num = ur'([0-9]{1,6})'  # this will pick up ANY number
+    #p_pre = r'(?:([A-Z]{3}[A ] ?)|(?:(NMNH[ \-]|USNM[ \-])?(?:([BCGMRS])-?)?))?'
+    p_pre = r'(?:([A-Z]{3}[A ] ?)|(?:(NMNH[ \-]+|USNM[ \-]+)?(?:([A-Z]{1,3})[ \-]?)?))?'
+    p_num = r'([0-9]{1,6})'  # this will pick up ANY number
     if MINCATNUM == 1:
-        p_suf = ur'\s?([-\.][A-z0-9\.\- ]+|[-/\.][0-9]{1,4}|[-/\.][A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
+        p_suf = r'\s?([-\.][A-z0-9\.\- ]+|[-/\.][0-9]{1,4}|[-/\.][A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
     else:
-        p_suf = ur'\s?([-/\.][0-9]{1,4}|[-/\.][A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
-    regex = re.compile(ur'\b(' + p_pre + p_num + p_suf + ur')\b', re.I)
+        p_suf = r'\s?([-/\.][0-9]{1,4}|[-/\.][A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
+    regex = re.compile(r'\b(' + p_pre + p_num + p_suf + r')\b', re.I)
     all_id_nums = []
-    for substring in re.split(ur'\s(and|&)\s', val, flags=re.I):
+    for substring in re.split(r'\s(and|&)\s', val, flags=re.I):
         id_nums = _parse_matches(regex.findall(substring), prefixed_only)
         id_nums = _fix_misidentified_suffixes(id_nums)
         id_nums = _fill_range(id_nums, substring)

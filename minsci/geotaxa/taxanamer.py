@@ -12,7 +12,7 @@ from .taxatree import TaxaTree
 
 
 class TaxaNamer(TaxaTree):
-    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'rb'))
+    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'r'))
     _capex = [str(s) if isinstance(s, int) else s for s in config['capex']]
 
     def __init__(self, *args, **kwargs):
@@ -27,7 +27,7 @@ class TaxaNamer(TaxaTree):
             return name
         name = name.lower()
         for word in self._capex:
-            pattern = re.compile(ur'\b{}\b'.format(word), flags=re.I)
+            pattern = re.compile(r'\b{}\b'.format(word), flags=re.I)
             matches = pattern.findall(name)
             if matches and word.isupper():
                 name = pattern.sub(matches[0][0].upper(), name)

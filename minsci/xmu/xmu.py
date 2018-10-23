@@ -222,7 +222,7 @@ class XMu(object):
             fp = os.path.splitext(self.path)[0] + '.json'
         print('Saving data to {}...'.format(fp))
         data = {key: getattr(self, key) for key in self.keep}
-        json.dump(data, open(fp, 'wb'), cls=ABCEncoder)
+        json.dump(data, open(fp, 'w'), cls=ABCEncoder)
 
 
     def load(self, fp=None):
@@ -233,7 +233,7 @@ class XMu(object):
         if os.path.getmtime(fp) <= os.path.getmtime(self.path):
             raise IOError
         print('Reading data from {}...'.format(fp))
-        data = json.load(open(fp, 'rb'))
+        data = json.load(open(fp, 'r'))
         for attr, val in data.items():
             setattr(self, attr, val)
         self.from_json = True
@@ -515,7 +515,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
         else:
             grid_flds = '|'.join(['|'.join(field) for field in sorted(table)])
             group = Grid(grid_flds, operator)
-    if isinstance(rec, (int, int, float, basestring)):
+    if isinstance(rec, (int, float, basestring)):
         atom = etree.SubElement(root, 'atom')
         # Set path to parent if is a row in a table
         if isinstance(path, int):
@@ -548,12 +548,12 @@ def _emuize(rec, root=None, path=None, handlers=None,
             paths = list(rec.keys())
         except AttributeError:
             paths = [i for i in range(len(rec))]
-        if isinstance(path, (int, int)):
+        if isinstance(path, int):
             root = etree.SubElement(root, 'tuple')
             # Add append attributes if required
             if group is not None:
-                hashed = (hashlib.md5(group.fields +\
-                          '|{}'.format(path)).hexdigest())
+                hashval = (group.fields + '|{}'.format(path)).encode('utf-8')
+                hashed = hashlib.md5(hashval).hexdigest()
                 operator = group.operator.format(path + 1)
                 if not re.match(r'^(\+|-|\d+=)$', operator):
                     raise ValueError('Illegal operator: {}'.format(operator))
@@ -671,7 +671,7 @@ def emuize(records, module=None):
     root = None
     for rec in checked:
         try:
-            root = _emuize(rec.wrap(module), root, module=module)
+            root = _emuize(rec.expand().wrap(module), root, module=module)
         except:
             rec.pprint()
             raise

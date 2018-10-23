@@ -8,8 +8,11 @@ from past.builtins import basestring
 import re
 from collections import namedtuple
 from datetime import datetime
-from itertools import zip_longest
 from pytz import timezone
+try:
+    from itertools import zip_longest
+except ImportError as e:
+    from itertools import izip_longest as zip_longest
 
 from dateparser import parse
 
@@ -632,7 +635,7 @@ class XMuRecord(DeepDict):
             elif (val
                   and not key.startswith('_')
                   and not key.rstrip('_').endswith(('0', 'tab', ')', 'Ref'))
-                  and not isinstance(val, (basestring, int, int, float))):
+                  and not isinstance(val, (basestring, int, float))):
                 raise ValueError('{} must be atomic'.format(key))
             # Handle nested tables
             if k.endswith('_nesttab'):
@@ -658,7 +661,7 @@ class XMuRecord(DeepDict):
                 elif not expanded:
                     self[key] = []
             elif (k.endswith('Ref')
-                  and isinstance(val, (int, str, str))
+                  and isinstance(val, (int, str))
                   and val):
                 self[key] = self.clone({'irn': val})
             elif k.endswith('Ref'):
@@ -669,7 +672,7 @@ class XMuRecord(DeepDict):
             elif (k.endswith('Ref_tab')
                   and isinstance(val, list)
                   and any(val)
-                  and isinstance(val[0], (int, str, str))):
+                  and isinstance(val[0], (int, str))):
                 self[key] = [self.clone({'irn': s}) if s
                              else self.clone() for s in val]
             elif (k.endswith('Ref_tab')
@@ -679,7 +682,7 @@ class XMuRecord(DeepDict):
             elif (k.rstrip('_').endswith(self.tabends)
                   and isinstance(val, list)
                   and any(val)
-                  and isinstance(val[0], (int, str, str))):
+                  and isinstance(val[0], (int, str))):
                 try:
                     self[key] = [self.clone({base: s}) if base not in s else s for s in self[key]]
                 except:

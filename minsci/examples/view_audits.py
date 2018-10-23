@@ -33,7 +33,7 @@ xmudata = Auditor('eaudits.xml', percent_to_review=100, users=['mansura'])
 
 # Retrieve a list of the irns modified for each module
 xmudata.fast_iter(xmudata.itermodified)
-with open('modified.csv', 'wb') as f:
+with open('modified.csv', 'w') as f:
     writer = csv.writer(f)
     writer.writerow(['module', 'irn'])
     for module in sorted(xmudata.records):

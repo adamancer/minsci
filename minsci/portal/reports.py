@@ -32,7 +32,7 @@ def meteorites(**kwargs):
         names.setdefault(name, []).append(rec.get('higherGeography', ''))
     fn = filename('meteorites')
     antarctics = {}
-    with open(fn, 'wb') as f:
+    with open(fn, 'w') as f:
         writer = csv.writer(f, dialect='excel-tab')
         writer.writerow(['Name', 'Count', 'Antarctic'])
         for name in sorted(names):

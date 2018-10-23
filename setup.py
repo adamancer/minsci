@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 # Read long_description from file
 try:
-    long_description = open('README.rst', 'rb').read()
+    long_description = open('README.rst', 'r').read()
 except:
     long_description = ('Please see https://github.com/adamancer/minsci.git'
                         ' for more information about the MinSci Toolkit.')
@@ -13,7 +13,8 @@ setup(name='minsci',
       long_description=long_description,
       classifiers = [
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 2.7'
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.7'
       ],
       url='https://github.com/adamancer/minsci.git',
       author='adamancer',

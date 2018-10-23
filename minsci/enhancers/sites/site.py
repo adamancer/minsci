@@ -1,7 +1,6 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
-from past.utils import old_div
 import os
 import pprint as pp
 
@@ -14,7 +13,7 @@ from .sitelist import SiteList
 
 
 class Site(dict):
-    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'rb'))
+    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'r'))
     _attributes = [
         'location_id',
         'continent',
@@ -94,8 +93,8 @@ class Site(dict):
         self.latitude = rec.get('lat')
         self.longitude = rec.get('lng')
         if self.bbox and not (self.latitude or self.longitude):
-            self.latitude = old_div((self.bbox['east'] + self.bbox['west']), 2.)
-            self.longitude = old_div((self.bbox['north'] + self.bbox['south']), 2.)
+            self.latitude = (self.bbox['east'] + self.bbox['west']) / 2
+            self.longitude = (self.bbox['north'] + self.bbox['south']) / 2
         elif self.latitude and self.longitude and not self.bbox:
             self.bbox = {
                 'north': float(self.latitude) + 0.1,

@@ -59,7 +59,7 @@ def read_webminerals(url):
     fn = os.path.basename(url).rsplit('.', 1)[0] + '.json'
     fp = os.path.join(os.path.dirname(__file__), '..', 'files', 'taxa', fn)
     try:
-        codes = json.load(open(fp, 'rb'))
+        codes = json.load(open(fp, 'r'))
     except (IOError, OSError):
         print('Reading classification tree from {}...'.format(url))
         soup = BeautifulSoup(requests.get(url).text, 'html5lib')
@@ -97,7 +97,7 @@ def read_webminerals(url):
                     name = u''
                     parent = get_webmin_parent(code)
                     codes[code] = AuthorityTaxon(code, name, parent)
-        json.dump(codes, open(fp, 'wb'))
+        json.dump(codes, open(fp, 'w'))
     return AuthorityDict(codes)
 
 
@@ -108,7 +108,7 @@ def read_bgs():
     fn = os.path.basename(url).rsplit('.', 1)[0] + '.json'
     fp = os.path.join(os.path.dirname(__file__), '..', 'files', 'taxa', fn)
     try:
-        codes = json.load(open(fp, 'rb'))
+        codes = json.load(open(fp, 'r'))
     except (IOError, OSError):
         print('Reading classification tree from {}...'.format(url))
         f = requests.get(url).iter_lines()
@@ -122,7 +122,7 @@ def read_bgs():
                 name = data['Translation']
                 parent = data['Parent Code']
                 codes[code] = AuthorityTaxon(code, name, parent)
-        json.dump(codes, open(fp, 'wb'))
+        json.dump(codes, open(fp, 'w'))
     return AuthorityDict(codes)
 
 

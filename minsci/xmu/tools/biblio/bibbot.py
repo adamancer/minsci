@@ -29,7 +29,7 @@ class BibBot(requests.Session):
             if response.status_code == 200:
                 if path is not None:
                     print('Writing to {}...'.format(path))
-                    with open(path, 'wb') as f:
+                    with open(path, 'w') as f:
                         for chunk in response.iter_content(chunk_size=4096):
                             if chunk:
                                 f.write(chunk)

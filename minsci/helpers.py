@@ -6,7 +6,6 @@ from __future__ import unicode_literals
 from builtins import input
 from builtins import next
 from builtins import str
-from builtins import zip
 from builtins import range
 from past.builtins import basestring
 import csv
@@ -16,9 +15,12 @@ import re
 import string
 import sys
 from copy import copy, deepcopy
-from itertools import zip_longest
 from pprint import pprint
 from textwrap import fill
+try:
+    from itertools import zip_longest
+except ImportError as e:
+    from itertools import izip_longest as zip_longest
 
 import inflect
 import pyodbc
@@ -316,7 +318,7 @@ def prompt(text, validator, confirm=False,
     # Prepare string
     text = u'{} '.format(text.rstrip())
     # Prepare validator
-    if isinstance(validator, (str, str)):
+    if isinstance(validator, str):
         validator = re.compile(validator, re.U)
     elif isinstance(validator, dict) and sorted(validator.keys()) == ['n', 'y']:
         text = u'{}({}) '.format(text, '/'.join(list(validator.keys())))
@@ -421,12 +423,12 @@ def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
     if not isinstance(default_suffix, basestring):
         raise Exception('Default suffix must be a string')
     # Regular expressions for use with catalog number functions
-    p_pre = ur'(?:([A-Z]{3}[A ] ?)|(?:(NMNH |USNM )?(?:([BCGMRS])-?)?))?'
-    p_num = ur'([0-9]{1,6})'  # this will pick up ANY number
-    p_suf = ur'\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
-    regex = re.compile(ur'\b(' + p_pre + p_num + p_suf + ur')\b')
+    p_pre = r'(?:([A-Z]{3}[A ] ?)|(?:(NMNH |USNM )?(?:([BCGMRS])-?)?))?'
+    p_num = r'([0-9]{1,6})'  # this will pick up ANY number
+    p_suf = r'\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
+    regex = re.compile(r'\b(' + p_pre + p_num + p_suf + r')\b')
     all_id_nums = []
-    for substring in re.split(ur'\s(and|&)\s', val, flags=re.I):
+    for substring in re.split(r'\s(and|&)\s', val, flags=re.I):
         id_nums = _parse_matches(regex.findall(substring), prefixed_only)
         id_nums = _fix_misidentified_suffixes(id_nums)
         id_nums = _fill_range(id_nums, substring)
@@ -617,7 +619,7 @@ def rprint(obj, show=True):
 def read_file(path, success, error=None):
     """Process file at given path using success callback"""
     try:
-        with open(path, 'rb') as f:
+        with open(path, 'r') as f:
             return success(f)
     except IOError:
         if error is None:
@@ -683,7 +685,7 @@ def _parse_matches(matches, prefixed_only=False):
     """Format catalog numbers from a parsed list"""
     id_nums = []
     for match in matches:
-        id_num = dict(list(zip(CATKEYS, [val.rstrip('-, ') for val in match])))
+        id_num = dict(list(zip_longest(CATKEYS, [val.rstrip('-, ') for val in match])))
         # Handle meteorites
         if id_num['MetPrefix'] or id_num['CatMuseumAcronym'] == 'USNM':
             if id_num['MetPrefix']:
@@ -811,7 +813,7 @@ def read_unicode_text(fp, encoding='utf-16', skiplines=0):
         for row in rows:
             if ''.join(row).strip():
                 vals = [s.strip().decode('utf-8') for s in row]
-                record = {key: val for key, val in zip(keys, vals)}
+                record = {key: val for key, val in zip_longest(keys, vals)}
     return records
 
 
@@ -834,9 +836,9 @@ def write_emu_search(mask, catnums, output='search.txt'):
     nums = list(set([str(n).split('-')[0] for n in catnums]))
     nums.sort(key=lambda n: int(n))
     if mask.endswith('.txt'):
-        mask = open('mask.txt', 'rb').read()
+        mask = open('mask.txt', 'r').read()
     search = ['\t(\n\t\tCatNumber = {}\n\t)'.format(cn) for cn in nums]
-    with open(output, 'wb') as f:
+    with open(output, 'w') as f:
         f.write(mask.format('\n\tor\n'.join(search)))
     print('The following catalog records were not found:')
     print('\n'.join(sorted(nums)))

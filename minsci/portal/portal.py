@@ -67,7 +67,7 @@ def _archive(**kwargs):
     kwargs.update(defaults)
     fn = timestamped('portal.xml')
     count = 0
-    with open(fn, 'wb') as f:
+    with open(fn, 'w') as f:
         for dept in ['ms', 'pl']:
             kwargs['dept'] = dept
             last_id = 0
@@ -132,7 +132,7 @@ def archive(title, details, content_contact, technical_contact, **kwargs):
                 # Write file
                 fp = os.path.join(dsa, 'response{}.xml'.format(i))
                 print('Writing {}...'.format(fp))
-                with open(fp, 'wb') as f:
+                with open(fp, 'w') as f:
                     f.write(units.encode('utf-8').rstrip().lstrip('\r\n'))
                 last_id = re.search('Last record: (\d{7,8})', footer).group(1)
         else:
@@ -199,7 +199,7 @@ def download(**kwargs):
             keys.extend(list(rec.keys()))
         keys = sorted(list(set(keys)))
         fn = timestamped('portal.csv')
-        with open(fn, 'wb') as f:
+        with open(fn, 'w') as f:
             writer = csv.writer(f)
             writer.writerow(keys)
             for rec in records:
@@ -213,7 +213,7 @@ def download(**kwargs):
 def parse_config():
     """Parses the current portal keyword definitions"""
     args = []
-    with open(os.path.join(os.path.dirname(__file__), 'files', 'config.txt'), 'rb') as f:
+    with open(os.path.join(os.path.dirname(__file__), 'files', 'config.txt'), 'r') as f:
         for line in f:
             arg = {}
             label, definition = line.strip().split('\t', 1)
@@ -241,8 +241,8 @@ def timestamped(base='portal.csv'):
 
 def encode_for_excel(fp, encoding='utf-8'):
     """Re-encode a document for Excel"""
-    with open(fp, 'rb') as f:
+    with open(fp, 'r') as f:
         text = f.read().decode(encoding)
-    with open(fp, 'wb') as f:
+    with open(fp, 'w') as f:
         f.write(codecs.BOM_UTF16_LE)
         f.write(text.encode('utf-16-le'))

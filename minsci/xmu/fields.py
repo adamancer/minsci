@@ -2,6 +2,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+from builtins import open
 from builtins import range
 from builtins import object
 import json as serialize
@@ -104,8 +105,12 @@ class XMuFields(object):
                     'map_tables': map_tables,
                     'hashed_tables': self.hashed_tables,
                 }
-                with open(cache_path, 'wb') as f:
-                    serialize.dump(fields, f)
+                with open(cache_path, 'w', encoding='utf-8') as f:
+                    # HACK: JSON hack for 2/3 compatibility
+                    try:
+                        serialize.dump(fields, f)
+                    except TypeError as e:
+                        f.write(serialize.dumps(fields, ensure_ascii=False))
 
 
     def __call__(self, *args):
@@ -126,12 +131,12 @@ class XMuFields(object):
         if json_newer:
             cprint('Reading cached XMuFields object...')
             try:
-                with open(cache_path, 'rb') as f:
+                with open(cache_path, 'r', encoding='utf-8') as f:
                     cached = serialize.load(f)
-            except IOError:
+            except IOError as e:
                 cprint('Cache file not found!')
-            except KeyError:
-                cprint('Cache file not JSON!')
+            except ValueError as e:
+                cprint('Cache file not valid JSON!')
             else:
                 # Check logged in the cached file
                 if params != cached.get('params'):
@@ -211,7 +216,7 @@ class XMuFields(object):
         re_field = re.compile(r"'[A-z].*?\},", re.DOTALL)
         #re_lines = re.compile(r'[A-z].*,', re.DOTALL)
         try:
-            with open(fp, 'rb') as f:
+            with open(fp, 'r', encoding='cp1252') as f:
                 modules = re_module.findall(f.read())
         except (IOError, OSError):
             #raise Exception('{} not found'.format(fp))
@@ -237,7 +242,7 @@ class XMuFields(object):
                     except ValueError:
                         pass
                     else:
-                        schema_data[key] = val.decode('cp1252')
+                        schema_data[key] = val
                 schema_data['ModuleName'] = module_name
                 # ItemName appears only for fields that are editable in EMu
                 # (I think), so use it to cull copy fields, etc.
@@ -294,7 +299,7 @@ class XMuFields(object):
         for fp in glob.iglob(os.path.join(self._fpath, 'tables', 'e*.txt')):
             module_name = os.path.splitext(os.path.basename(fp))[0]
             _tables = {}
-            with open(fp, 'rb') as f:
+            with open(fp, 'r', encoding='utf-8') as f:
                 for line in [line.strip() for line in f.read().splitlines()
                              if ',' in line and not line.startswith('#')]:
                     table, column = line.split(',')
@@ -362,7 +367,7 @@ class XMuFields(object):
         """
         cprint('Reading user-defined aliases...')
         aliases = {}
-        with open(os.path.join(self._fpath, 'aliases.txt')) as f:
+        with open(os.path.join(self._fpath, 'aliases.txt'), 'r', encoding='utf-8') as f:
             for line in [line.strip() for line in f.read().splitlines()
                          if ',' in line and not line.startswith('#')]:
                 alias, path = line.split(',')
@@ -425,7 +430,7 @@ class XMuFields(object):
         paths = []
         schema = []
         module = None
-        with open(fp, 'rb') as f:
+        with open(fp, 'r', encoding='utf-8') as f:
             for line in f:
                 if module is None and 'table name="e' in line:
                     module = line.split('"')[1]

@@ -50,7 +50,7 @@ class FieldMapper(object):
         """
         aliases = {}
         fp = os.path.join('mapper', '{}.txt'.format(module))
-        with open(fp, 'rb') as f:
+        with open(fp, 'r') as f:
             for line in f:
                 if line.startswith('#'):
                     continue

@@ -108,14 +108,15 @@ def split_records(ris):
     """Splits a RIS document into records"""
     records = []
     lines = []
-    pattern = re.compile(ur'[A-Z][A-Z0-9] {1,2}-')
+    pattern = re.compile(r'[A-Z][A-Z0-9] {1,2}-')
     for line in ris.split('\n'):
         line = line.strip()
-        if isinstance(line, str):
-            try:
-                line = line.decode('utf-8')
-            except UnicodeDecodeError:
-                line = line.decode('latin1')
+        # Not required for Python 2/3
+        #if isinstance(line, str):
+        #    try:
+        #        line = line.decode('utf-8')
+        #    except UnicodeDecodeError:
+        #        line = line.decode('latin1')
         if pattern.match(line):
             lines.append(line)
             if line.startswith('ER'):
@@ -351,9 +352,6 @@ def get_ris(url):
     """Retrieves RIS from a url"""
     if 'pubs.er.usgs.gov' in url or 'pubs.usgs.gov' in url:
         url = url.replace('pubs.usgs.gov', 'pubs.er.usgs.gov')
-        print(url)
-        result = bot.download(url.rstrip('/? \n\r') + '?mimetype=ris')
-        print(result)
         return bot.download(url.rstrip('/? \n\r') + '?mimetype=ris')
     print('Failed to retrieve {}'.format(url))
     return url

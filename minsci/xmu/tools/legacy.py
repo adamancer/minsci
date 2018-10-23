@@ -348,7 +348,7 @@ class Legacy(XMu):
             write_group('ecatalogue', self.groups[name],
                         fp=mask.format(name + '.xml'), name=name)
         if self.errors:
-            with open(mask.format('results.log'), 'wb') as f:
+            with open(mask.format('results.log'), 'w') as f:
                 writer = csv.writer(f)
                 writer.writerow(['irn', 'check', 'emu value', 'orig value'])
                 [writer.writerow(row) for row in self.errors]

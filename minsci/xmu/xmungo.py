@@ -315,13 +315,13 @@ class XMungo(MongoBot):
         """Save attributes listed in the self.keep as json"""
         print('Saving data to {}...'.format(self.jsonpath))
         data = {key: getattr(self, key) for key in self.keep}
-        json.dump(data, open(self.jsonpath, 'wb'))
+        json.dump(data, open(self.jsonpath, 'w'))
 
 
     def load(self):
         """Load data from json file created by self.save"""
         print('Reading data from {}...'.format(self.jsonpath))
-        data = json.load(open(self.jsonpath, 'rb'))
+        data = json.load(open(self.jsonpath, 'r'))
         for attr, val in data.items():
             setattr(self, attr, val)
         self.from_json = True

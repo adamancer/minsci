@@ -7,7 +7,7 @@ import pprint as pp
 from collections import Mapping
 
 
-ENDPOINTS = basestring, int, int, float
+ENDPOINTS = basestring, int, float
 
 
 class DeepDict(dict):
@@ -104,7 +104,7 @@ class DeepDict(dict):
         mapping = self
         i = 0
         while i < (len(args) - 1):
-            if isinstance(args[i+1], (int, int)):
+            if isinstance(args[i+1], int):
                 mapping = mapping.setdefault(args[i], [])
                 try:
                     mapping = mapping[args[i+1]]
@@ -138,7 +138,7 @@ class DeepDict(dict):
                 # empty containers are deleted until a populated one is found.
                 mapping.pop(last)
                 first = False
-            elif isinstance(last, (int, int)) and any(mapping):
+            elif isinstance(last, int) and any(mapping):
                 # Lists with any true-like values are left intact
                 pass
             elif not _any(mapping[last]):
@@ -169,7 +169,7 @@ class DeepDict(dict):
                 self.pluck(*path)
             else:
                 return True
-        elif isinstance(mapping, (int, int, float)):
+        elif isinstance(mapping, (int, float)):
             # Any number-like value is considered true (so zeroes are kept)
             return True
         elif not mapping:
