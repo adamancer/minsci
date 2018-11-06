@@ -24,7 +24,7 @@ class DeepDict(dict):
 
 
     def __str__(self):
-        return pp.pformat(self)
+        return pp.pformat(dict(self))
 
 
     def clone(self, obj=None):

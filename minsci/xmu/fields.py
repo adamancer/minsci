@@ -183,7 +183,7 @@ class XMuFields(object):
                         raise KeyError('No module specified: {}'.format(args))
                     elif not self.schema:
                         # No error on bad path if the schema is not defined
-                        print('No schema defined')
+                        raise Exception('No schema defined')
                     else:
                         raise KeyError('Illegal path: {}'.format(args))
             else:
@@ -219,8 +219,7 @@ class XMuFields(object):
             with open(fp, 'r', encoding='cp1252') as f:
                 modules = re_module.findall(f.read())
         except (IOError, OSError):
-            #raise Exception('{} not found'.format(fp))
-            return DeepDict()
+            raise Exception('{} not found'.format(fp))
         schema = DeepDict()
         for module in sorted(list(modules)):
             module_name = module.split('\n')[0].strip().split(' ')[0]

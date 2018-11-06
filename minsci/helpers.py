@@ -346,7 +346,7 @@ def prompt(text, validator, confirm=False,
                 cprint(option)
             print('-' * 60)
         # Prompt for value
-        val = input(text).decode(sys.stdin.encoding)
+        val = input(text)#.decode(sys.stdin.encoding)
         if val.lower() == 'q':
             print('User exited prompt')
             sys.exit()
