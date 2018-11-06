@@ -1,0 +1,12 @@
+channels: [default]
+dependencies:
+- python=3.7
+- lxml
+- pillow
+- pymongo
+- pyodbc
+- pytz
+- requests
+- unidecode
+- pip: [bibtexparser, dateparser, inflect, nameparser, requests_cache]
+name: minsci

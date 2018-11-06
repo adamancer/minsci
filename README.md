@@ -9,9 +9,27 @@ Installation
 ------------
 
 The minsci package exists on PyPI, but I don't do well keeping it up-to-date,
-so it's better to install directly from github. Python 2.7 and git are both
-required. Once you have those installed, run the following from your command
-prompt:
+so it's better to install directly from github. Both Python 2 and 3 are
+(theoretically) supported, and both installation methods below require Git.
+
+### Install using Miniconda
+
+The easiest way to install the minsci package is to use [Miniconda]. Once you
+have Miniconda installed on your system, use the following commands to install
+minsci into its own environment:
+
+```
+cd /path/to/directory
+git clone https://github.com/adamancer/minsci
+cd minsci
+conda env create -f requirements.yaml
+conda activate minsci
+python setup.py install
+```
+
+### Install using a standalone Python
+
+Install minsci using a standalone installation using the following commands:
 
 ```
 cd /path/to/directory
@@ -20,6 +38,8 @@ cd minsci
 pip install -r requirements.txt
 python setup.py install
 ```
+
+### Post-installation
 
 Once you've finished installing the package, there are a few clean up steps
 that you can do to better tailor things to your EMu:
@@ -76,5 +96,6 @@ Use the -h flag to see the available options:
 `minsci download -h`
 
 
+[Miniconda]: https://conda.io/miniconda.html
 [NMNH Geology Collections Data Portal]: https://geogallery.si.edu/portal
 [Simple Darwin Core]: http://rs.tdwg.org/dwc/terms/simple/
