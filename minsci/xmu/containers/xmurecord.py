@@ -441,6 +441,15 @@ class XMuRecord(DeepDict):
         return [val for label, val in rows if standardize(label) == match]
 
 
+    def get_accession_number(self, legacy=False):
+        """Returns the accession number for a specimen"""
+        tranum = self('AcqTransactionRef', 'TraNumber')
+        legnum = self('AcqTransactionRef', 'TraLegacyNumber')
+        Accession = namedtuple('Accession', ['number', 'legacy_number'])
+        return Accession(tranum if tranum else None, legnum if legnum else None)
+
+
+
     def get_location(self, current=False, keyword=None):
         """Returns the current or permanent location of a specimen"""
         locs = self('LocLocationRef_tab' if current else 'LocPermanentLocationRef')
