@@ -5,6 +5,8 @@ from __future__ import unicode_literals
 from builtins import str
 from builtins import range
 from past.builtins import basestring
+
+import json
 import re
 from collections import namedtuple
 from datetime import datetime
@@ -25,6 +27,7 @@ Row = namedtuple('Row', ['irn', 'field', 'row', 'val'])
 
 class XMuRecord(DeepDict):
     """Contains methods for reading data from EMu XML exports"""
+    delim = '|'
 
     def __init__(self, *args):
         super(XMuRecord, self).__init__(*args)
@@ -40,6 +43,22 @@ class XMuRecord(DeepDict):
     def __call__(self, *args, **kwargs):
         """Shorthand for XMuRecord.smart_pull(*args)"""
         return self.smart_pull(*args)
+
+
+    def __setitem__(self, key, val):
+        """Tests if val contains classwide delimiter before adding to self"""
+        if self.delim:
+            try:
+                delimited = self.delim in json.dumps(val)
+            except TypeError:
+                pass
+            else:
+                if delimited:
+                    raise ValueError('{} contains {}: {}'.format(key,
+                                                                 self.delim,
+                                                                 val))
+        super(XMuRecord, self).__setitem__(key, val)
+
 
 
     '''
@@ -97,7 +116,7 @@ class XMuRecord(DeepDict):
         if '/' in key:
             raise KeyError('Illegal key: {}'.format(key))
         if key.endswith(self.tabends) and not isinstance(val, list):
-            val = val.split(delim)
+            val = [s.strip() for s in val.split(delim)]
         return super(XMuRecord, self).setdefault(key, val)
 
 
