@@ -35,7 +35,8 @@ class Bot(requests.Session):
                 print('Retrying in {:,} seconds...'.format(seconds))
                 time.sleep(seconds)
             else:
-                if not response.from_cache:
+                response.from_cache
+                if hasattr(response, 'from_cache') and not response.from_cache:
                     if not self.quiet:
                         print('Resting up for the big push...')
                     time.sleep(self.wait)
@@ -54,9 +55,9 @@ class ChemBot(Bot):
 
     """
 
-    def __init__(self, user_id):
+    def __init__(self, user_id, *args, **kwargs):
         wait = 3
-        super(ChemBot, self).__init__(wait)
+        super(ChemBot, self).__init__(wait, *args, **kwargs)
         user_agent = 'MinSciBot/0.2 ({})'.format(user_id)
         self.headers.update({
             'User-Agent': user_agent
@@ -88,29 +89,10 @@ class ChemBot(Bot):
         if not self.quiet:
             print('url: {}'.format(response.url))
         if response.status_code == 200:
-            return ChemTable(response)
-            status = content.get('status')
-            if status is None:
-                return content
-            #elif response.from_cache:
-            #    # If bad response comes from cache, delete that entry and
-            #    # try again
-            #    if status.get('value') not in (15,):
-            #        print response.url
-            #        print '{message} (code={value})'.format(**status)
-            #        self.cache.delete_url(response.url)
-            #        return self._query_EarthChem(url, **self._params)
-            else:
-                # If bad response is live, kill the process
-                print('{message} (code={value})'.format(**status))
-                if status.get('value') in (18, 19, 20):
-                    #self.cache.delete_url(response.url)
-                    raise RuntimeError('Out of credits')
-                # If not a credit error, try again in 30 seconds
-                if status.get('value') not in (15,):
-                    #self.cache.delete_url(response.url)
-                    time.sleep(30)
-                    return self._query_EarthChem(url, **self._params)
+            if response.text == 'no results found':
+                return None
+            #self.cache.delete_url(response.url)
+            return response
 
 
     def get_sample(self, sample_id, doi=None, title=None, author=None):
@@ -127,14 +109,14 @@ class ChemBot(Bot):
         """
         assert sample_id and (doi or title and author)
         url = 'http://ecp.iedadata.org/restsearchservice'
-        content = ChemTable()
+        response = None
         # Search by DOI
         if doi:
-            content = self._query_earthchem(url, sampleid=sample_id, doi=doi)
+            response = self._query_earthchem(url, sampleid=sample_id, doi=doi)
         # Search by title and author
-        if not content and title:
-            content = self._query_earthchem(url, sampleid=sample_id, title=title, author=author)
-        return content
+        if not response and title:
+            response = self._query_earthchem(url, sampleid=sample_id, title=title, author=author)
+        return response
 
 
     def get_publication(self, doi=None, title=None, author=None):
@@ -148,7 +130,7 @@ class ChemBot(Bot):
         Returns:
             JSON representation of the matching sample
         """
-        assert sample_id and (doi or title and author)
+        assert doi or title and author
         url = 'http://ecp.iedadata.org/restsearchservice'
         content = ChemTable()
         # Search by DOI
