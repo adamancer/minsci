@@ -19,7 +19,7 @@ CATKEYS = (
     'CatNumber',
     'CatSuffix'
     )
-MINCATNUM = 1000
+MINCATNUM = 100  # FIXME: this really should be an attribute
 
 
 class CatNum(object):
@@ -91,6 +91,38 @@ class CatNum(object):
                 and self.suffix == other.suffix
                 and self.delim == other.delim
                 and self.division == other.division)
+
+
+    def __lt__(self, other):
+        map_none = {
+            str: '',
+            int: 0
+        }
+        for attr in ('prefix', 'number', 'suffix', 'division'):
+            this = getattr(self, attr)
+            that = getattr(other, attr)
+            if this != that:
+                if this is None:
+                    this = map_none[type(that)]
+                if that is None:
+                    that = map_none[type(this)]
+                return this < that
+
+
+    def __gt__(self, other):
+        map_none = {
+            str: '',
+            int: 0
+        }
+        for attr in ('prefix', 'number', 'suffix', 'division'):
+            this = getattr(self, attr)
+            that = getattr(other, attr)
+            if this != that:
+                if this is None:
+                    this = map_none[type(that)]
+                if that is None:
+                    that = map_none[type(this)]
+                return this > that
 
 
     def __repr__(self):
@@ -313,6 +345,8 @@ def _parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
         attrs = {}
     # Cull text we don't want
     val = re.sub(r'(No\. |#|specimens? )', '', val, flags=re.I).replace('  ', ' ')
+    # Perform some basic cleanup
+    val = val.replace('_', ' ')
     # Catch code using the old syntax
     if not isinstance(default_suffix, basestring):
         raise Exception('Default suffix must be a string')
