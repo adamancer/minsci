@@ -15,8 +15,8 @@ so it's better to install directly from github. Both Python 2 and 3 are
 ### Install using Miniconda
 
 The easiest way to install the minsci package is to use [Miniconda]. Once you
-have Miniconda installed on your system, use the following commands to install
-minsci into its own environment:
+have Miniconda installed on your system, open the Anaconda Prompt and use the
+following commands to install minsci into its own environment:
 
 ```
 cd /path/to/directory
