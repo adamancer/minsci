@@ -241,6 +241,7 @@ def timestamped(base='portal.csv'):
 
 def encode_for_excel(fp, encoding='utf-8'):
     """Re-encode a document for Excel"""
+    return
     with open(fp, 'r') as f:
         text = f.read().decode(encoding)
     with open(fp, 'w') as f:

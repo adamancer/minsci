@@ -3,7 +3,7 @@ from __future__ import unicode_literals
 import csv
 
 from .portal import get, get_simpledwr, encode_for_excel, timestamped
-from ..geobots.plss import TRS
+#from ..geobots.plss import TRS
 
 
 def meteorites(**kwargs):
@@ -27,12 +27,13 @@ def meteorites(**kwargs):
             break
     # Get names
     names = {}
-    for rec in records:
+    for rec in records[0]:
         name = rec['catalogNumber'].split('|')[0].rsplit(',', 1)[0].strip()
         names.setdefault(name, []).append(rec.get('higherGeography', ''))
-    fn = filename('meteorites')
+    #fn = filename('meteorites')
+    fn = 'meteorites.csv'
     antarctics = {}
-    with open(fn, 'w') as f:
+    with open(fn, 'w', encoding='utf-8-sig') as f:
         writer = csv.writer(f, dialect='excel-tab')
         writer.writerow(['Name', 'Count', 'Antarctic'])
         for name in sorted(names):
@@ -41,7 +42,7 @@ def meteorites(**kwargs):
             if antarctic:
                 antarctics[name] = len(names[name])
             row = [name, count, antarctic]
-            writer.writerow([u'{}'.format(s).encode('utf-8') for s in row])
+            writer.writerow(row)
     encode_for_excel(fn)
     # Report total meteorites found
     print('Found {:,} total meteorites ({:,} distinct)'.format(len(records),
