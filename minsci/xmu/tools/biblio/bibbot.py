@@ -11,9 +11,9 @@ requests_cache.install_cache('refs')
 
 class BibBot(requests.Session):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, email, *args, **kwargs):
         super(BibBot, self).__init__(*args, **kwargs)
-        self.headers.update({'User-Agent': 'SmithsonianBot (mansura@si.edu)'})
+        self.headers.update({'User-Agent': 'BibBot ({})'.format(email)})
 
 
     def download(self, url, path=None):
