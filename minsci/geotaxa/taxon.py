@@ -164,10 +164,11 @@ class Taxon(dict):
             'RanParentRef': self.parent.irn,
             'ClaCurrentlyAccepted': 'Yes'
         })
-        if self.irn is not None:
+        if self.irn is not None and not str(self.irn).isalpha():
             rec['irn'] = self.irn
         else:
-            rec['NotNotes'] = 'Record created automatically'
+            rec['NotNotes'] = ('Record generated using the minsci package for'
+                               ' Python 3 (https://github.com/adamancer/minsci)')
         rec.module = 'etaxonomy'
         return rec.expand()
 
@@ -178,6 +179,7 @@ class Taxon(dict):
             assert len(rec('ClaOtherRank_tab')) == 1
             assert not rec('ClaSpecies')
         except AssertionError:
+            print(rec)
             raise AssertionError(rec('irn'))
 
         self['irn'] = int(rec('irn'))
