@@ -23,6 +23,7 @@ class Bot(requests_cache.CachedSession):
     """Methods to handle and retry HTTP requests for georeferencing"""
 
     def __init__(self, wait, *args, **kwargs):
+        self.quiet = kwargs.pop('quiet', False)
         super(Bot, self).__init__(*args, **kwargs)
         self.wait = wait
 
@@ -39,7 +40,8 @@ class Bot(requests_cache.CachedSession):
                 time.sleep(seconds)
             else:
                 if not response.from_cache:
-                    print('Resting up for the big push...')
+                    if not self.quiet:
+                        print('Resting up for the big push...')
                     time.sleep(self.wait)
                 return response
         raise Exception('Maximum retries exceeded')
@@ -54,8 +56,8 @@ class SiteBot(Bot):
 
     """
 
-    def __init__(self, username, user_id=None):
-        wait = 3600 / 2000
+    def __init__(self, username, user_id=None, **kwargs):
+        wait = kwargs.pop('wait', 3600 / 2000)
         super(SiteBot, self).__init__(wait, cache_name='bot')
         self.username = username
         if user_id is None:
@@ -64,12 +66,34 @@ class SiteBot(Bot):
         self.headers.update({
             'User-Agent': user_agent
             })
-        # Maps simple names to GeoNames field names
-        self._params = {
-            'country': 'countryName',
-            'state': 'adminName1',
-            'county': 'adminName2'
-        }
+
+
+    def _map_aliases(self, params):
+        try:
+            params['countryName'] = self._map_country(params['country'])
+        except KeyError:
+            pass
+        else:
+            del params['country']
+        try:
+            params['adminCode1'] = NAME_TO_ABBR.get(params['state'],
+                                                    params['state'])
+        except KeyError:
+            pass
+        else:
+            del params['state']
+        return params
+
+
+    @staticmethod
+    def _map_country(country):
+        if isinstance(country, basestring):
+            country = [s.strip() for s in country.split('|')]
+        codes = [TO_COUNTRY_CODE.get(c.strip()) for c in country if c]
+        codes = [code for code in codes if code is not None]
+        if len(codes) != len(country):
+            raise ValueError('Unknown country: {}'.format(country))
+        return codes
 
 
     def _query_geonames(self, url, **params):
@@ -90,7 +114,8 @@ class SiteBot(Bot):
         defaults.update(params)
         # Make and parse query
         response = self._retry(self.get, url, params=defaults)
-        print(response.url)
+        if not self.quiet:
+            print(response.url)
         if response.status_code == 200:
             content = response.json()
             status = content.get('status')
@@ -103,7 +128,7 @@ class SiteBot(Bot):
                     print(response.url)
                     print('{message} (code={value})'.format(**status))
                     self.cache.delete_url(response.url)
-                    return self._query_geonames(url, **self._params)
+                    return self._query_geonames(url, **params)
             else:
                 # If bad response is live, kill the process
                 print(response.url)
@@ -115,10 +140,10 @@ class SiteBot(Bot):
                 if status.get('value') not in (15,):
                     self.cache.delete_url(response.url)
                     time.sleep(30)
-                    return self._query_geonames(url, **self._params)
+                    return self._query_geonames(url, **params)
 
 
-    def get_by_id(self, geoname_id):
+    def get_by_id(self, geoname_id, style='MEDIUM'):
         """Returns feature data for a given GeoNames ID
 
         Args:
@@ -129,10 +154,10 @@ class SiteBot(Bot):
         """
         assert geoname_id
         url = 'http://api.geonames.org/getJSON'
-        return self._query_geonames(url, geonameId=geoname_id)
+        return self._query_geonames(url, geonameId=geoname_id, style=style)
 
 
-    def search(self, query, countries=None, **params):
+    def search(self, query, **params):
         """Searches all GeoNames fields for a query string
 
         Args:
@@ -144,17 +169,19 @@ class SiteBot(Bot):
             JSON representation of matching locations
         """
         url = 'http://api.geonames.org/searchJSON'
+        valid = set(['country', 'state', 'features'])
+        invalid = sorted(list(set(params) - valid))
+        if invalid:
+            raise ValueError('Illegal params: {}'.format(invalid))
         if query:
             params['q'] = query
-            if countries is not None:
-                if isinstance(countries, basestring):
-                    countries = countries.split('|')
-                codes = [TO_COUNTRY_CODE.get(c.strip()) for c in countries if c]
-                codes = [code for code in codes if code is not None]
-                if len(codes) == len(countries):
-                    params['country'] = codes
-            params['featureClass'] = [c for c in params['features'] if len(c) == 1]
-            params['featureCodes'] = [c for c in params['features'] if len(c) > 1]
+            params = self._map_aliases(params)
+            try:
+                params['featureClass'] = [c for c in params['features'] if len(c) == 1]
+                params['featureCode'] = [c for c in params['features'] if len(c) > 1]
+                del params['features']
+            except KeyError:
+                pass
             return self._query_geonames(url, **params)
         else:
             return []
@@ -190,6 +217,21 @@ class SiteBot(Bot):
         return self._find_latlong(url, lat, lng, dec_places)
 
 
+    def ocean(self, lat, lng, dec_places=None):
+        """Returns basic ocean information for a lat-long pair
+
+        Args:
+            lat (float): latitide
+            lng (float): longitude
+            dec_places (int): decimal places
+
+        Returns:
+            JSON representation of point
+        """
+        url = 'http://api.geonames.org/oceanJSON'
+        return self._find_latlong(url, lat, lng, dec_places)
+
+
     def _find_latlong(self, url, lat, lng, dec_places=None):
         """Returns information for a lat-long pair from the given url
 
@@ -211,7 +253,6 @@ class SiteBot(Bot):
             lat = mask.format(lat)
             lng = mask.format(lng)
         params = {'lat': lat, 'lng': lng}
-        print('Populating geography for {}...'.format(params))
         return self._query_geonames(url, **params)
 
 

@@ -3,6 +3,7 @@ from __future__ import unicode_literals
 from __future__ import division
 import os
 import pprint as pp
+import re
 
 from yaml import load
 
@@ -33,11 +34,13 @@ class Site(dict):
         'site_kind',
         'site_source',
         'site_num',
-        'site_names'
+        'site_names',
+        'synonyms'
     ]
     _code_to_attr = config['code_to_attribute']
     _attr_to_code = config['attribute_to_codes']
-    bot = SiteBot('mansura')
+    bot = None
+    localbot = None
 
 
     def __init__(self, data):
@@ -49,10 +52,12 @@ class Site(dict):
             self.from_emu(data)
         elif isinstance(data, list) and 'countryCode' in data[0]:
             self.from_geonames(data[0])
-        elif 'countryCode' in data:
+        elif 'geonameId' in data:
             self.from_geonames(data)
         elif 'recordNumber' in data:
             self.from_dwc(data)
+        else:
+            raise ValueError('Unrecognized data format: {}'.format(data))
 
 
     def __getattr__(self, attr):
@@ -82,6 +87,7 @@ class Site(dict):
         self.continent = rec.get('continentCode')
         self.country = rec.get('countryName')
         self.state_province = rec.get('adminName1')
+        self.county = rec.get('adminName2')
         # Map specific site
         self.features = []
         try:
@@ -92,21 +98,26 @@ class Site(dict):
         self.bbox = rec.get('bbox')
         self.latitude = rec.get('lat')
         self.longitude = rec.get('lng')
-        if self.bbox and not (self.latitude or self.longitude):
-            self.latitude = (self.bbox['east'] + self.bbox['west']) / 2
-            self.longitude = (self.bbox['north'] + self.bbox['south']) / 2
-        elif self.latitude and self.longitude and not self.bbox:
-            self.bbox = {
-                'north': float(self.latitude) + 0.1,
-                'east': float(self.longitude) + 0.1,
-                'west': float(self.longitude) - 0.1,
-                'south': float(self.latitude) - 0.1
-            }
+        #if self.bbox and not (self.latitude or self.longitude):
+        #    self.latitude = (self.bbox['east'] + self.bbox['west']) / 2
+        #    self.longitude = (self.bbox['north'] + self.bbox['south']) / 2
+        #elif self.latitude and self.longitude and not self.bbox:
+        #    self.bbox = {
+        #        'north': float(self.latitude) + 0.1,
+        #        'east': float(self.longitude) + 0.1,
+        #        'west': float(self.longitude) - 0.1,
+        #        'south': float(self.latitude) - 0.1
+        #    }
         # Map site
         self.site_kind = rec.get('fcode')
         self.site_num = rec.get('geonameId')
         self.site_source = u'GeoNames'
-        self.site_names = rec.get('name')
+        # Set name
+        name = rec.get('toponymName')
+        #if '/' in name:
+        #    name, rest = name.split('/')
+        #    print('WARNING: Split {} from {}'.format(rest, name))
+        self.site_names = [name]
         # Map synonyms
         self.synonyms = [s['name'] for s in rec.get('alternateNames', [])]
 
@@ -170,6 +181,15 @@ class Site(dict):
         self.site_names = rec.get('LocSiteName_tab')
 
 
+    def stripwords(self, val, field):
+        val = val.strip('. ')
+        words = self.config['stripwords'].get(field, [])
+        words.sort(key=len, reverse=True)
+        for word in self.config['stripwords'].get(field, []):
+            val = re.sub(r'\b{}\b'.format(word), '', val, flags=re.I).strip()
+        return val
+
+
 
     def match(self, field=None, **kwargs):
         most_specific = True
@@ -182,11 +202,21 @@ class Site(dict):
             val = getattr(self, row['field'])
             if val:
                 matches = SiteList(self.bot.search(val, features=row['codes'], **kwargs))
-                #matches.best_match(val, self)
+                if not matches:
+                    stripped = self.stripwords(val, row['field'])
+                    matches = SiteList(self.bot.search(stripped, features=row['codes'], **kwargs))
                 if matches:
-                    return matches[0]
-                else:
-                    most_specific = False
+                    return matches, most_specific
+                most_specific = False
+        return SiteList(), most_specific
+
+
+    def match_one(self, name, *args, **kwargs):
+        matches, most_specific = self.match(**kwargs)
+        if matches and most_specific:
+            return matches.match_one(name=name, site=self)
+        raise ValueError('No unique match found for {} ({})'.format(name, kwargs))
+
 
 
     def match_all(self, **kwargs):
@@ -196,7 +226,6 @@ class Site(dict):
             if match:
                 import re
                 key = re.sub('_([a-z])', lambda m: m.group(1).upper(), row['field'])
-                print(key)
                 matches[key] = match
                 if row['field'] == 'country':
                     kwargs['countryCode'] = match.orig['countryCode']
@@ -233,6 +262,23 @@ class Site(dict):
 
     def key(self, val):
         val = unidecode(val)
+
+
+    def polygon(self, dec_places=4):
+        """Converts bounding coordinates to a polygon"""
+        polygon = [
+            (self.bbox['west'], self.bbox['north']),
+            (self.bbox['east'], self.bbox['north']),
+            (self.bbox['east'], self.bbox['south']),
+            (self.bbox['west'], self.bbox['south']),
+            (self.bbox['west'], self.bbox['north']),
+        ]
+        if dec_places is not None:
+            mask = '{{0:.{}f}}'.format(dec_places)
+            for i, coords in enumerate(polygon):
+                polygon[i] = [mask.format(c) for c in coords]
+        return polygon
+
 
 
 

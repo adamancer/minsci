@@ -116,3 +116,6 @@ code_to_attribute:
   ADM2: county
   MN: mine
   PPL: municipality
+stripwords:
+  county: [co, county, dist, district]
+  state_province: [dist, district, prov, province]
