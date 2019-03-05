@@ -56,7 +56,7 @@ class Embedder(object):
             ('xmp:copyrightstatus', 'unknown'),
             ('xmp-xmprights:marked', '')
         ]
-        self.logfile = open('embedder.log', 'ab')
+        self.logfile = open('embedder.log', 'a')
 
 
     def get_caption(self, rec):
@@ -214,13 +214,13 @@ class Embedder(object):
         cmd.append(dst)
         #print ' '.join(cmd)
         print(' Writing metadata...')
-        tmpfile = tempfile.NamedTemporaryFile()
+        tmpfile = tempfile.NamedTemporaryFile('w+')
         return_code = subprocess.call(cmd, cwd=os.getcwd(), stdout=tmpfile)
         if return_code:
             self.logfile.write('Error: {}: Bad return'
                                ' code ({})\n'.format(path, return_code))
         # Check temporary log for errors
-        result = self._parse_log(tmpfile)
+        result = self._parse_exiftool_log(tmpfile)
         if '1 image files updated' not in result:
             self.logfile.write('Error: {}: Embed failed\n'.format(path))
             return False
@@ -260,7 +260,7 @@ class Embedder(object):
 
 
     @staticmethod
-    def _parse_log(f):
+    def _parse_exiftool_log(f):
         """Parses success/failure info from exiftool log"""
         result = []
         f.seek(0)
