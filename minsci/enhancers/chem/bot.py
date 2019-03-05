@@ -12,10 +12,16 @@ from datetime import datetime
 import requests
 from lxml import etree
 
-from database import Chemistry, Session
+#from database import Chemistry, Session
+
+try:
+    import requests_cache
+    BASECLASS = requests_cache.CachedSession
+except KeyError:#NameError:
+    BASECLASS = requests.Session
 
 
-class Bot(requests.Session):
+class Bot(BASECLASS):
     """Methods to handle and retry HTTP requests for georeferencing"""
 
     def __init__(self, wait, *args, **kwargs):
