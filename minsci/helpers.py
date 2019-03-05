@@ -46,7 +46,7 @@ def base2int(i, base):
 
 def int2base(i, base):
     """Converts base 10 integer to specified base"""
-    digs = string.digits + string.letters
+    digs = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
     if i < 0:
         sign = -1
     elif i == 0:
@@ -57,7 +57,7 @@ def int2base(i, base):
     digits = []
     while i:
         digits.append(digs[i % base])
-        i /= base
+        i = int(i / base)
     if sign < 0:
         digits.append('-')
     digits.reverse()
