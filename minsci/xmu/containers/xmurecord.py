@@ -655,7 +655,7 @@ class XMuRecord(DeepDict):
         for key in list(self.keys()):
             val = self[key]
             k = key.rsplit('(', 1)[0]               # key stripped of row logic
-            base = key.rstrip('_').split('_', 1)[0].rstrip('(0+)') # strip _tab
+            base = key.rstrip('_').split('_', 1)[0].rstrip('(0+-)') # strip _tab
             # Confirm that data type appears to be correct
             if (key.rstrip('_').endswith(('0', 'tab', ')'))
                 and not isinstance(val, list)):
