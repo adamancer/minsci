@@ -96,7 +96,8 @@ class FillFromDOI(XMu):
                 except ValueError as e:
                     logging.exception('doi')
                     self.errors.append(e)
-                formatted['irn'] = rec('irn')
+                if rec('irn'):
+                    formatted['irn'] = rec('irn')
                 # Remove DOIs, since these already exist in the source
                 # record and the existing values are already cased properly.
                 # DOIs found in the notes field are excepted.
@@ -189,7 +190,7 @@ def parse_authors(author_string, parse_names=True):
                 'NamFirst': fn.first,
                 'NamMiddle': fn.middle,
                 'NamLast': fn.last,
-                'NamSuffix': fn.suffix,
+                'NamSuffix': fn.suffix.rstrip('.'),
                 'SecRecordStatus': 'Unlisted'
             }))
         else:
