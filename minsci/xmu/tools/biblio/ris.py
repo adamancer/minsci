@@ -137,9 +137,10 @@ def emuize(ris, parsers=None):
         # Look for customizers based on UR
         parser = None
         for key, func in parsers.items():
-            if [url for url in rec.get('UR', []) if key in url]:
-                parser = func
-                break
+            if ([url for url in rec.get('UR', []) if key in url]
+                or key == rec.get('JO')):
+                    parser = func
+                    break
         else:
             parser = parsers['default']
         try:
