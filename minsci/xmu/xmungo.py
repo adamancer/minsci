@@ -226,7 +226,7 @@ class XMungo(MongoBot):
 
 
     def _fast_iter(self, query=None, func=None, report=0, skip=0, limit=0,
-                   callback=None, **kwargs):
+                   callback=None, mongo=None, **kwargs):
         if func is None:
             func = self.iterate
         if report:
@@ -238,11 +238,11 @@ class XMungo(MongoBot):
         _query.update(query)
         if skip:
             self._skip = skip
-        if self._skip:
-            print('Skipping first {:,} records...'.format(self._skip))
-            cursor = self.collection.find(_query, skip=self._skip)
-        else:
-            cursor = self.collection.find(_query)
+        if mongo is None:
+            mongo = {}
+        mongo.update({'skip': skip, 'limit': limit})
+        print('Mongo query params: {}'.format(mongo))
+        cursor = self.collection.find(_query, **mongo)
         cursor.batch_size(500)
         print('{:,} matching records found!'.format(cursor.count()))
         # Process documents using func
@@ -261,8 +261,8 @@ class XMungo(MongoBot):
                 print(('{:,} records processed! ({:,}'
                        ' successful, t={}s)').format(self._skip, n_success,
                                                      elapsed))
-            if limit and not self._skip % limit:
-                break
+            #if limit and not self._skip % limit:
+            #    break
         print('{:,} records processed! ({:,} successful)'.format(self._skip,
                                                                  n_success))
         if callback is not None:
