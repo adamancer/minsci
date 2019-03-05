@@ -18,7 +18,6 @@ def write_group(module, irns, fp='group.xml', irn=None, name=None):
             specified.
         name (str): name of new group. Either this or irn must be specified.
     """
-
     if irn is None and name is None:
         raise ValueError('Must provide either irn or name for the group')
     if not module in list(GROUPS.fields.schema.keys()):

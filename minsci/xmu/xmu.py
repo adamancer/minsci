@@ -555,7 +555,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
                 hashval = (group.fields + '|{}'.format(path)).encode('utf-8')
                 hashed = hashlib.md5(hashval).hexdigest()
                 operator = group.operator.format(path + 1)
-                if not re.match(r'^(\+|-|\d+=)$', operator):
+                if not re.match(r'^(\+|\-|\d+=)$', operator):
                     raise ValueError('Illegal operator: {}'.format(operator))
                 root.set('row', operator)
                 if group.operator == '+':
