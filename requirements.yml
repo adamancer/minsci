@@ -6,6 +6,7 @@ dependencies:
 - pymongo
 - pyodbc
 - pytz
+- pyyaml
 - requests
 - unidecode
 - pip: [bibtexparser, dateparser, inflect, nameparser, requests_cache]
