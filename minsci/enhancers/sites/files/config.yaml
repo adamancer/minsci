@@ -3,6 +3,107 @@ mp:
   mt: mount
   mtns: mountains
   mtn: mountain
+ordered:
+  - locality
+  - mine
+  - municipality
+  - features
+  - volcano
+  - water_body
+  - island
+  - mining_district
+  - county
+  - state_province
+  - country
+  - continent
+codes:
+  locality:
+    - A
+    - H
+    - L
+    - P
+    - R
+    - S
+    - T
+    - U
+    - V
+  mine:
+    - MN
+    - MNAU
+    - MNC
+    - MNCR
+    - MNCU
+    - MNFE
+    - MNN
+    - MNQ
+    - MNQR
+  municipality:
+    - P
+  features:
+    - A
+    - H
+    - L
+    - P
+    - R
+    - S
+    - T
+    - U
+    - V
+  volcano:
+    - CLDA
+    - CONE
+    - CRTR
+    - VLC
+  island:
+    - ATOL
+    - ISL
+    - ISLET
+    - ISLF
+    - ISLM
+    - ISLT
+  mining_district:
+    - MNA
+  county:
+    - ADM2
+    - ADM2H
+    - ADM3
+    - ADM3H
+    - ADM4
+    - ADM4H
+    - ADM5
+  water_body:
+    - BAY
+    - SD
+    - GULF
+  island_group:
+    - ATOL
+    - ISL
+    - ISLS
+    - ISLET
+    - ISLF
+    - ISLM
+    - ISLT
+  state_province:
+    - ADM1
+    - ADM1H
+    - TERR
+    - LAND
+    - RGN
+  country:
+    - PCL
+    - PCLD
+    - PCLF
+    - PCLH
+    - PCLI
+    - PCLIX
+    - PCLS
+  sea:
+    - SEA
+    - GULF
+  ocean:
+    - OCN
+  continent:
+    - CONT
 attribute_to_codes:
   - field: mine
     codes:
@@ -15,6 +116,10 @@ attribute_to_codes:
       - MNN
       - MNQ
       - MNQR
+  - field: feature
+    codes:
+      - S
+      - (1 km)
   - field: municipality
     codes:
       - P
@@ -28,6 +133,12 @@ attribute_to_codes:
       - CONE
       - CRTR
       - VLC
+  - field: feature
+    codes:
+      - (10 km)
+  - field: mining_district
+    codes:
+      - MNA
   - field: island
     codes:
       - ATOL
@@ -52,19 +163,7 @@ attribute_to_codes:
   - field: county
     codes:
       - L
-  - field: mining_district
-    codes:
-      - MNA
   - field: feature
-    codes:
-      - H
-      - L
-      - R
-      - S
-      - T
-      - U
-      - V
-  - field: locality
     codes:
       - A
       - H
@@ -79,6 +178,17 @@ attribute_to_codes:
     codes:
       - BAY
       - SD
+  - field: feature
+    codes:
+      - A
+      - H
+      - L
+      - P
+      - R
+      - S
+      - T
+      - U
+      - V
   - field: island_group
     codes:
       - ATOL

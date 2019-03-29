@@ -1,20 +1,67 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
+
+import logging
+logger = logging.getLogger(__name__)
+
+import csv
+import json
 import os
 import pprint as pp
 import re
+from collections import namedtuple
 
+from titlecase import titlecase
 from yaml import load
 
-from .bot import SiteBot
+from .bot import SiteBot, distance_on_unit_sphere
 from .sitelist import SiteList
+from ...standardizer import LocStandardizer
 
+
+
+AdminDiv = namedtuple('AdminDiv', ['name', 'code', 'level'])
+
+
+def _read_config(dirpath):
+    config = load(open(os.path.join(dirpath, 'files', 'config.yaml'), 'r'))
+    codes = {}
+    classes = {}
+    with open(os.path.join(dirpath, 'files', 'codes.csv'), 'r', encoding='utf-8-sig') as f:
+        rows = csv.reader(f, dialect='excel')
+        keys = next(rows)
+        for row in rows:
+            rowdict = {k: v for k, v in zip(keys, row)}
+            try:
+                rowdict['SizeIndex'] = int(rowdict['SizeIndex'][:-3])
+            except ValueError:
+                pass
+            code = rowdict['FeatureCode']
+            codes[code] = rowdict
+            classes.setdefault(rowdict['FeatureClass'], []).append(code)
+    # Map features classes to related feature codes
+    for attr, classes_and_codes in config['codes'].items():
+        codes_ = []
+        for code in classes_and_codes:
+            try:
+                expanded = classes[code]
+            except KeyError:
+                codes_.append(code)
+            else:
+                for keyword in ['CONT', 'OCN']:
+                    try:
+                        expanded.remove(keyword)
+                    except ValueError:
+                        pass
+                codes_.extend(expanded)
+        config['codes'][attr] = codes_
+    return config, codes
 
 
 
 class Site(dict):
-    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'r'))
+    config, codes = _read_config(os.path.dirname(__file__))
     _attributes = [
         'location_id',
         'continent',
@@ -43,11 +90,14 @@ class Site(dict):
     localbot = None
 
 
-    def __init__(self, data):
+    def __init__(self, data=None):
         super(Site, self).__init__()
         self.orig = data
         if not data or not any(data):
             pass
+        elif 'location_id' in data:
+            for key, val in data.items():
+                setattr(self, key, val)
         elif 'irn' in data:
             self.from_emu(data)
         elif isinstance(data, list) and 'countryCode' in data[0]:
@@ -58,6 +108,9 @@ class Site(dict):
             self.from_dwc(data)
         else:
             raise ValueError('Unrecognized data format: {}'.format(data))
+        self.strict = False
+        self.std = LocStandardizer()
+        self.name = None
 
 
     def __getattr__(self, attr):
@@ -72,7 +125,7 @@ class Site(dict):
 
 
     def _repr__(self):
-        return {a: getattr(self, a) for a in self._attributes}
+        return pp.pformat({a: getattr(self, a) for a in self._attributes})
 
 
     def __bool__(self):
@@ -112,14 +165,13 @@ class Site(dict):
         self.site_kind = rec.get('fcode')
         self.site_num = rec.get('geonameId')
         self.site_source = u'GeoNames'
-        # Set name
-        name = rec.get('toponymName')
-        #if '/' in name:
-        #    name, rest = name.split('/')
-        #    print('WARNING: Split {} from {}'.format(rest, name))
-        self.site_names = [name]
         # Map synonyms
         self.synonyms = [s['name'] for s in rec.get('alternateNames', [])]
+        # Set name to the first English synonym
+        names = [s['name'] for s in rec.get('alternateNames', []) if s.get('lang') == 'en']
+        if not names:
+            names = [rec.get('name')]
+        self.site_names = names
 
 
     def from_emu(self, rec):
@@ -132,7 +184,7 @@ class Site(dict):
         self.municipality = rec('LocTownship')
         self.island = rec('LocIslandName')
         self.island_group = rec('LocIslandGrouping')
-        self.water_body = rec('LocSeaGulf') or rec('LocBaySound')
+        self.water_body = rec('LocBaySound')
         self.locality = rec('LocPreciseLocation')
         latitude = rec('LatLatitudeDecimal_nesttab')
         if any(latitude):
@@ -143,42 +195,46 @@ class Site(dict):
         # Map to additional fields
         self.mine = rec('LocMineName')
         self.volcano = rec('VolVolcanoName')
+        self.sea = rec.get('LocSeaGulf')
+        self.ocean = rec.get('LocOcean')
         # Map features
         self.features = []
-        for key in ['LocGeomorphologicalLocation']:
-            val = rec(key)
-            if val:
-                self.features.append(val)
+        for key in ['LocGeomorphologicalLocation', 'LocGeologicSetting']:
+            vals = [s.strip() for s in re.split(r'[;,]', rec(key)) if s.strip()]
+            self.features.extend(vals)
         # Map site info
         self.site_kind = rec('LocRecordClassification')
         self.site_num = rec('LocSiteStationNumber')
         self.site_source = rec('LocSiteNumberSource')
         self.site_names = rec('LocSiteName_tab')
+        self.synonyms = []
+        # Check if locality string is just a place name
+        self._parse_emu_locality()
+        # Move directional info to precise locality
+        for attr in self._attributes:
+            if attr == 'locality':
+                continue
+            vals = getattr(self, attr)
+            if not isinstance(vals, list):
+                vals = [vals]
+            updated = []
+            for val in vals:
+                for word in ['m', 'meters', 'km', 'mi', 'mile', 'miles']:
+                    if re.search(r'\b{}\b'.format(word), val, flags=re.I):
+                        self.locality += '; ' + val
+                        logger.info('Moved {} from {} to {}'.format(val, attr, 'locality'))
+                        break
+                else:
+                    updated.append(val)
+            if attr in ['features', 'site_names', 'synonyms']:
+                setattr(self, attr, updated)
+            else:
+                setattr(self, attr, '; '.join(updated))
+        print(self)
 
 
     def from_dwc(self, rec):
-        self.location_id = rec.get('irn')
-        # Map to DwC field names
-        self.continent = rec.get('LocContinent')
-        self.country = rec.get('country')
-        self.state_province = rec.get('stateProvince')
-        self.county = rec.get('county')
-        self.municipality = rec.get('municipality')
-        self.island = rec.get('island')
-        self.island_group = rec.get('LocIslandGrouping')
-        self.water_body = rec.get('LocSeaGulf') or rec.get('LocBaySound')
-        self.features = [rec.get('LocGeomorphologicalLocation')]
-        self.locality = rec.get('locality')
-        self.latitude = rec.get('LatLatitudeDecimal_nesttab')
-        self.longitude = rec.get('LatLongitudeDecimal_nesttab')
-        # Map to additional fields
-        self.mine = rec.get('LocMineName')
-        self.volcano = rec.get('VolVolcanoName')
-        # Map site info
-        self.site_kind = rec.get('LocRecordClassification')
-        self.site_num = rec.get('LocSiteStationNumber')
-        self.site_source = rec.get('LocSiteNumberSource')
-        self.site_names = rec.get('LocSiteName_tab')
+        raise AttributeError('from_dwc method not implemented')
 
 
     def stripwords(self, val, field):
@@ -190,51 +246,84 @@ class Site(dict):
         return val
 
 
-
-    def match(self, field=None, **kwargs):
-        most_specific = True
-        rows = self._attr_to_code
-        if field is not None:
-            rows = [row for row in rows if row['field'] == field]
-            if not rows:
-                raise ValueError('Unknown field: {}'.format(field))
-        for row in rows:
-            val = getattr(self, row['field'])
-            if val:
-                matches = SiteList(self.bot.search(val, features=row['codes'], **kwargs))
-                if not matches:
-                    stripped = self.stripwords(val, row['field'])
-                    matches = SiteList(self.bot.search(stripped, features=row['codes'], **kwargs))
-                if matches:
-                    return matches, most_specific
-                most_specific = False
-        return SiteList(), most_specific
+    def _parse_emu_locality(self):
+        """Look for features in locality string from EMu"""
+        pattern = r'^[A-Z][a-z]+([ -]([A-Z][a-z]+|of|de|la|le|l\'|d\'))*$'
+        val = titlecase(self.locality)
+        vals = [s.strip() for s in re.split(r'[;,]', val) if s.strip()]
+        for val in vals:
+            if val.endswith(' (Near)'):
+                val = val[:-7]
+            if not re.search(pattern, val):
+                break
+        else:
+            self.features.extend(vals)
+            self.locality = ''
+        return self
 
 
-    def match_one(self, name, *args, **kwargs):
-        matches, most_specific = self.match(**kwargs)
-        if matches and most_specific:
-            return matches.match_one(name=name, site=self)
-        raise ValueError('No unique match found for {} ({})'.format(name, kwargs))
+    def get_admin_codes(self):
+        """Maps names of admin divisions to codes used by GeoNames"""
+        self.country_code = self.bot._map_country(self.country)
+        admin = {'country': self.country_code}
+        val = self.state_province
+        if val:
+            self.admin_div_1 = self.get_admin_code(val, 'ADM1')
+            self.admin_code_1 = self.admin_div_1.code
+            admin['adminCode1'] = self.admin_code_1
+        val = self.county.replace(' Co.', '')
+        if val:
+            self.admin_div_2 = self.get_admin_code(val, 'ADM2')
+            self.admin_code_2 = self.admin_div_2.code
+            admin['adminCode2'] = self.admin_code_2
+        return admin
 
 
+    def most_specific_feature(self):
+        for field in self.config['ordered']:
+            name = getattr(self, field)
+            if isinstance(name, list) and len(name) == 1:
+                return name[0], field
+            elif name:
+                return name, field
+        return None, None
 
-    def match_all(self, **kwargs):
-        matches = {}
-        for row in self._attr_to_code[::-1]:
-            match = self.match(row['field'], **kwargs)
-            if match:
-                import re
-                key = re.sub('_([a-z])', lambda m: m.group(1).upper(), row['field'])
-                matches[key] = match
-                if row['field'] == 'country':
-                    kwargs['countryCode'] = match.orig['countryCode']
-                elif row['field'] == 'stateProvince':
-                    kwargs['adminCode1'] = match.orig['adminCode1']
-        return matches
+
+    def find_synonyms(self):
+        site = self.__class__(self.bot.get_by_id(self.site_num))
+        self.synonyms = sorted(list(set(self.synonyms + site.synonyms)))
+
+
+    def summarize(self, mask='{name}{higher_loc} ({url})'):
+        """Summarizes site info for a GeoNames record as a string"""
+        name = self.site_names[0]
+        county = self.county
+        if self.country == 'United States' and not county.endswith('Co.'):
+            county += ' Co.'
+        loc = [s for s in [county, self.state_province, self.country] if s]
+        higher_loc = ', '.join(loc)
+        if higher_loc == self.site_names[0]:
+            higher_loc = ''
+        else:
+            higher_loc = ', ' + higher_loc
+        url = 'http://geonames.org/{}'.format(self.site_num)
+        info = {
+            'name': name,
+            'higher_loc': higher_loc,
+            'url': url
+        }
+        return mask.format(**info)
+
+
+    @staticmethod
+    def oxford_comma(vals, delim=', '):
+        if len(vals) <= 2:
+            return ' and '.join(vals)
+        return delim.join(vals[:-1]) + ', and ' + vals[-1]
 
 
     def compare(self, other):
+        """Checks if two sites are equivalent"""
         n = max([len(attr) for attr in self._attributes])
         for attr in self._attributes:
             val1 = getattr(self, attr)
@@ -279,6 +368,96 @@ class Site(dict):
                 polygon[i] = [mask.format(c) for c in coords]
         return polygon
 
+
+    def verify(self):
+        """Verifies higher political geography in a GeoNames match"""
+        eqs = []
+        if self.site_num:
+            gnsite = self.bot.get_by_id(self.site_num)
+            for attr in ['country', 'state_province', 'country']:
+                attr1 = getattr(site, attr)
+                attr2 = getattr(gnsite, attr)
+                eqs.append('==' if attr1 == attr2 else '!=')
+                print('{}: {} {} {}').format(attr, attr1, eqs[-1], attr2)
+        return '!=' not in eqs
+
+
+
+    def synonymize(self, attr):
+        for attr in ['country', 'state_province', 'country']:
+            if attr == attr:
+                break
+
+
+    def get_admin_name(self, *args, **kwargs):
+        kwargs['search_name'] = True
+        return self.get_admin_div(*args, **kwargs)
+
+
+    def get_admin_code(self, *args, **kwargs):
+        try:
+            assert self.admin_codes
+        except AssertionError:
+            self.read_admin_codes()
+        kwargs['search_name'] = False
+        return self.get_admin_div(*args, **kwargs)
+
+
+    def get_admin_div(self, term, level, search_name=None, suffixes='HD'):
+        term_ = self.std(term)
+        try:
+            country_code = self.bot._map_country(self.country)[0]
+        except IndexError as e:
+            logger.error('Unrecognized country', exc_info=True)
+            raise
+        try:
+            val = self.admin_codes[country_code][level][term_]
+        except KeyError:
+            for level in [level + s for s in suffixes]:
+                try:
+                    val = self.admin_codes[country_code][level][term_]
+                except KeyError:
+                    pass
+                else:
+                    break
+            else:
+                level = level.rstrip(suffixes)
+                raise ValueError('Unknown {}: {}, {}'.format(level, term, self.country))
+        # If searching a name, look up the official name as well
+        if len(val) < len(term) or search_name:
+            try:
+                name = self.admin_codes[country_code][level][self.std(val)]
+            except KeyError:
+                raise KeyError('Unknown {}: {}, {}'.format(level, val, self.country))
+            return AdminDiv(name, val, level)
+        return AdminDiv(val, term, level)
+
+
+    def read_admin_codes(self, standardize=False):
+        """Reads and if necessary formats the list of admin codes"""
+        print('Loading admin codes...')
+        fp = os.path.join(os.path.dirname(__file__), 'files', 'admin_codes_std.json')
+        # Standardize keys
+        if standardize:
+            orig = os.path.join(os.path.dirname(__file__), 'files', 'admin_codes.json')
+            admin_codes = json.load(open(orig, 'r', encoding='utf-8'))
+            print('Standardizing keys...')
+            for country, levels in admin_codes.items():
+                print('Processing {}...'.format(country))
+                for level, names in levels.items():
+                    for key, code in list(names.items()):
+                        if self.std(key) != key:
+                            names[self.std(key)] = code
+                            del names[key]
+            json.dump(admin_codes,
+                      open(fp, 'w', encoding='utf-8'),
+                      indent=2,
+                      sort_keys=True)
+        else:
+            admin_codes = json.load(open(fp, 'r', encoding='utf-8'))
+        self.__class__.admin_codes = admin_codes
+        print('Loaded codes!')
+        return admin_codes
 
 
 

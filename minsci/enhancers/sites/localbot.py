@@ -7,6 +7,7 @@ from builtins import str
 from builtins import range
 from past.builtins import basestring
 import functools
+import json
 import math
 import os
 import re
@@ -21,6 +22,7 @@ from requests.structures import CaseInsensitiveDict
 
 from .bot import SiteBot, ABBR_TO_NAME, NAME_TO_ABBR, FROM_COUNTRY_CODE, TO_COUNTRY_CODE
 from .sitelist import SiteList
+from ...standardizer import Standardizer
 
 
 
@@ -77,7 +79,14 @@ class LocalBot(SiteBot):
                                'feature code',
                                'feature class'])
             self.df.to_pickle(pkl)
-        self.admin = self._map_admin()
+        fp = os.path.join(os.path.dirname(__file__), 'files', 'admin_codes.json')
+        try:
+            raise
+            self.admin = json.load(open(fp, 'r', encoding='utf-8'))
+        except:
+            self.admin = self._map_admin()
+            json.dump(self.admin, open(fp, 'w', encoding='utf-8'), indent=2, sort_keys=True, ensure_ascii=False)
+        self.std = Standardizer()
 
 
     def as_json(self, row):
@@ -115,25 +124,35 @@ class LocalBot(SiteBot):
 
 
     def _map_admin(self):
+        print('Mapping administrative codes...')
         admin = {}
         rows = self.df.loc[self.df['feature class'] == 'A']
-        for i, row in rows.iterrows():
+        for idx, row in rows.iterrows():
             feature_code = row['feature code']
             try:
                 i = feature_code[-1]
-                admin_code = row['admin{} code'.format(i)]
+                admin_key = 'admin{} code'.format(i)
+                admin_code = row[admin_key]
             except (KeyError, TypeError):
                 pass
             else:
                 country_code = row['country code']
-                admin.setdefault(country_code, {}) \
-                           .setdefault(feature_code, {}) \
-                           .setdefault(admin_code, row['name'])
-                # Also store names. Unlike admin codes, names are not stored
-                # exactly as they appear in the db and are instead formatted
-                # to be easier to match.
-                for key in [self.std(n) for n in self.get_names(row)]:
-                    admin[country_code][feature_code][key] = admin_code
+                for i, code in enumerate([country_code,
+                                          feature_code,
+                                          admin_code]):
+                    if not isinstance(code, str):
+                        print('{}: {} ({}, {})'.format(i + 1, code, admin_key, idx))
+                        break
+                else:
+                    admin.setdefault(country_code, {}) \
+                               .setdefault(feature_code, {}) \
+                               .setdefault(admin_code, row['name'])
+                    # Also store names. Unlike admin codes, names are not stored
+                    # exactly as they appear in the db and are instead formatted
+                    # to be easier to match.
+                    for key in [self.std(n) for n in self.get_names(row)]:
+                        if key and len(key) > 2:
+                            admin[country_code][feature_code][key] = admin_code
         return admin
 
 
@@ -152,13 +171,6 @@ class LocalBot(SiteBot):
                     admin['adminCode{}'.format(i)] = admin_code
                     admin['adminName{}'.format(i)] = name
         return admin
-
-
-    def std(self, val):
-        try:
-            return val.lower()
-        except (AttributeError, TypeError):
-            return None
 
 
     def get_admin_code(self, country_code, feature_code, val):

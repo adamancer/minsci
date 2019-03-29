@@ -3,6 +3,9 @@ from __future__ import print_function
 from __future__ import unicode_literals
 from __future__ import division
 
+import logging
+logger = logging.getLogger(__name__)
+
 from builtins import str
 from builtins import range
 from past.builtins import basestring
@@ -69,6 +72,7 @@ class SiteBot(Bot):
 
 
     def _map_aliases(self, params):
+        return params
         try:
             params['countryName'] = self._map_country(params['country'])
         except KeyError:
@@ -115,7 +119,7 @@ class SiteBot(Bot):
         # Make and parse query
         response = self._retry(self.get, url, params=defaults)
         if not self.quiet:
-            print(response.url)
+            logger.info('GeoNames URL: {}'.format(response.url))
         if response.status_code == 200:
             content = response.json()
             status = content.get('status')
@@ -141,6 +145,7 @@ class SiteBot(Bot):
                     self.cache.delete_url(response.url)
                     time.sleep(30)
                     return self._query_geonames(url, **params)
+        raise ValueError('Bad response: {}'.format(response.status_code))
 
 
     def get_by_id(self, geoname_id, style='MEDIUM'):
@@ -169,12 +174,19 @@ class SiteBot(Bot):
             JSON representation of matching locations
         """
         url = 'http://api.geonames.org/searchJSON'
-        valid = set(['country', 'state', 'features'])
+        valid = set([
+            'adminCode1',
+            'adminCode2',
+            'country',
+            'countryName',
+            'state',
+            'features'
+            ])
         invalid = sorted(list(set(params) - valid))
         if invalid:
             raise ValueError('Illegal params: {}'.format(invalid))
         if query:
-            params['q'] = query
+            params['name'] = query
             params = self._map_aliases(params)
             try:
                 params['featureClass'] = [c for c in params['features'] if len(c) == 1]
@@ -258,28 +270,30 @@ class SiteBot(Bot):
 
 
 
-def distance_on_unit_sphere(lat1, long1, lat2, long2):
+def distance_on_unit_sphere(lat1, lng1, lat2, lng2, unit='km'):
     """Calculates the distance in km between two points on a sphere
 
     From http://www.johndcook.com/blog/python_longitude_latitude/
 
     Args:
         lat1 (int or float): latitude of first coordinate pair
-        long1 (int or float): longitude of first coordinate pair
+        lng1 (int or float): longitude of first coordinate pair
         lat2 (int or float): latitude of second coordinate pair
-        long2 (int or float): longitdue of second coordinate pair
+        lng2 (int or float): longitdue of second coordinate pair
 
     Returns:
         Distance between two points in km
     """
-
-    # Convert latitude and longitude to spherical coordinates in radians.
+    # Coerce strings to floats
+    lat1, lng1, lat2, lng2 = [float(s) if not isinstance(s, float) else s
+                              for s in [lat1, lng1, lat2, lng2]]
+    # Convert latitude and lngitude to spherical coordinates in radians.
     degrees_to_radians = math.pi / 180.
     phi1 = (90. - lat1) * degrees_to_radians
     phi2 = (90. - lat2) * degrees_to_radians
     # theta = longitude
-    theta1 = long1 * degrees_to_radians
-    theta2 = long2 * degrees_to_radians
+    theta1 = lng1 * degrees_to_radians
+    theta2 = lng2 * degrees_to_radians
     # Compute spherical distance from spherical coordinates.
     # For two locations in spherical coordinates
     # (1, theta, phi) and (1, theta', phi')
@@ -291,7 +305,10 @@ def distance_on_unit_sphere(lat1, long1, lat2, long2):
     arc = math.acos(cos)
     # Remember to multiply arc by the radius of the earth
     # in your favorite set of units to get length.
-    return arc * 6371.
+    units = {
+        'km': 6371.
+    }
+    return arc * units[unit]
 
 
 def dec2dms(dec, is_lat):
