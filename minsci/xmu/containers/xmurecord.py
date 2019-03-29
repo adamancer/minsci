@@ -7,6 +7,7 @@ from builtins import range
 from past.builtins import basestring
 
 import json
+import pprint as pp
 import re
 from collections import namedtuple
 from datetime import datetime
@@ -656,77 +657,80 @@ class XMuRecord(DeepDict):
         for key in list(self.keys()):
             val = self[key]
             k = key.rsplit('(', 1)[0]               # key stripped of row logic
-            base = key.rstrip('_').split('_', 1)[0].rstrip('(0+-)') # strip _tab
+            base = key.rstrip('_').split('_', 1)[0].rsplit('(')[0]
             # Confirm that data type appears to be correct
             if (key.rstrip('_').endswith(('0', 'tab', ')'))
                 and not isinstance(val, list)):
-                raise ValueError('{} must be a list'.format(key))
+                raise ValueError('{} must be a list (={})'.format(key, val))
             elif (val
                   and not key.startswith('_')
                   and not key.rstrip('_').endswith(('0', 'tab', ')', 'Ref'))
                   and not isinstance(val, (basestring, int, float))):
-                raise ValueError('{} must be atomic'.format(key))
+                raise ValueError('{} must be atomic (={})'.format(key, val))
             # Handle nested tables
             if k.endswith('_nesttab'):
-                # Test if the table has already been expanded by looking
-                # for a corresponding _nesttab_inner key
-                try:
-                    expanded = any([k + '_inner' in list(v.keys()) for v in val])
-                except (AttributeError, IndexError):
-                    expanded = False
-                if not expanded and any(val):
-                    if 'Ref_' in k:
-                        base = 'irn'
-                    if isinstance(val[0], basestring):
-                        self[key] = [self.clone({
-                            k + '_inner': [self.clone({base: s}) for s in val]
-                            })]
+                #print('{}={} parsed as nested table'.format(key, val))
+                # Nested references are irn only
+                if 'Ref_' in k:
+                    base = 'irn'
+                # Process nested tables as if mixed
+                vals = []
+                for val in val:
+                    # Each val is either a list or a dict
+                    if isinstance(val, dict):
+                        vals.append(val)
                     else:
-                        self[key] = []
-                        for s in val:
-                            self[key].append(self.clone({
-                                k + '_inner': [self.clone({base: s}) for s in s]
-                                }))
-                elif not expanded:
-                    self[key] = []
+                        vals.append(self.clone({k + '_inner': [self.clone({base: s}) for s in val]}))
+                self[key] = vals
             elif (k.endswith('Ref')
                   and isinstance(val, (int, str))
                   and val):
+                #print('{}={} parsed as atomic reference'.format(key, val))
                 self[key] = self.clone({'irn': val})
             elif k.endswith('Ref'):
+                #print('{}={} parsed as atomic reference'.format(key, val))
                 try:
                     self[key]._expand(keep_empty=True)
                 except AttributeError:
                     self[key] = self.clone(self[key])._expand(keep_empty=True)
             elif (k.endswith('Ref_tab')
                   and isinstance(val, list)
-                  and any(val)
-                  and isinstance(val[0], (int, str))):
-                self[key] = [self.clone({'irn': s}) if s
-                             else self.clone() for s in val]
-            elif (k.endswith('Ref_tab')
-                  and isinstance(val, list)
                   and any(val)):
-                self[key] = [self.clone(d)._expand(keep_empty=True) for d in val]
+                #print('{}={} parsed as reference grid'.format(key, val))
+                vals = []
+                for val in val:
+                    if isinstance(val, dict) or base in val:
+                        vals.append(self.clone(val)._expand(keep_empty=True))
+                    else:
+                        vals.append(self.clone({'irn': val}))
+                self[key] = vals
             elif (k.rstrip('_').endswith(self.tabends)
                   and isinstance(val, list)
                   and any(val)
-                  and isinstance(val[0], (int, str))):
-                try:
-                    self[key] = [self.clone({base: s}) if base not in s else s for s in self[key]]
-                except:
-                    print(key)
-                    raise
+                  and any([isinstance(s, (int, str)) for s in val])):
+                #print('{}={} parsed as mixed grid'.format(key, val))
+                # Local table (all unexpanded or a mix)
+                vals = []
+                for val in val:
+                    if isinstance(val, dict) or base in val:
+                        vals.append(val)
+                    else:
+                        vals.append(self.clone({base: val}))
+                self[key] = vals
             elif (k.rstrip('_').endswith(self.tabends)
                   and isinstance(val, list)
                   and not any(val)):
-                self[key] = []
+                #print('{}={} parsed as empty table'.format(key, val))
+                # Local table without anything in it
+                self[key] = [] if not keep_empty else [{base: s} for s in val]
             elif (isinstance(val, list)
                   and any([v for v in val if isinstance(v, dict)])
                   and any([v for v in val if not isinstance(v, dict)])):
                 # Catches mixtures of expanded and unexpanded keys
                 self[key] = [val if isinstance(val, dict) else {base: val}
                              for val in self[key]]
+            else:
+                pass#print('{}={} either atomic or previously parsed'.format(key, val))
         return self
 
 
@@ -803,6 +807,13 @@ class XMuRecord(DeepDict):
     def grid(self, cols, **kwargs):
         """Creates an XMuGrid object based on this record"""
         return XMuGrid(rec=self, cols=cols, **kwargs)
+
+
+    def trim(self):
+        for key in self:
+            val = self(key)
+            print(key, val)
+
 
 
 
