@@ -23,6 +23,7 @@ from ...dicts import DeepDict
 
 
 Row = namedtuple('Row', ['irn', 'field', 'row', 'val'])
+GridInfo = namedtuple('GridInfo', ['rows', 'cols'])
 
 
 class XMuRecord(DeepDict):
@@ -797,6 +798,193 @@ class XMuRecord(DeepDict):
     def zip(self, *args):
         """Zips the set of lists, padding each list to the max length"""
         return zip_longest(*[self(arg) for arg in args])
+
+
+    def grid(self, cols, **kwargs):
+        """Creates an XMuGrid object based on this record"""
+        return XMuGrid(rec=self, cols=cols, **kwargs)
+
+
+
+class XMuGrid(object):
+
+    def __init__(self, rec, cols, default=''):
+        self.record = rec
+        self.cols = sorted(list(set(cols)))
+        self.default = default
+        self.pad_grid()
+
+
+    def __str__(self):
+        return pp.pformat(self.rows())
+
+
+    def __repr__(self):
+        return pp.pformat({col: self.record.get(col, []) for col in self.cols})
+
+
+    def __iter__(self):
+        return iter(self.grid())
+
+
+    def __len__(self):
+        return max([len(self.record.get(col, [])) for col in self.cols])
+
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self.rows()[key]
+        elif key in self.cols:
+            return self.record[key]
+        raise KeyError('{} not in grid'.format(key))
+
+
+    @staticmethod
+    def _check_type(col, val):
+        """Checks type for append"""
+        if col.endswith('_nesttab'):
+            if not isinstance(val, list):
+                raise KeyError('{} must be a list (={})'.format(col, val))
+        elif col.endswith('Ref_tab'):
+            if not isinstance(val, (int, float, str, dict)):
+                raise KeyError('{} must be atomic (={})'.format(col, val))
+        elif col.endswith(('0', '_tab')):
+            if not isinstance(val, (int, float, str)):
+                raise KeyError('{} must be atomic (={})'.format(col, val))
+        else:
+            raise KeyError('No type check defined for {}'.format(col))
+
+
+    @staticmethod
+    def coerce(col, val=None):
+        if col.endswith('_nesttab') and not isinstance(val, list):
+            return [val]
+        return val
+
+
+    def expand(self):
+        self.record.expand(keep_empty=True)
+        missing = set(self.cols) - set(self.record)
+        if missing:
+            raise ValueError('Missing columns from grid: {}'.format(list(missing)))
+
+
+    def info(self):
+        return GridInfo(len(self), self.cols)
+
+
+    def rows(self):
+        """Converts the grid to a list of dictionaries"""
+        self.expand()
+        rows = []
+        for col in self.cols:
+            for i, val in enumerate(self.record(col)):
+                try:
+                    rows[i][col] = val
+                except IndexError:
+                    rows.append({col: val})
+        return rows
+
+
+    def grid(self):
+        """Returns the grid"""
+        grid = self.record.clone({c: self.record(c) for c in self.cols})
+        grid['irn'] = '00000000'
+        grid.expand()
+        del grid['irn']
+        return grid
+
+
+    def pad_grid(self):
+        """Pads the grid to the length of the column with the most rows"""
+        if self.default is not None:
+            num_rows = len(self)
+            for col in self.cols:
+                self.pad_col(col, num_rows)
+            self.expand()
+
+
+    def pad_col(self, col, num_rows=None):
+        """Pads column to the given length or the number of rows in the grid"""
+        if self.default is not None:
+            if num_rows is None:
+                num_rows = len(self)
+            diff = num_rows - len(self.record.get(col, []))
+            try:
+                self.record[col].extend([self.default] * diff)
+            except KeyError:
+                self.record[col] = [self.default] * num_rows
+
+
+    def pad_row(self, **kwargs):
+        """Fills in missing keys in a row with the classwide default value"""
+        if self.default is not None:
+            for col in self.cols:
+                kwargs.setdefault(col, self.default)
+        return kwargs
+
+
+    def index(self, **kwargs):
+        """Finds the index of the row matching the kwargs"""
+        indexes = []
+        for col, refval in kwargs.items():
+            for i, val in enumerate(self.record(col)):
+                if val == refval:
+                    indexes.append(i)
+        if not indexes:
+            raise IndexError('No row matches {}'.format(kwargs))
+        if len(indexes) > 1:
+            raise IndexError('Multiple rows match {}'.format(kwargs))
+        return indexes[0]
+
+
+    def append(self, **kwargs):
+        """Appends a row to the grid"""
+        kwargs = self.pad_row(**kwargs)
+        for col, val in kwargs.items():
+            val = self.coerce(col, val)
+            self._check_type(col, val)
+            self.record[col].append(val)
+        self.expand()
+
+
+    def extend(self, rows):
+        """Appends multiple rows to the grid"""
+        for row in rows:
+            self.append(**row)
+
+
+    def insert(self, index, **kwargs):
+        """Inserts a row into the grid at the given index"""
+        kwargs = self.pad_row(**kwargs)
+        for col, val in kwargs.items():
+            val = self.coerce(col, val)
+            self._check_type(col, val)
+            self.record[col].insert(index, val)
+        self.expand()
+
+
+    def replace(self, index=None, match_on=None, default='', **kwargs):
+        """Replaces the row at the given index"""
+        assert index is not None or match_on
+        if index is None:
+            index = self.index(**match_on)
+        kwargs = self.pad_row(**kwargs)
+        for col, val in kwargs.items():
+            self.recordord(col)[i] = val
+        self.expand()
+
+
+    def delete(self, index=None, **kwargs):
+        """Deletes the row at the given index"""
+        assert index is not None or kwargs
+        if index is None:
+            index = self.index(**kwargs)
+        for col in self.cols:
+            self.pad_col(col)
+            del self.record[col][index]
+        self.expand()
+
 
 
 def standardize(val):
