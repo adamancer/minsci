@@ -180,7 +180,7 @@ def _sorter(key, order):
         return -1
 
 
-def oxford_comma(lst, lowercase=False):
+def oxford_comma(lst, lowercase=False, delim=', '):
     """Formats list as comma-delimited string
 
     Args:
@@ -200,7 +200,7 @@ def oxford_comma(lst, lowercase=False):
         return ' and '.join(lst)
     else:
         last = lst.pop()
-        return ', '.join(lst) + ', and ' + last
+        return delim.join(lst) + delim + 'and ' + last
 
 
 def singular(val):
