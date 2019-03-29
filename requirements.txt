@@ -10,4 +10,5 @@ pytz
 pyyaml
 requests
 requests_cache
+shapely
 unidecode

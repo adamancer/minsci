@@ -8,6 +8,7 @@ dependencies:
 - pytz
 - pyyaml
 - requests
+- shapely
 - unidecode
 - pip: [bibtexparser, dateparser, inflect, nameparser, requests_cache]
 name: minsci
