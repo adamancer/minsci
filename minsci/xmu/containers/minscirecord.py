@@ -230,6 +230,13 @@ class MinSciRecord(XMuRecord):
                                       'CatOtherNumbersValue_tab')
 
 
+    def get_other_numbers(self, label):
+        """Gets all the collector's field numbers for a record"""
+        return self.get_matching_rows(label,
+                                      'CatOtherNumbersType_tab',
+                                      'CatOtherNumbersValue_tab')
+
+
     def is_antarctic(self, metname=None):
         """Checks if record is an Antarctic meteorite based on regex pattern"""
         if metname is None:
