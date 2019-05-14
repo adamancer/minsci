@@ -27,9 +27,9 @@ handlers:
     encoding: utf8
 loggers:
   minsci:
-    level: DEBUG
+    level: WARNING
     handlers: [console, info_file_handler, error_file_handler]
     propagate: no
 root:
-    level: INFO
+    level: ERROR
     handlers: [console, info_file_handler, error_file_handler]

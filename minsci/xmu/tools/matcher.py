@@ -263,7 +263,7 @@ class Matcher(XMu):
                         if not 'irn' in rec[field][i]:
                             rec[field][i]['SecRecordStatus'] = 'Active'
         # Look for derivative fields. EMu includes a handful of groups of
-        # related fields that are derived from each other (coordiantes,
+        # related fields that are derived from each other (coordinates,
         # elevation, and depth). Matching against these fields is a problems
         # because it's unlikely that the import will include more than one,
         # so we check for those here.
