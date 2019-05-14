@@ -3,7 +3,7 @@ from builtins import str
 import os
 import re
 
-from yaml import load
+import yaml
 
 from .taxalist import TaxaList
 from .taxatree import TaxaTree
@@ -12,7 +12,7 @@ from .taxatree import TaxaTree
 
 
 class TaxaNamer(TaxaTree):
-    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'r'))
+    config = yaml.safe_load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'r'))
     _capex = [str(s) if isinstance(s, int) else s for s in config['capex']]
 
     def __init__(self, *args, **kwargs):

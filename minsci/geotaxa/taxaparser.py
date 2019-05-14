@@ -9,8 +9,9 @@ import re
 from collections import namedtuple
 from pprint import pformat
 
+import yaml
 from unidecode import unidecode
-from yaml import load
+
 
 
 
@@ -18,7 +19,7 @@ Part = namedtuple('Part', ['word', 'stem', 'rank', 'pos'])
 
 class TaxaParser(object):
     """Analyzes and segments a rock name"""
-    config = load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'r'))
+    config = yaml.safe_load(open(os.path.join(os.path.dirname(__file__), 'files', 'config.yaml'), 'r'))
     _colors = sorted(config['colors'], key=len, reverse=True)
     _modifiers = sorted(config['modifiers'], key=len, reverse=True)
     _textures = sorted(config['textures'], key=len, reverse=True)

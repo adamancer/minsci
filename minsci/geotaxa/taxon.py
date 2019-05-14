@@ -261,7 +261,7 @@ class Taxon(dict):
         taxon = self.preferred()
         while taxon.parent:
             parents.insert(0, taxon.parent)
-            taxon = self.tree[taxon.parent.irn]
+            taxon = self.tree[taxon.parent.irn].preferred()
         if include_self:
             parents.append(Taxon({'irn': self.irn, 'sci_name': self.sci_name}))
         if full_records:
