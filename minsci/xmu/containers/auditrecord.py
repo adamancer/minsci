@@ -20,7 +20,7 @@ class AuditRecord(XMuRecord):
         self.changes = None
 
 
-    def parse_field(self, field):
+    def parse_field(self, field, keep_xml=False):
         """Parse values found in a single field in the old/new table"""
         vals = {}
         for line in self(field):
@@ -29,18 +29,52 @@ class AuditRecord(XMuRecord):
                 print('Could not parse {}'.format(field))
                 vals[field] = 'PARSE_ERROR'
                 continue
-            try:
-                tree = etree.fromstring(xml)
-            except etree.XMLSyntaxError:
-                print(xml)
-                raise
-            if xml.startswith('<atom'):
-                val = tree.text if isinstance(tree.text, str) else tree.text.decode('utf-8')
+            if keep_xml:
+                vals[field] = xml
             else:
-                atoms = [tuple.find('atom') for tuple in tree.findall('tuple')]
-                val = [atom.text if atom is not None else '' for atom in atoms]
-            vals[field] = val
+                try:
+                    tree = etree.fromstring(xml)
+                except etree.XMLSyntaxError:
+                    print(xml)
+                    raise
+                if xml.startswith('<atom'):
+                    val = tree.text if isinstance(tree.text, str) else tree.text.decode('utf-8')
+                else:
+                    atoms = [tuple.find('atom') for tuple in tree.findall('tuple')]
+                    val = [atom.text if atom is not None else '' for atom in atoms]
+                vals[field] = val
         return vals
+
+
+    def simplify(self, whitelist=None, blacklist=None):
+        """Simplifies audit to fields according to whitelist/blacklist
+
+        This mostly is useful as a space-saver for large audit sets that
+        require the entire dataset to be in place before analyzing it.
+        """
+        assert whitelist or blacklist
+        if not whitelist:
+            whitelist = []
+        if not blacklist:
+            blacklist = []
+        old = self.parse_field('AudOldValue_tab', keep_xml=True)
+        new = self.parse_field('AudNewValue_tab', keep_xml=True)
+        keys = set(list(old.keys()) + list(new.keys()))
+        keys = [k for k in keys if not whitelist or k in whitelist]
+        keys = [k for k in keys if not blacklist or k not in blacklist]
+        self['AudOldValue_tab'] = []
+        self['AudNewValue_tab'] = []
+        for key in keys:
+            try:
+                self['AudOldValue_tab'].append('{}: {}'.format(key, old[key]))
+            except KeyError:
+                pass
+            try:
+                self['AudNewValue_tab'].append('{}: {}'.format(key, new[key]))
+            except KeyError:
+                pass
+        self.expand()
+        return self
 
 
     def parse_changes(self, whitelist=None, blacklist=None):

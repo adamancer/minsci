@@ -38,7 +38,7 @@ class Auditor(XMu):
         self.modules = kwargs.pop('modules', [])
         self.users = kwargs.pop('users', [])
         super(Auditor, self).__init__(*args, **kwargs)
-        print('Reviewing around {}% of records'.format(self.percent_to_review))
+        print('Examining around {}% of records'.format(self.percent_to_review))
         # Default values for the blacklist. Fields included here are not
         # printed in the HTML report.
         if not self.blacklist:
@@ -59,9 +59,11 @@ class Auditor(XMu):
         self._html = []  # results is a list of self.containers
 
 
-    def iterate(self, element):
+    def iterate(self, element, whitelist=None, blacklist=None):
         """Groups audit records by module and irn"""
         rec = self.parse(element)
+        if whitelist or blacklist:
+            rec = rec.simplify(whitelist=whitelist, blacklist=blacklist)
         if rec('AudTable') == 'egroups':
             return True
         key = '-'.join([rec('AudTable'), rec('AudKey')])
@@ -190,8 +192,8 @@ class Auditor(XMu):
         footer = ['</body>'
                   '</html>']
         html = header + self._html if html is None else html + footer
-        with open(fp, 'w') as f:
-            f.write(''.join([s.encode('utf-8') for s in html]))
+        with open(fp, 'w', encoding='utf-8') as f:
+            f.write(''.join(html))
 
 
     @staticmethod
