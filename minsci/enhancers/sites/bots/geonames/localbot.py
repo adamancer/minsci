@@ -20,13 +20,13 @@ import requests_cache
 from lxml import etree
 from requests.structures import CaseInsensitiveDict
 
-from .bot import SiteBot, ABBR_TO_NAME, NAME_TO_ABBR, FROM_COUNTRY_CODE, TO_COUNTRY_CODE
+from .bot import GeoNamesBot, ABBR_TO_NAME, NAME_TO_ABBR, FROM_COUNTRY_CODE, TO_COUNTRY_CODE
 from .sitelist import SiteList
 from ...standardizer import Standardizer
 
 
 
-class LocalBot(SiteBot):
+class LocalBot(GeoNamesBot):
     """Modifies bot to use local GeoNames data for search and id queries
 
     Attributes:
@@ -71,7 +71,12 @@ class LocalBot(SiteBot):
             print('Loaded pickled dataframe')
         except OSError:
             print('Reading {}...'.format(fp))
-            self.df = pd.read_csv(fp, sep='\t', header=None, names=cols, dtype=dtype)
+            self.df = pd.read_csv(fp,
+                                  sep='\t',
+                                  header=None,
+                                  names=cols,
+                                  dtype=dtype,
+                                  keep_default_na=False)
             self.df.set_index(['name',
                                'alternatenames',
                                'country code',
@@ -127,16 +132,22 @@ class LocalBot(SiteBot):
         print('Mapping administrative codes...')
         admin = {}
         rows = self.df.loc[self.df['feature class'] == 'A']
+        last = None
         for idx, row in rows.iterrows():
             feature_code = row['feature code']
             try:
                 i = feature_code[-1]
                 admin_key = 'admin{} code'.format(i)
                 admin_code = row[admin_key]
+            except IndexError:
+                pass
             except (KeyError, TypeError):
                 pass
             else:
                 country_code = row['country code']
+                if country_code != last:
+                    print(country_code)
+                    last = country_code
                 for i, code in enumerate([country_code,
                                           feature_code,
                                           admin_code]):
@@ -154,6 +165,15 @@ class LocalBot(SiteBot):
                         if key and len(key) > 2:
                             admin[country_code][feature_code][key] = admin_code
         return admin
+
+
+    def _map_id(self):
+        print('Mapping administrative codes...')
+        admin = {}
+        rows = self.df.loc[self.df['feature class'] == 'A']
+        for idx, row in rows.iterrows():
+            feature_code = row['feature code']
+
 
 
     def _get_admin_names(self, row):

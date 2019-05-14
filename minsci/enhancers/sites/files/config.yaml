@@ -1,8 +1,3 @@
-mp:
-  st: saint
-  mt: mount
-  mtns: mountains
-  mtn: mountain
 ordered:
   - locality
   - mine
@@ -53,7 +48,14 @@ codes:
     - CLDA
     - CONE
     - CRTR
+    - HLL
+    - HLLS
+    - MT
+    - MTS
+    - PK
     - VLC
+  maps:
+    - _MAP
   island:
     - ATOL
     - ISL
@@ -73,6 +75,8 @@ codes:
     - ADM5
   water_body:
     - BAY
+    - COVE
+    - INLT
     - SD
     - GULF
   island_group:
@@ -226,6 +230,3 @@ code_to_attribute:
   ADM2: county
   MN: mine
   PPL: municipality
-stripwords:
-  county: [co, county, dist, district]
-  state_province: [dist, district, prov, province]

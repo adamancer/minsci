@@ -208,6 +208,7 @@ SN	SEN	686	SG	Senegal	Dakar	196,190.0	12,323,252	AF
 SO	SOM	706	SO	Somalia	Mogadishu	637,657.0	10,112,453	AF
 SR	SUR	740	NS	Suriname	Paramaribo	163,270.0	492,829	SA
 SS	SSD	728	OD	South Sudan	Juba	644,329.0	8,260,490	AF
+ST	STP	678	TP	Sao Tome and Principe	Sao Tome	1,001.0	175,808	AF
 ST	STP	678	TP	São Tomé and Príncipe	Sao Tome	1,001.0	175,808	AF
 SV	SLV	222	ES	El Salvador	San Salvador	21,040.0	6,052,064	NA
 SX	SXM	534	NN	Sint Maarten	Philipsburg	21.0	37,429	NA
