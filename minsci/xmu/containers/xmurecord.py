@@ -1,7 +1,6 @@
 """Subclass of DeepDict with methods specific to XMu"""
 from __future__ import print_function
 from __future__ import unicode_literals
-
 from builtins import str
 from builtins import range
 from past.builtins import basestring
@@ -55,10 +54,11 @@ class XMuRecord(DeepDict):
             except TypeError:
                 pass
             else:
-                if delimited:
-                    raise ValueError('{} contains {}: {}'.format(key,
-                                                                 self.delim,
-                                                                 val))
+                pass
+                #if delimited:
+                #    raise ValueError('{} contains {}: {}'.format(key,
+                #                                                 self.delim,
+                #                                                 val))
         super(XMuRecord, self).__setitem__(key, val)
 
 
