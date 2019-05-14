@@ -835,7 +835,7 @@ class XMuGrid(object):
 
 
     def __iter__(self):
-        return iter(self.grid())
+        return iter(self.rows())
 
 
     def __len__(self):
@@ -848,6 +848,10 @@ class XMuGrid(object):
         elif key in self.cols:
             return self.record[key]
         raise KeyError('{} not in grid'.format(key))
+
+
+    def __delitem__(self, i):
+        self.delete(i)
 
 
     @staticmethod
