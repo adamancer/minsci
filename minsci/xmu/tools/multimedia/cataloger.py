@@ -143,6 +143,10 @@ class Mediator(XMu):
         return pp.pformat(self._existing)
 
 
+    def __iter__(self):
+        return iter(self._existing)
+
+
     def add(self, fn, irns):
         assert isinstance(irns, list)
         try:
