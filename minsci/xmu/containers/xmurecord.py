@@ -655,7 +655,7 @@ class XMuRecord(DeepDict):
         # Expand shorthand keys, including tables and simple references.
         # Keys pointing to other XMuRecord objects are left alone.
         for key in list(self.keys()):
-            val = self[key]
+            val = self.coerce(self[key])
             k = key.rsplit('(', 1)[0]               # key stripped of row logic
             base = key.rstrip('_').split('_', 1)[0].rsplit('(')[0]
             # Confirm that data type appears to be correct
@@ -732,6 +732,14 @@ class XMuRecord(DeepDict):
             else:
                 pass#print('{}={} either atomic or previously parsed'.format(key, val))
         return self
+
+
+    def coerce(self, val):
+        if isinstance(val, list):
+            return [self.coerce(val) for val in val]
+        elif isinstance(val, (int, float)):
+            return str(val)
+        return val
 
 
     def to_refine(self):
