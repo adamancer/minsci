@@ -341,6 +341,11 @@ class XMu(object):
             self.read(root, keys, result[self.module], counter)
             return result
         for child in root:
+            # Skip nodes with no populated descendants. This gets around
+            # the bad XML reported by EMu for certain empty attachments.
+            if not any([s.strip() for s in child.itertext()]):
+                continue
+            # Process nodes with populated descendants
             name = child.get('name')
             # Check for unnamed tuples, which represent rows inside a table
             if name is None:
@@ -372,7 +377,12 @@ class XMu(object):
                     # Strip double spaces
                     while '  ' in val:
                         val = val.replace('  ', ' ')
-                    result[name] = val.strip()
+                    try:
+                        result[name] = val.strip()
+                    except IndexError:
+                        # This exception catches an empty first row in
+                        # a nested table
+                        result.append(val.strip())
             else:
                 if isinstance(name, int):
                     try:
