@@ -151,12 +151,15 @@ class XMu(object):
         """
         if func is None:
             func = self.iterate
+        keep_going = True
+        n_processed = -skip
+        n_success = 0
+        if limit:
+            limit += skip
+        if skip:
+            print('Skipping the first {:,} records'.format(skip))
         if report:
             starttime = datetime.now()
-        keep_going = True
-        n_total = 0
-        n_success = 0
-        limit += skip
         for fp in self._files:
             if report:
                 cprint('Reading {}...'.format(fp))
@@ -165,8 +168,8 @@ class XMu(object):
                 # Process children of module table only
                 parent = element.getparent().get('name')
                 if parent is not None and parent.startswith('e'):
-                    n_total += 1
-                    if skip and n_total < skip:
+                    n_processed += 1
+                    if n_processed <= 0:
                         continue
                     result = func(element, **kwargs)
                     if result is False:
@@ -177,28 +180,41 @@ class XMu(object):
                     element.clear()
                     while element.getprevious() is not None:
                         del element.getparent()[0]
-                    if report and not n_total % report:
-                        now = datetime.now()
-                        elapsed = now - starttime
-                        starttime = now
-                        print(('{:,} records processed! ({:,}'
-                               ' successful, t={}s)').format(n_total,
-                                                             n_success,
-                                                             elapsed))
-                    if limit and not n_total % limit:
+                    if report:
+                        starttime = self._report(report,
+                                                 n_processed,
+                                                 n_success,
+                                                 starttime)
+                    if limit and not n_processed % limit:
+                        print('Stopped processing before end of file'
+                              ' (limit={:,} records)'.format(limit))
                         keep_going = False
                         break
             del context
             if not keep_going:
                 break
         print(('{:,} records processed!'
-               ' ({:,} successful)').format(n_total, n_success))
+               ' ({:,} successful)').format(n_processed, n_success))
         self.finalize()
         if callback is not None:
             if callback_kwargs is None:
                 callback_kwargs = {}
             callback(**callback_kwargs)
         return True
+
+
+    def _report(self, report, n_processed, n_success, starttime):
+        now = datetime.now()
+        elapsed = now - starttime
+        by_count = isinstance(report, int)
+        if not by_count:
+            report = int(report.rstrip('s'))
+        if ((by_count and not n_processed % report)
+            or (not by_count and (report - elapsed.total_seconds()) < 0)):
+                mask = '{:,} records processed! ({:,} successful, t={}s)'
+                print(mask.format(n_processed, n_success, elapsed))
+                return now
+        return starttime
 
 
     def autoiterate(self, keep=None, **kwargs):
