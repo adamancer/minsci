@@ -235,12 +235,35 @@ class Taxon(dict):
         self['gen_name'] = sorted(list(parsed.keywords))
 
 
+    def fix(self):
+        rec = {}
+        parent = self.tree[self.parent.irn] if self.parent else None
+        preferred = self.preferred()
+        if (parent
+            and not parent.name[0].isnumeric()
+            and parent.rank != 'synonym'
+            and self != preferred
+            and preferred.irn != parent.irn):
+                print('{irn}: {name}'.format(**self))
+                print('Parent:    {name} (irn={irn})'.format(**parent))
+                print('Preferred: {name} (irn={irn})'.format(**preferred))
+                print('---')
+                rec['RanParentRef'] = preferred.irn
+        if self != preferred and self.rank != 'synonym':
+            rec['ClaOtherRank_tab'] = ['synonym']
+        if rec:
+            rec['irn'] = self.irn
+            rec = XMuRecord(rec)
+            rec.module = 'etaxonomy'
+            return rec.expand()
+
+
     def preferred(self):
         preferred = self
         i = 0
         while not preferred.is_current:
             preferred = self.tree[preferred.current.irn]
-            self.parent = preferred.parent
+            #self.parent = preferred.parent
             i += 1
             if i > 100:
                 raise ValueError('Infinite loop: %s', self.name)
