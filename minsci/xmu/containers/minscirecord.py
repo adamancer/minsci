@@ -175,7 +175,7 @@ class MinSciRecord(XMuRecord):
         if kind == 'IGSN':
             args = (kind, 'CatOtherNumbersType_tab', 'CatOtherNumbersValue_tab')
         matches = self.get_matching_rows(*args)
-        if len(matches) > 1 and not allow_multiple:
+        if len(set(matches)) > 1 and not allow_multiple:
             raise Exception('Multiple values found for {}'.format(kind))
         if allow_multiple:
             return matches
