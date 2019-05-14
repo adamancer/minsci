@@ -10,9 +10,12 @@ import time
 
 import getpass
 import json
+import os
 from datetime import datetime
 
 import pymongo
+import yaml
+from pymongo import MongoClient
 from pymongo.operations import ReplaceOne, DeleteOne
 
 from .xmu import XMu, XMuRecord
@@ -23,22 +26,11 @@ class MongoBot(object):
     """Contains methods to connect and interact with NMNH MongoDB"""
 
     def __init__(self, username, password, instance=None, container=None):
+        config_file = os.path.join(__file__, '..', 'files', 'config.yaml')
+        config = yaml.safe_load(open(config_file, 'r'))['mongo']
         self.username = username
         self.password = password
-        self.instances = {
-            'production': {
-                'host': 'nmnh-rcismngo01-int,nmnh-rcismngo02-int',
-                'login_db': 'admin',
-                'db': 'cs',
-                'collections': ['catalog', 'narrative']
-                },
-            #'development': {
-            #    'host': 'nmnh-rcisdev2:27017',
-            #    'login_db': 'ms',
-            #    'db': 'ms',
-            #    'collections': ['catalog', 'narrative']
-            #    }
-        }
+        self.instances = config
         self.jsonpath = 'xmungo.json'
         self.connections = {}
         for nickname in self.instances:
@@ -51,26 +43,30 @@ class MongoBot(object):
     def connect(self, nickname):
         """Store connection to a server in a dict"""
         instance = self.instances[nickname]
-        host = instance['host']
-        login_db = instance['login_db']
-        collections = instance['collections']
-        login_server = '/'.join([host.rstrip('/'), login_db.strip('/')])
-        client = pymongo.MongoClient('mongodb://{}'.format(login_server))
+        #host = instance['host']
+        #login_db = instance['login_db']
+        ##collections = instance['collections']
+        #login_server = '/'.join([host.rstrip('/'), login_db.strip('/')])
+        #client = pymongo.MongoClient('mongodb://{}'.format(login_server))
         while True:
-            print('Connecting to {}...'.format(login_server))
-            # User credentials
             if self.password is None:
                 print('Username: ' + self.username)
                 self.password = getpass.getpass('Password: ')
+            print('Connecting to {}...'.format(instance['host']))
             try:
-                client[login_db].authenticate(self.username, self.password)
+                client = MongoClient(instance['host'],
+                                     username=self.username,
+                                     password=self.password,
+                                     authSource=instance['authSource'],
+                                     authMechanism=instance['authMechanism'])
             except (ValueError, pymongo.errors.OperationFailure):
                 print('Invalid password!')
+                self.password = None
             else:
                 break
         client_db = client[instance['db']]
         connection = {}
-        for collection in collections:
+        for collection in instance['collections']:
             connection[collection] = client_db[collection]
         self.connections[nickname] = connection
 
@@ -355,7 +351,7 @@ def mongo2xmu(doc, container):
         'CatDivision': doc.getpath('catdv'),
         'CatCatalog': doc.getpath('catct'),
         'CatCollectionName_tab': doc.getpath('catcn', []),
-        'CatSpecimenCount': str(int(doc.getpath('darin'))),
+        'CatSpecimenCount': str(int(doc.getpath('darin', 1))),
         'MinName': doc.getpath('minnm'),
         'MinJeweleryType': doc.getpath('minjt'),
         'MetMeteoriteName': doc.getpath('metnm'),
