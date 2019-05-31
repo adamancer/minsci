@@ -198,7 +198,7 @@ class DirectionParser(object):
     def parse(self, text):
         """Parses a simple directional string"""
         self.verbatim = text
-        mod1 = r'(?:about|approx(?:\.|imately)|around|collected|found|just)'
+        mod1 = r'(?:about|approx(?:\.|imately)|around|ca\.?|collected|found|just)'
         mod2 = r'(?: or so)?'
         num = r'(\d+(?:\.\d+| \d/\d)?)'
         nums = r'{0}(?: ?(?:\-|or|to) ?{0})?'.format(num)
