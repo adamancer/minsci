@@ -462,6 +462,21 @@ class Site(dict):
         return admin
 
 
+    def update_from_dict(self, dct):
+        """Updates site from a dictionary"""
+        for key, val in dct.items():
+            if key.endswith('+') or key in ['features', 'water_body']:
+                orig = getattr(self, key, val)
+                if isinstance(orig, list):
+                    setattr(self, key, orig + [val])
+                else:
+                    setattr(self, key, orig.rstrip('; ') + '; ' + val)
+            elif key in ['features', 'site_names']:
+                setattr(self, key, val)
+            else:
+                setattr(self, key, val)
+
+
     def get_radius(self, from_bounding_box=False):
         """Calculates a radius for this site"""
         if from_bounding_box:
