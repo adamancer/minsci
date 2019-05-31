@@ -51,6 +51,9 @@ class Standardizer(object):
         if self.remove_collations:
             for search, repl in self._collations.items():
                 val = val.replace(search, repl)
+        # Special handling for apostrophes to catch spellings like Hawai'i
+        val = re.sub(r"([a-z])'([a-z])", r'\1\2', val)
+        # Remove specical characters
         for char in self.remove_chars:
             val = val.replace(char, self.delim)
         # Replace abbreviations, etc. from keyword dict with standard value
