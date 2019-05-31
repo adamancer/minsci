@@ -1,3 +1,4 @@
+import pyproj
 from shapely.geometry import (
     mapping,
     Point as ShPoint,
@@ -9,9 +10,10 @@ from shapely.geometry import (
 class GeoShape(object):
     shape = None
 
-    def __init__(self, xy):
-        self.xy = xy
-        self.lat_lng = [(y, x) for x, y in xy]
+    def __init__(self, lng_lat, proj='EPSG:4326'):
+        self.proj = pyproj.Proj(init=proj)
+        self.xy = [self.proj(x, y) for x, y in lng_lat]
+        self.lat_lng = [(y, x) for x, y in lng_lat]
 
 
     def centroid(self):
@@ -23,7 +25,8 @@ class GeoShape(object):
 
 
     def hull(self):
-        hull = self.shape(self.xy).convex_hull
+        lng_lat = [(lng, lat) for lat, lng in self.lat_lng]
+        hull = self.shape(lng_lat).convex_hull
         return [(c[1], c[0]) for c in mapping(hull)['coordinates'][0]]
 
 
