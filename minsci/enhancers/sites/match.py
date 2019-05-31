@@ -3,6 +3,7 @@
 import logging
 logger = logging.getLogger(__name__)
 
+import hashlib
 import itertools
 import os
 import re
@@ -31,7 +32,49 @@ from ...helpers import oxford_comma
 Match = namedtuple('Match', ['record', 'filters', 'radius', 'matched'])
 
 
+class Hints(dict):
+
+    def __init__(self, *args, **kwargs):
+        self._dct = dict(*args, **kwargs)
+
+
+    def __getitem__(self, key):
+        dct = self._dct
+        for key in key.split('|'):
+            dct = dct[key]
+        return dct
+
+
+    def __setitem__(self, key, val):
+        dct = self._dct
+        keys = key.split('|')
+        last = keys.pop(-1)
+        for key in keys:
+            dct = dct.setdefault(key, {})
+        dct[last] = val
+        return dct
+
+
+    def __iter__(self):
+        return iter(self._dct)
+
+
+    def keyer(self, val, site, codes=None):
+        codes = '' if codes is None else '-'.join(codes)
+        parts = []
+        for part in (val, site.country_code, site.admin_code_1, codes):
+            if isinstance(part, list):
+                part = '-'.join(part)
+            val = site.std(part) if part else 'None'
+            parts.append(hashlib.md5(bytes(val, encoding='utf-8')).hexdigest())
+        return '|'.join(parts)
+
+
+
+
 class Matcher(object):
+    strip_words = ['area', 'near', 'nr']
+    hints = Hints()
 
 
     def __init__(self, site):
