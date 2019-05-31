@@ -26,12 +26,12 @@ A,ZN,FALSE,100 km,zone,
 A,ZNB,FALSE,100 km,buffer zone,a zone recognized as a buffer between two nations in which military presence is minimal or absent
 H,AIRS,TRUE,1 km,seaplane landing area,a place on a waterbody where floatplanes land and take off
 H,ANCH,FALSE,,anchorage,an area where vessels may anchor
-H,BAY,TRUE,5 km,bay,"a coastal indentation between two capes or headlands, larger than a cove but smaller than a gulf"
+H,BAY,TRUE,10 km,bay,"a coastal indentation between two capes or headlands, larger than a cove but smaller than a gulf"
 H,BAYS,FALSE,,bays,"coastal indentations between two capes or headlands, larger than a cove but smaller than a gulf"
 H,BGHT,TRUE,100 km,bight(s),an open body of water forming a slight recession in a coastline
-H,BNK,FALSE,,bank(s),"an elevation, typically located on a shelf, over which the depth of water is relatively shallow but sufficient for most surface navigation"
+H,BNK,FALSE,100 km,bank(s),"an elevation, typically located on a shelf, over which the depth of water is relatively shallow but sufficient for most surface navigation"
 H,BNKR,FALSE,,stream bank,a sloping margin of a stream channel which normally confines the stream to its channel on land
-H,BNKX,FALSE,,section of bank,
+H,BNKX,FALSE,10 km,section of bank,
 H,BOG,FALSE,,bog(s),"a wetland characterized by peat forming sphagnum moss, sedge, and other acid-water plants"
 H,CAPG,FALSE,,icecap,a dome-shaped mass of glacial ice covering an area of mountain summits or other high lands; smaller than an ice sheet
 H,CHN,TRUE,1 km,channel,"the deepest part of a stream, bay, lagoon, or strait, through which the main current flows"
@@ -60,7 +60,7 @@ H,DTCH,FALSE,,ditch,a small artificial watercourse dug for draining or irrigatin
 H,DTCHD,FALSE,,drainage ditch,a ditch which serves to drain the land
 H,DTCHI,FALSE,,irrigation ditch,a ditch which serves to distribute irrigation water
 H,DTCHM,FALSE,,ditch mouth(s),"an area where a drainage ditch enters a lagoon, lake or bay"
-H,ESTY,FALSE,,estuary,a funnel-shaped stream mouth or embayment where fresh water mixes with sea water under tidal influences
+H,ESTY,FALSE,10 km,estuary,a funnel-shaped stream mouth or embayment where fresh water mixes with sea water under tidal influences
 H,FISH,FALSE,,fishing area,"a fishing ground, bank or area where fishermen go to catch fish"
 H,FJD,TRUE,10 km,fjord,"a long, narrow, steep-walled, deep-water arm of the sea at high latitudes, usually along mountainous coasts"
 H,FJDS,FALSE,,fjords,"long, narrow, steep-walled, deep-water arms of the sea at high latitudes, usually along mountainous coasts"
@@ -98,17 +98,17 @@ H,MGV,FALSE,,mangrove swamp,a tropical tidal mud flat characterized by mangrove 
 H,MOOR,FALSE,10 km,moor(s),an area of open ground overlaid with wet peaty soils
 H,MRSH,TRUE,10 km,marsh(es),a wetland dominated by grass-like vegetation
 H,MRSHN,FALSE,,salt marsh,"a flat area, subject to periodic salt water inundation, dominated by grassy salt-tolerant plants"
-H,NRWS,FALSE,,narrows,"a navigable narrow part of a bay, strait, river, etc."
+H,NRWS,FALSE,10 km,narrows,"a navigable narrow part of a bay, strait, river, etc."
 H,OCN,TRUE,10000 km,ocean,one of the major divisions of the vast expanse of salt water covering part of the earth
 H,OVF,TRUE,1 km,overfalls,an area of breaking waves caused by the meeting of currents or by waves moving against the current
 H,PND,TRUE,1 km,pond,a small standing waterbody
-H,PNDI,FALSE,,intermittent pond,
-H,PNDN,FALSE,,salt pond,"a small standing body of salt water often in a marsh or swamp, usually along a seacoast"
-H,PNDNI,FALSE,,intermittent salt pond(s),
+H,PNDI,FALSE,1 km,intermittent pond,
+H,PNDN,FALSE,1 km,salt pond,"a small standing body of salt water often in a marsh or swamp, usually along a seacoast"
+H,PNDNI,FALSE,5 km,intermittent salt pond(s),
 H,PNDS,FALSE,5 km,ponds,small standing waterbodies
 H,PNDSF,FALSE,1 km,fishponds,ponds or enclosures in which fish are kept or raised
-H,PNDSI,FALSE,,intermittent ponds,
-H,PNDSN,FALSE,,salt ponds,"small standing bodies of salt water often in a marsh or swamp, usually along a seacoast"
+H,PNDSI,FALSE,1 km,intermittent ponds,
+H,PNDSN,FALSE,5 km,salt ponds,"small standing bodies of salt water often in a marsh or swamp, usually along a seacoast"
 H,POOL,FALSE,1 km,pool(s),"a small and comparatively still, deep part of a larger body of water such as a stream or harbor; or a small body of standing water"
 H,POOLI,FALSE,1 km,intermittent pool,
 H,RCH,FALSE,,reach,a straight section of a navigable stream or channel between two bends
@@ -130,18 +130,18 @@ H,SILL,FALSE,,sill,"the low part of an underwater gap or saddle separating basin
 H,SPNG,TRUE,1 km,spring(s),a place where ground water flows naturally out of the ground
 H,SPNS,FALSE,,sulphur spring(s),a place where sulphur ground water flows naturally out of the ground
 H,SPNT,FALSE,,hot spring(s),a place where hot ground water flows naturally out of the ground
-H,STM,TRUE,5 km,stream,a body of running water moving to a lower level in a channel on land
+H,STM,TRUE,50 km,stream,a body of running water moving to a lower level in a channel on land
 H,STMA,FALSE,,anabranch,a diverging branch flowing out of a main stream and rejoining it downstream
 H,STMB,FALSE,1 km,stream bend,a conspicuously curved or bent segment of a stream
-H,STMC,FALSE,5 km,canalized stream,"a stream that has been substantially ditched, diked, or straightened"
+H,STMC,FALSE,10 km,canalized stream,"a stream that has been substantially ditched, diked, or straightened"
 H,STMD,FALSE,1 km,distributary(-ies),"a branch which flows away from the main stream, as in a delta or irrigation canal"
-H,STMH,FALSE,5 km,headwaters,"the source and upper part of a stream, including the upper drainage basin"
-H,STMI,TRUE,5 km,intermittent stream,
-H,STMIX,FALSE,,section of intermittent stream,
-H,STMM,FALSE,1 km,stream mouth(s),"a place where a stream discharges into a lagoon, lake, or the sea"
+H,STMH,FALSE,10 km,headwaters,"the source and upper part of a stream, including the upper drainage basin"
+H,STMI,TRUE,10 km,intermittent stream,
+H,STMIX,FALSE,1 km,section of intermittent stream,
+H,STMM,FALSE,5 km,stream mouth(s),"a place where a stream discharges into a lagoon, lake, or the sea"
 H,STMQ,FALSE,,abandoned watercourse,"a former stream or distributary no longer carrying flowing water, but still evident due to lakes, wetland, topographic or vegetation patterns"
-H,STMS,TRUE,5 km,streams,bodies of running water moving to a lower level in a channel on land
-H,STMSB,FALSE,5 km,lost river,"a surface stream that disappears into an underground channel, or dries up in an arid area"
+H,STMS,TRUE,100 km,streams,bodies of running water moving to a lower level in a channel on land
+H,STMSB,FALSE,50 km,lost river,"a surface stream that disappears into an underground channel, or dries up in an arid area"
 H,STMX,FALSE,1 km,section of stream,
 H,STRT,TRUE,10 km,strait,"a relatively narrow waterway, usually narrower and less extensive than a sound, connecting two larger bodies of water"
 H,SWMP,TRUE,10 km,swamp,a wetland dominated by tree vegetation
@@ -169,11 +169,11 @@ L,BSNP,FALSE,,petroleum basin,an area underlain by an oil-rich structural basin
 L,BTL,FALSE,,battlefield,a site of a land battle of historical importance
 L,CLG,FALSE,,clearing,an area in a forest with trees removed
 L,CMN,FALSE,,common,a park or pasture for community use
-L,CNS,FALSE,,concession area,"a lease of land by a government for economic development, e.g., mining, forestry"
+L,CNS,FALSE,10 km,concession area,"a lease of land by a government for economic development, e.g., mining, forestry"
 L,COLF,FALSE,,coalfield,a region in which coal deposits of possible economic value occur
 L,CONT,TRUE,10000 km,continent,"continent: Europe, Africa, Asia, North America, South America, Oceania, Antarctica"
 L,CST,TRUE,100 km,coast,a zone of variable width straddling the shoreline
-L,CTRB,FALSE,,business center,a place where a number of businesses are located
+L,CTRB,FALSE,1 km,business center,a place where a number of businesses are located
 L,DEVH,FALSE,,housing development,a tract of land on which many houses of similar design are built according to a development plan
 L,FLD,TRUE,10 km,field(s),an open as opposed to wooded area
 L,FLDI,FALSE,,irrigated field(s),a tract of level or terraced land which is irrigated
@@ -194,13 +194,13 @@ L,PRK,TRUE,50 km,park,"an area, often of forested land, maintained as a place of
 L,PRT,FALSE,5 km,port,"a place provided with terminal and transfer facilities for loading and discharging waterborne cargo or passengers, usually located in a harbor"
 L,QCKS,FALSE,,quicksand,"an area where loose sand with water moving through it may become unstable when heavy objects are placed at the surface, causing them to sink"
 L,RES,TRUE,10 km,reserve,a tract of public land reserved for future use or restricted as to use
-L,RESA,FALSE,,agricultural reserve,a tract of land reserved for agricultural reclamation and/or development
+L,RESA,FALSE,50 km,agricultural reserve,a tract of land reserved for agricultural reclamation and/or development
 L,RESF,FALSE,50 km,forest reserve,a forested area set aside for preservation or controlled use
-L,RESH,FALSE,,hunting reserve,a tract of land used primarily for hunting
-L,RESN,FALSE,,nature reserve,an area reserved for the maintenance of a natural habitat
-L,RESP,FALSE,,palm tree reserve,an area of palm trees where use is controlled
-L,RESV,FALSE,,reservation,"a tract of land set aside for aboriginal, tribal, or native populations"
-L,RESW,FALSE,,wildlife reserve,a tract of public land reserved for the preservation of wildlife
+L,RESH,FALSE,50 km,hunting reserve,a tract of land used primarily for hunting
+L,RESN,FALSE,50 km,nature reserve,an area reserved for the maintenance of a natural habitat
+L,RESP,FALSE,50 km,palm tree reserve,an area of palm trees where use is controlled
+L,RESV,FALSE,50 km,reservation,"a tract of land set aside for aboriginal, tribal, or native populations"
+L,RESW,FALSE,50 km,wildlife reserve,a tract of public land reserved for the preservation of wildlife
 L,RGN,TRUE,100 km,region,an area distinguished by one or more observable physical or cultural characteristics
 L,RGNE,FALSE,100 km,economic region,a region of a country established for economic development or for statistical purposes
 L,RGNH,FALSE,100 km,historical region,a former historic area distinguished by one or more observable physical or cultural characteristics
@@ -527,7 +527,7 @@ T,GRGE,TRUE,1 km,gorge(s),"a short, narrow, steep-sided section of a stream vall
 T,HDLD,TRUE,10 km,headland,a high projection of land extending into a large body of water beyond the line of the coast
 T,HLL,TRUE,10 km,hill,a rounded elevation of limited extent rising above the surrounding land with local relief of less than 300m
 T,HLLS,TRUE,10 km,hills,rounded elevations of limited extent rising above the surrounding land with local relief of less than 300m
-T,HMCK,FALSE,,hammock(s),"a patch of ground, distinct from and slightly above the surrounding plain or wetland. Often occurs in groups"
+T,HMCK,FALSE,5 km,hammock(s),"a patch of ground, distinct from and slightly above the surrounding plain or wetland. Often occurs in groups"
 T,HMDA,TRUE,100 km,rock desert,"a relatively sand-free, high bedrock plateau in a hot desert, with or without a gravel veneer"
 T,INTF,FALSE,,interfluve,a relatively undissected upland between adjacent stream valleys
 T,ISL,TRUE,50 km,island,"a tract of land, smaller than a continent, surrounded by water at high water"
@@ -538,7 +538,7 @@ T,ISLS,TRUE,1000 km,islands,"tracts of land, smaller than a continent, surrounde
 T,ISLT,FALSE,50 km,land-tied island,"a coastal island connected to the mainland by barrier beaches, levees or dikes"
 T,ISLX,FALSE,10 km,section of island,
 T,ISTH,FALSE,5 km,isthmus,a narrow strip of land connecting two larger land masses and bordered by water
-T,KRST,FALSE,,karst area,"a distinctive landscape developed on soluble rock such as limestone characterized by sinkholes, caves, disappearing streams, and underground drainage"
+T,KRST,FALSE,10 km,karst area,"a distinctive landscape developed on soluble rock such as limestone characterized by sinkholes, caves, disappearing streams, and underground drainage"
 T,LAVA,FALSE,5 km,lava area,an area of solidified lava
 T,LEV,FALSE,,levee,a natural low embankment bordering a distributary or meandering stream; often built up artificially to control floods
 T,MESA,FALSE,5 km,mesa(s),"a flat-topped, isolated elevation with steep slopes on all sides, less extensive than a plateau"
