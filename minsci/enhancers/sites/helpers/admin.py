@@ -87,6 +87,8 @@ def _read_current():
     fp = os.path.join(FILES, 'current.json')
     try:
         current = json.load(open(fp, 'r', encoding='utf-8'))
+    except json.decoder.JSONDecodeError as e:
+        raise
     except IOError:
         current = {}
     print('Loaded current!')
@@ -96,10 +98,22 @@ def _read_current():
 def _save_current(current):
     """Updates the current names lookup"""
     fp = os.path.join(FILES, 'current.json')
-    json.dump(current,
+    json.dump(_remove_empty_keys(current, n=2),
               open(fp, 'w', encoding='utf-8'),
               indent=2,
-              sort_keys=True)
+              sort_keys=True,
+              ensure_ascii=False)
+
+
+def _remove_empty_keys(dct, n=1):
+    for i in range(n):
+        for key in list(dct.keys()):
+            if isinstance(dct[key], dict):
+                if not dct[key]:
+                    del dct[key]
+                else:
+                    _remove_empty_keys(dct[key])
+    return dct
 
 
 
@@ -144,6 +158,9 @@ class AdminParser(object):
                 self.__class__._admin_divs = _read_admin_divs()
             except IOError:
                 self.__class__._admin_divs = _read_admin_divs(standardize=True)
+        if isinstance(term, list):
+            return [self.get_admin_div(t, level, country, search_name, suffixes)
+                    for t in term]
         term_ = self._std(term)
         try:
             country_code = self.get_country_code(country)
@@ -206,10 +223,15 @@ class AdminParser(object):
             except KeyError:
                 lookup[key] = {}
                 lookup = lookup[key]
+            except TypeError:
+                raise ValueError('Multiple states given')
         # Map archaic to current terms
         try:
             current = lookup.get(self._std(val), val)
-            code = callback(current, *args, **kwargs) if current else None
+            code = None
+            if current and not isinstance(current, dict):
+                code = callback(current, *args, **kwargs)
+                logger.debug('Mapped "{}" to {}'.format(val, code))
         except ValueError:
             try:
                 lookup[self._std.strip_word(self._std(val), 'ca')]
@@ -238,5 +260,4 @@ class AdminParser(object):
         else:
             if not current:
                 raise ValueError('Unknown #4 {}: {}'.format(ergs, val))
-            logger.debug('Mapped "{}" to {}'.format(val, code))
             return current, code
