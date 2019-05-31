@@ -399,14 +399,18 @@ class Matcher(object):
         matched = []
         for match in matches:
             fcodes.append(match.site_kind)
-            radius = self.codes[match.site_kind]['SizeIndex']
+            #radius = self.codes[match.site_kind]['SizeIndex']
+            radius = self.get_radius(match)
             matches_.append(Match(match, matches.filters(), radius, name))
             matched.append(name)
-        max_size = 1e8  # arbitrarilty large value
+        max_size = 1e8  # arbitrarily large value
         if fcodes:
             self._check_fcodes(fcodes)
             max_size = self.max_size(fcodes)
-        return matches_, matched, max_size
+        # Save result to the hints dictionary before returning it
+        result = matches_, matched, max_size
+        self.hints[self.hints.keyer(name, self.site, hintcodes)] = result
+        return result
 
 
     def finalize_match(self, matches, threshold, terms, matched):
@@ -692,7 +696,11 @@ class Matcher(object):
         return match.record.latitude, match.record.longitude
 
 
-    def get_radius(self, match):
+    def get_radius(self, site):
+        """Calculates the radius for the given match or site"""
+        # Extract the site from the record attribute of a Match object
+        if hasattr(site, 'record'):
+            site = site.record
         # Certain feature codes should calculate the radius from the bounding
         # box (countries, states, countries, etc.)
         self.radius_from_bbox = False
@@ -709,16 +717,16 @@ class Matcher(object):
             codes.extend(self.config['codes'][key])
         codes = [c for c in codes if not re.search(r'ADM[45]', c)]
         # Determine which radius to use
-        radius_from_code = self.codes[match.record.site_kind]['SizeIndex']
+        radius_from_code = self.codes[site.site_kind]['SizeIndex']
         try:
-            radius = match.record.get_radius(from_bounding_box=True)
-        except ValueError:
+            radius = site.get_radius(from_bounding_box=True)
+        except ValueError as e:
             pass
         else:
-            if match.record.site_kind in codes or radius > radius_from_code:
+            if site.site_kind in codes or radius > radius_from_code:
                 self.radius_from_bbox = True
                 return radius
-        return self.codes[match.record.site_kind]['SizeIndex']
+        return self.codes[site.site_kind]['SizeIndex']
 
 
     def encircle(self, matches):
