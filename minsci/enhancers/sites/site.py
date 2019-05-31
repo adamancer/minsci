@@ -385,7 +385,24 @@ class Site(dict):
 
 
     def from_dwc(self, rec):
-        raise AttributeError('from_dwc method not implemeneted')
+        """Constructs a site from a Simple Darwin Core record"""
+        for key, val in rec.items():
+            key = re.sub('([A-Z]+)', r'_\1', key).lower() \
+                    .replace('decimal', '') \
+                    .strip('_')
+            if key not in self._attributes:
+                pass
+            setattr(self, key, val)
+        self.location_id = rec['occurrenceID'].split('/')[-1]
+        try:
+            self.latitude = float(self.latitude)
+            self.longitude = float(self.longitude)
+        except (TypeError, ValueError):
+            pass
+        self.bbox = []
+        self.fill()
+        self.classification = self.classify()
+        self._check_attributes()
 
 
     def from_site(self, rec):
