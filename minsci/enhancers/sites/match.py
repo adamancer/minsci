@@ -13,6 +13,7 @@ from shapely.geometry import Polygon
 
 from .helpers import (
     Kml,
+    SectionTownshipRange,
     encircle,
     get_centroid,
     get_circle,
@@ -81,19 +82,57 @@ class Matcher(object):
         fields = self.config['ordered']
         if force_field is not None:
             fields = [force_field]
-        # First look for directions
+        # Check US records for PLSS coordinates
+        plss_strings = []
+        if self.site.country_code == 'US' and self.site.admin_code_1:
+            for field in fields:
+                val = getattr(self.site, field)
+                states = self.site.admin_code_1
+                if not isinstance(states, list):
+                    states = [states]
+                for state in states:
+                    try:
+                        plss = SectionTownshipRange(val, state)
+                    except (ValueError, TypeError):
+                        pass
+                    else:
+                        # PLSS coordinates are highly specifc, so stop here
+                        sites = plss.sites(self.site)
+                        if sites:
+                            match = Match(sites[-1], {},
+                                          plss.get_radius(),
+                                          None)
+                            self.finalize_match([match], -1, [], [])
+                            polygon = plss.get_coords(dec_places=None)
+                            self.latitude = [c[0] for c in polygon]
+                            self.longitude = [c[1] for c in polygon]
+                            self.radius = match.radius
+                            self.explanation = plss.describe()
+                            sites[-1].directions_from = sites[:-1]
+                            return self
+                        else:
+                            term = '"{}"'.format(plss.verbatim.strip('" '))
+                            terms.append(term)
+                            plss_strings.append(plss.verbatim)
+        # Check for directions (10 km W of Washington)
         for field in fields:
             val = getattr(self.site, field)
+            # Remove PLSS strings
+            for verbatim in plss_strings:
+                try:
+                    val = val.replace(verbatim, '').strip()
+                except AttributeError:
+                    val = [s.replace(verbatim, '').strip() for s in val]
             names = [n for n in self.get_names(val) if is_directions(n)]
             for name in names:
                 logger.debug('Checking for directions in "{}"'.format(name))
-                terms.append(name)
                 try:
                     parse_directions(name)
                 except ValueError:
                     pass
                 else:
                     logger.debug('Matching {}={}...'.format(field, name))
+                    terms.append('"{}"'.format(name.strip('" ')))
                     match = self.match_one(name, field, **kwargs)
                     matches_, matched_, max_size = match
                     matches.extend(matches_)
@@ -108,6 +147,12 @@ class Matcher(object):
         # Now look for simple (ha) place names
         for field in fields:
             val = getattr(self.site, field)
+            # Remove PLSS strings
+            for verbatim in plss_strings:
+                try:
+                    val = val.replace(verbatim, '').strip()
+                except AttributeError:
+                    val = [s.replace(verbatim, '').strip() for s in val]
             names = [n for n in self.get_names(val) if not is_directions(n)]
             # If this is the first populated value, set the threshold
             # for size. Additional place names must be at least as

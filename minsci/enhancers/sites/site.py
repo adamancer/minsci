@@ -18,6 +18,7 @@ from titlecase import titlecase
 from .helpers import (
     AdminParser,
     DirectionParser,
+    PLSSParser,
     get_circle,
     get_distance,
     get_point,
@@ -290,6 +291,23 @@ class Site(dict):
                     }
                 except ValueError:
                     pass
+        # Map section-township-range to locality
+        labels = [s.lower() for s in rec('MapOtherKind_tab')]
+        if 'section' in labels and 'township range' in labels:
+            # Check if locality already has a PLSS string
+            try:
+                parsed = PLSSParser().parse(self.locality)
+            except ValueError:
+                parsed = None
+            if parsed is None:
+                labels = [lbl.split(' ')[0] for lbl in labels]
+                rows = zip(labels, rec('MapOtherCoordA_tab'))
+                plss = {lbl: val for lbl, val in rows}
+                rows = zip(labels, rec('MapOtherCoordB_tab'))
+                plss['range'] = {lbl: val for lbl, val in rows}['township']
+                mask = '{quarter} Sec. {section} {township} {range}'
+                div = mask.format(**plss)
+                self.locality = '{}; {}'.format(self.locality.rstrip('; '), div)
         # Map to additional fields
         self.mine = rec('LocMineName')
         self.mining_district = rec('LocMiningDistrict')
