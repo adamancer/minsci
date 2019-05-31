@@ -503,6 +503,14 @@ class Site(dict):
 
     def get_radius(self, from_bounding_box=False):
         """Calculates a radius for this site"""
+        # Check if site a feature code that can be used to estiamte the radius.
+        # Force a check of the bounding box if not.
+        try:
+            radius = self.codes[self.site_kind]['SizeIndex']
+        except KeyError:
+            from_bounding_box = True
+            radius = 25
+        # Get the center-to-corner distance of the bounding box
         if from_bounding_box:
             try:
                 diameter = get_distance(self.bbox['north'], self.bbox['west'],
@@ -510,11 +518,8 @@ class Site(dict):
             except (AttributeError, KeyError, TypeError, ValueError):
                 pass
             else:
-                return diameter / 2
-        try:
-            return self.codes[self.site_kind]['SizeIndex']
-        except KeyError:
-            return 10
+                radius = diameter / 2
+        return radius
 
 
     def most_specific_feature(self):
