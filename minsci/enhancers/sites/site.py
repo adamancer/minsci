@@ -97,8 +97,6 @@ class Site(dict):
             self.from_geonames(data)
         elif 'recordNumber' in data:
             self.from_dwc(data)
-        #elif 'properties' in data:
-        #    self.from_geolocate(data, **kwargs)
         else:
             self.from_site(data)
 
@@ -158,15 +156,16 @@ class Site(dict):
                 else:
                     if not this:
                         setattr(site, attr, getattr(self, attr))
+        site.fill()
         # If basic info is populated and the cloned site includes admin
         # codes, regenerate those here
-        try:
-            self.admin_div_1
-        except AttributeError:
-            pass
-        else:
-            site.get_admin_codes()
-        site.fill()
+        if data or copy_missing_fields:
+            try:
+                self.admin_div_1
+            except AttributeError:
+                pass
+            else:
+                site.get_admin_codes()
         return site
 
 
@@ -546,7 +545,7 @@ class Site(dict):
             (self.bbox['south'], self.bbox['east']),
             (self.bbox['south'], self.bbox['west']),
             (self.bbox['north'], self.bbox['west']),
-            (self.bbox['north'], self.bbox['east']),
+            (self.bbox['north'], self.bbox['east'])
         ]
         # Reverse order for XY plotting (e.g., for Shapely)
         if for_plot:

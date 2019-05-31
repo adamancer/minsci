@@ -77,6 +77,7 @@ class Kml(object):
             if hasattr(site, 'record'):
                 site = site.record
                 site.radius = radius
+            #print(style, radius)
             placemark = etree.SubElement(self.doc, 'Placemark')
             # Add name to placemark
             name_ = etree.SubElement(placemark, 'name')
@@ -103,7 +104,7 @@ class Kml(object):
                         try:
                             val = mask.format(float(getattr(site, attr)))
                         except ValueError:
-                            pass
+                            continue
                     if attr == 'radius':
                         val += ' km'
                     html.append('<strong>{}:</strong> {}'.format(attr.title(),
@@ -156,7 +157,8 @@ class Kml(object):
         extrude.text = '1'
         altitude_mode.text = 'relativeToGround'
         points = get_circle(site.latitude, site.longitude, radius)
-        coordinates.text = ' '.join(['{},{}'.format(*pt[::-1]) for pt in points])
+        coordinates.text = ' '.join(['{},{}'.format(*pt[::-1])
+                                     for pt in points])
         return self
 
 
