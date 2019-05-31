@@ -104,14 +104,16 @@ class Matcher(object):
 
 
     def get_names(self, names):
+        """Splits a name string on common delimiters to get a list of names"""
         if not isinstance(names, list):
             try:
                 parse_directions(names)
             except ValueError:
-                names = [s.strip() for s in re.split('[,;]', names)]
+                names = [s.strip() for s in re.split('[,;:|]', names)]
             else:
                 names = [names]
-        return [n for n in names if n.strip()]
+        names = [n for n in names if n.strip()]
+        return names
 
 
     def match(self, force_field=None, force_codes=None, **kwargs):
@@ -211,13 +213,13 @@ class Matcher(object):
                 logger.debug('Rejected {} for matching'
                              ' (less specific)'.format(field))
                 continue
-            elif terms and field in ['county',
+            elif terms and field in [#'county',
                                      'state_province',
                                      'country',
                                      'ocean',
                                      'continent']:
-                logger.debug('Rejected {} for matching (county and'
-                             ' larger ignored if terms found'
+                logger.debug('Rejected {} for matching (admin divisions'
+                             ' and oceans ignored if terms found'
                              ' elsewhere)'.format(field))
                 continue
             # Reset codes to defaults if using field-based featureCodes
@@ -225,6 +227,10 @@ class Matcher(object):
                 fcodes = None
             # Iterate through all names stored under this attribute
             for name in names:
+                # Filter values that match country
+                if (field != 'country'
+                    and self.std(name) == self.std(self.site.country)):
+                        continue
                 logger.debug('Matching {}={}...'.format(field, name))
                 terms.append(name)
                 match = self.match_one(name, field, fcodes,**kwargs)
@@ -430,7 +436,7 @@ class Matcher(object):
                    ' matching {} (n={}).')
         else:
             stname = self.std(name).replace('-', ' ')
-            stname = self.std.strip_words(name, ['area', 'near', 'nr'])
+            stname = self.std.strip_words(name, self.strip_words)
             logger.debug('Standardized "{}"'
                          ' to "{}"'.format(name, stname))
             # Search GeoNames for matching records
@@ -507,15 +513,16 @@ class Matcher(object):
         self.terms = sorted(list(set(terms)))
         self.matched = sorted(list(set(matched)))
         self.missed = sorted(list(set(terms) - set(matched)))
-        if self.matches:
-            self._validate()
-        if len(self.matches) == 1:
-            self.latitude, self.longitude = self.get_coords(matches[0])
-            self.radius = self.get_radius(matches[0])
-        elif len(self.matches) > 1:
-            self.encompass()
-        else:
-            raise ValueError('No match found')
+        if self.threshold > 0:
+            if self.matches:
+                self._validate()
+            if len(self.matches) == 1:
+                self.latitude, self.longitude = self.get_coords(matches[0])
+                self.radius = self.get_radius(matches[0])
+            elif len(self.matches) > 1:
+                self.encompass()
+            else:
+                raise ValueError('No match found')
         return self
 
 
@@ -524,10 +531,12 @@ class Matcher(object):
         if matches is None:
             matches = self.matches
         matched = set(self.group_by_term(matches).keys())
-        for term in self.matched:
+        for term in self.matched[:]:
             if term not in matched:
-                self.terms.remove(term)
-                self.matched.remove(term)
+                while term in self.terms:
+                    self.terms.remove(term)
+                while term in self.matched:
+                    self.matched.remove(term)
 
 
     def encompass(self, max_distance_km=100, high_grade=True):
@@ -556,7 +565,8 @@ class Matcher(object):
                             ' and kept the less specific one'
                             ' (featureCode={4})')
                     matches = [admin]
-                elif site.record.site_kind == '_DIRS':
+                #elif site.record.site_kind == '_DIRS':
+                elif len(matches) == 2:
                     logger.debug('Sites are parent-child')
                     mask = ('determined that this locality is {2}'
                             ' {3} (featureCode={4}), another feature mentioned'
@@ -668,8 +678,6 @@ class Matcher(object):
 
     def high_grade(self):
         """Identifies the most specific matches if multiple names matched"""
-        # Directions supersede otherwise more precise localities
-
         # Identify sites that matched uniquely
         grouped = self.group_by_term()
         matches = []
@@ -796,6 +804,7 @@ class Matcher(object):
             'continent',
             'country',
             'state_province',
+            'island_group',
             'county',
             'island'
             ]
@@ -1015,9 +1024,9 @@ class Matcher(object):
         nums = [[m.record.site_num for m in g] for g in groups]
         indexes = []
         for i, grp in enumerate(nums):
-            if len(grp) != len(set(grp)):
+            if len(grp) != len(set(grp)) or grp in nums[:i]:
                 indexes.append(i)
-        for i in indexes[::-1]:
+        for i in sorted(indexes)[::-1]:
             del groups[i]
         # Log combinations
         if groups:
@@ -1042,7 +1051,7 @@ class Matcher(object):
         # Check if any of the matched terms include "near"
         matched = [self.std(m) for m in self.matched]
         near = [m for m in matched
-                if m != self.std.strip_words(m, ['near', 'nr'])]
+                if m != self.std.strip_words(m, self.strip_words)]
         if near:
             return False
         max_size = self.max_size([m.record.site_kind for m in matches])
@@ -1133,6 +1142,7 @@ class Matcher(object):
                 'latitude': lat,
                 'longitude': lng
             })
+            site.radius = 0
             kml.add_site(site,
                          style='#measured',
                          name='{}, {}'.format(lat, lng),
@@ -1152,7 +1162,9 @@ class Matcher(object):
         """Describes how the coordinates and error radius were determined"""
         if not (self.latitude and self.longitude):
             raise ValueError('No match found')
-        if len(self.matches) == 1:
+        if self.threshold < 0:
+            description = self.describe_custom()
+        elif len(self.matches) == 1:
             description = self.describe_one()
         elif self.count == 1:
             description = self.describe_one_name()
@@ -1160,6 +1172,11 @@ class Matcher(object):
             description = self.describe_multiple_names()
         logger.info('Description: {}'.format(description))
         return description
+
+
+    def describe_custom(self):
+        """Describes match to a source other than GeoNames"""
+        return self.explanation
 
 
     def describe_one(self, match=None):
@@ -1333,7 +1350,7 @@ class Matcher(object):
                     ' information available in this record. ')
         # Check for terms that could not be matched
         names = list(set(self.terms) - set(self.matched))
-        names = ['"{}"'.format(n) if is_directions(n) else n for n in names]
+        #names = ['"{}"'.format(n) if is_directions(n) else n for n in names]
         if names:
             info = {
                 'names': oxford_comma([n.strip('. ') for n in names]),
@@ -1364,10 +1381,12 @@ class Matcher(object):
                     ' feature{sn} and {was} ignored when determining'
                     ' coordinates given here. ').format(**info)
         # Check for sites that match multiple localities
-        terms = set([self.std.strip_words(self.std(t), ['near', 'nr'])
+        terms = set([self.std.strip_words(self.std(t), self.strip_words)
                      for t in self.terms])
-        matched = set([self.std.strip_words(self.std(t), ['near', 'nr'])
+        matched = set([self.std.strip_words(self.std(t), self.strip_words)
                        for t in self.matched])
+        grouped = set([self.std.strip_words(self.std(t), self.strip_words)
+                       for t in grouped])
         one_name = len(terms) == len(matched) == len(grouped) == 1
         if one_name and len(self.matches) > 1:
             return ('This was the most specific place name found'
@@ -1396,7 +1415,8 @@ class Matcher(object):
             'terms_set': terms,
             'matched': self.matched,
             'matched_set': matched,
-            'grouped': grouped.keys()
+            'grouped': self.group_by_term().keys(),
+            'grouped_set': grouped
         }
         raise ValueError('Could not determine specificity: {}'.format(criteria))
 
