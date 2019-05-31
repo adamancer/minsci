@@ -818,18 +818,58 @@ class Matcher(object):
         return codes
 
 
+    def is_related_to(self, m1, m2=None, swap_order=True):
+        related = self.get_related(m1, m2, swap_order=swap_order)
+        if len(related) > 1:
+            # Check for a parent-child relationship
+            parent_child = [rel for rel in related if rel[2]]
+            if len(parent_child) == 1:
+                return parent_child[0]
+            # If all children the same, pick one--the specifics aren't important
+            children = [r[0].record.location_id for r in parent_child]
+            if len(set(children)) == 1:
+                return parent_child[0]
+            # If all the same parent, identify largest child
+            parents = [r[1].record.location_id for r in parent_child]
+            if len(set(parents)) == 1:
+                radii = [r[0].radius for r in parent_child]
+                largest = [r for r in parent_child if r[0].radius == max(radii)]
+                if len(largest) == 1:
+                    return largest[0]
+            # Identify the smallest parent
+            radii = [r[1].radius for r in parent_child]
+            smallest = [r for r in parent_child if r[1].radius == min(radii)]
+            if len(smallest) == 1:
+                return smallest[0]
+            # If all the same parent, identify largest child
+            parents = [r[1].record.location_id for r in parent_child]
+            if len(set(parents)) == 1:
+                radii = [r[0].radius for r in parent_child]
+                largest = [r for r in parent_child if r[0].radius == max(radii)]
+                if len(largest) == 1:
+                    return largest[0]
+            # Give up
+            return None
+        return related[0] if len(related) == 1 else None
 
-    def is_related_to(self, m1, m2=None, swap_on_failure=True):
+
+
+    def get_related(self, m1, m2=None, swap_order=True):
         """Checks if any match is contained by any other match"""
+        related = []
         if m2 is None:
             m2 = m1[1:]
             m1 = m1[:1]
         admins = [m for m in m2
-                  if m.record.site_kind.startswith('ADM') or m.record.polygon()]
+                  if (m.record.site_kind.startswith('ADM')
+                      or m.record.polygon())]
         if admins:
             for site, admin in self.find_combinations([m1, admins]):
                 if admin.record.contains(site.record):
-                    return site, admin, True
+                    related.append([site, admin, True])
+                    continue
+                # Check if the lat-long of the site falls into the radius/box
+                # of the admin
                 try:
                     lat = float(site.record.latitude)
                     lng = float(site.record.longitude)
@@ -837,20 +877,21 @@ class Matcher(object):
                     pass
                 else:
                     if admin.record.contains(lat=lat, lng=lng):
-                        return site, admin, True
-        if swap_on_failure:
-            return self.is_related_to(m2, m1, False)
+                        related.append([site, admin, True])
+        if swap_order:
+            related.extend(self.get_related(m2, m1, False))
         # If neither site contains the other, check if they are close together
-        for site, admin in self.find_combinations([m1, admins]):
-            if admin.record.is_close_to(site.record):
-                # Check that the sites are ordered correctly. The
-                # comparison here relies on the ordering of the ADM
-                # fields in GeoNames.
-                if (not admin.record.site_kind.startswith('ADM')
-                    or (admin.record.site_kind < site.record.site_kind)):
-                        site, admin = admin, site
-                return site, admin, False
-        return None
+        if not related:
+            for site, admin in self.find_combinations([m1, admins]):
+                if admin.record.is_close_to(site.record):
+                    # Check that the sites are ordered correctly. The
+                    # comparison here relies on the ordering of the ADM
+                    # fields in GeoNames.
+                    if (not admin.record.site_kind.startswith('ADM')
+                        or (admin.record.site_kind < site.record.site_kind)):
+                            site, admin = admin, site
+                    related.append([site, admin, False])
+        return related
 
 
     def group_by_term(self, matches=None):
