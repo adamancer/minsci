@@ -738,22 +738,27 @@ class Site(dict):
         """Checks if this site contains another site or point"""
         # FIXME: This will fail on the international dateline
         assert other or (lat and lng)
+        result = False
         # If this is an admin div, compare its name to the other site
         if other and self.site_kind.startswith(('ADM', 'PCL')):
             # Look for the official names of the state and county
             names = set(self.site_names + self.synonyms)
-            admin = set([other.country, other.state_province, other.county])
-            if names & admin:
-                return True
-            # Special handling for ADM1 and ADM2
-            if (self.site_kind == 'ADM1'
-                and self.state_province == other.state_province):
-                   return True
-            elif self.site_kind == 'ADM2' and self.county == other.county:
-                return True
+            #admin = set([other.country, other.state_province, other.county])
+            #if names & admin:
+            #    result = True
+            if (self.site_kind.startswith('PCL')
+                and other.country in names):
+                    result = True
+            elif (self.site_kind == 'ADM1'
+                and other.state_province in names):
+                    result = True
+            elif (self.site_kind == 'ADM2'
+                  and other.county in names):
+                    result = True
         # Check if the other site falls within this site's uncertainty
         polygon = self.polygon(dec_places=None, for_plot=True)
-        if (not polygon
+        if (not result
+            and not polygon
             and (check_radius
                  or self.site_kind.startswith(('ADM', 'PCL')))):
             radius = self.get_radius()
@@ -762,7 +767,7 @@ class Site(dict):
             polygon = [(lng_, lat_) for lat_, lng_ in circle]
         # Check if the other site falls within this site's bounding box. We
         # don't need to worry about whether the site is an admin div here.
-        if polygon:
+        if polygon and not result:
             polygon = Polygon(polygon)
             try:
                 shape = Polygon(other.polygon(dec_places=None, for_plot=True))
@@ -770,9 +775,14 @@ class Site(dict):
                 shape = Point(float(other.longitude), float(other.latitude))
             except AttributeError:
                 shape = Point(lng, lat)
-            return polygon.contains(shape)
-        logger.debug('{} does not contain {}'.format(self, other))
-        return False
+            result = polygon.contains(shape)
+        if other is None:
+            other = '({}, {})'.format(lat, lng)
+        if result:
+            logger.debug('{} contains {}'.format(self, other))
+        else:
+            logger.debug('{} does not contain {}'.format(self, other))
+        return result
 
 
     def within(self, other):
