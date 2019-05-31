@@ -438,7 +438,12 @@ class Site(dict):
         mapped = map_archaic(self.country,
                              keys=['countries'],
                              callback=self.adm_parse.get_country_code)
-        self.country, self.country_code = mapped
+        name, code = mapped
+        if not isinstance(name, dict):
+            self.country, self.country_code = name, code
+        else:
+            self.update_from_dict(name)
+            return self.get_admin_codes()
         admin = {'country': self.country_code}
         # Map archaic state names
         val = self.state_province
@@ -448,16 +453,35 @@ class Site(dict):
                                  callback=self.adm_parse.get_admin_code,
                                  level='ADM1',
                                  country=self.country)
-            self.state_province, self.admin_code_1 = mapped
-            self.admin_code_1 = self.admin_code_1.code
+            name, code = mapped
+            if not isinstance(name, dict):
+                self.state_province, self.admin_code_1 = name, code
+                try:
+                    self.admin_code_1 = self.admin_code_1.code
+                except AttributeError:
+                    self.admin_code_1 = [c.code for c in self.admin_code_1]
+            else:
+                name.setdefault('state_province', '')
+                self.update_from_dict(name)
+                return self.get_admin_codes()
             admin['adminCode1'] = self.admin_code_1
         # Check county name
         val = self.county.replace(' Co.', '')
         if val and self.country_code != 'AQ':
-            self.admin_div_2 = self.adm_parse.get_admin_code(val,
-                                                             'ADM2',
-                                                             self.country)
-            self.admin_code_2 = self.admin_div_2.code
+            mapped = map_archaic(val,
+                                 keys=['counties',
+                                       self.country,
+                                       self.state_province],
+                                 callback=self.adm_parse.get_admin_code,
+                                 level='ADM2',
+                                 country=self.country)
+            name, code = mapped
+            if not isinstance(name, dict):
+                self.county, self.admin_code_2 = name, code
+            else:
+                name.setdefault('county', '')
+                self.update_from_dict(name)
+                return self.get_admin_codes()
             admin['adminCode2'] = self.admin_code_2
         return admin
 
