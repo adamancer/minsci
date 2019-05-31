@@ -23,7 +23,7 @@ class SiteList(MutableSequence):
         self._obj = [self.itemclass(s) if type(s) != self.itemclass else s
                      for s in list(*args, **kwargs)]
         self.orig = self._obj[:]
-        self.std = LocStandardizer(remove_collations=True)
+        self._std = LocStandardizer(remove_collations=True)
         self._filters = []
 
 
@@ -61,6 +61,10 @@ class SiteList(MutableSequence):
 
     def __repr__(self):
         return repr(self._obj)
+
+
+    def clone(self):
+        return self.__class__(self._obj[:])
 
 
     def irns(self):
@@ -123,9 +127,9 @@ class SiteList(MutableSequence):
         logger.debug('Matching name={}...'.format(name))
         matches = []
         orig = name
-        name = self._std(name, attr)
+        name = self._std_to_field(name, attr)
         for site in self:
-            names = [self._std(n, attr)
+            names = [self._std_to_field(n, attr)
                      for n in site.site_names + site.synonyms]
             matched = name in names
             if matched:
@@ -176,21 +180,6 @@ class SiteList(MutableSequence):
         return self
 
 
-    def _std(self, name, attr):
-        """Creates a list of names customized for the field being match on"""
-        words = {
-            'island': ['isla', 'isle', 'island'],
-            'volcano': ['mt', 'mount', 'mountain', 'volcano']
-        }
-        name = self.std(name)
-        for word in words.get(attr, []):
-            pattern = r'\b{}\b'.format(word)
-            name = re.sub(pattern, '', name)
-        name = self.std.strip_word(name, 'near')
-        name = name.replace('-', '')
-        return name
-
-
     def _check_codes(self):
         for site in self:
             try:
@@ -207,6 +196,43 @@ class SiteList(MutableSequence):
         eq = '==' if score >= 0 else '!='
         logger.debug('{} {} {}'.format(val1, eq, val2))
         return score
+
+
+    def std(self, val):
+        if isinstance(val, list):
+            return [self._std(s) for s in val]
+        return self._std(val)
+
+
+    def _std_to_field(self, name, attr):
+        """Creates a list of names customized for the field being match on"""
+        words = {
+            'island': ['isla', 'isle', 'island'],
+            'volcano': ['mt', 'mount', 'mountain', 'volcano']
+        }
+        name = self.std(name)
+        for word in words.get(attr, []):
+            pattern = r'\b{}\b'.format(word)
+            name = re.sub(pattern, '', name)
+        name = self._std.strip_words(name, ['area', 'near', 'nr'])
+        name = name.replace('-', '')
+        return name
+
+
+    def _eq(self, val1, val2):
+        """Tests if values match by equals or in"""
+        val1 = self.std(val1)
+        val2 = self.std(val2)
+        if isinstance(val1, list) and not isinstance(val2, list):
+            return val2 in val1
+        elif not isinstance(val1, list) and isinstance(val2, list):
+            return val1 in val2
+        elif isinstance(val1, list):
+            return set(val1) == set(val2)
+        else:
+            return val1 == val2
+
+
 
 
 class MatchList(SiteList):

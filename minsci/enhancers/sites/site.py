@@ -509,7 +509,7 @@ class Site(dict):
 
 
     def is_synonym_for(self, name):
-        std = SiteList()._std
+        std = SiteList()._std_to_field
         keys = ['asciiName', 'name', 'toponymName']
         primary = [std(self.verbatim.get(''), None) for k in keys]
         synonyms = [std(s, None) for s in self.synonyms]
