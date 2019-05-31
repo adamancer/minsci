@@ -252,7 +252,93 @@ class Matcher(object):
                        ' for...')
 
 
-    def match_one(self, name, field, force_codes = None, **kwargs):
+    def match_one(self, name, field, force_codes=None, **kwargs):
+        """Wraps _match_one method to allow checking multiple states
+
+        Records that list an archaic state/province may need to check multiple
+        ADM1s. This requires some jiggery-pokery with the site attribute.
+        """
+        # Check the hint dictionary
+        if is_directions(name):
+            hintcodes = ['DIR']
+        elif force_codes:
+            hintcodes = force_codes
+        elif self.site.country:
+            hintcodes = self.config['codes'][field]
+        else:
+            hintcodes = self.config['codes']['undersea']
+        try:
+            return self.hints[self.hints.keyer(name, self.site, hintcodes)]
+        except KeyError:
+            pass
+        if isinstance(self.site.state_province, list):
+            del kwargs['adminCode1']
+            state_province = self.site.state_province[:]
+            admin_codes = self.site.admin_code_1[:]
+            self.site.state_province = ''
+            self.site.admin_code_1 = ''
+            matches, _, _ = self._match_one(name, field, force_codes, **kwargs)
+            # Reset state/province attributes
+            self.site.state_province = state_province
+            self.site.admin_code_1 = admin_codes
+            if matches:
+                # Limit matches to those matching one of the states
+                filters = matches[0].filters
+                filters.append({'admin_code_1': 1})
+                matches = [m.record for m in matches
+                           if m.record.admin_code_1 in admin_codes]
+                # This block of code is adapted from _match_one
+                fcodes = []
+                matches_ = []
+                matched = []
+                for match in matches:
+                    fcodes.append(match.site_kind)
+                    radius = self.get_radius(match)
+                    matches_.append(Match(match, filters, radius, name))
+                    matched.append(name)
+                max_size = 1e8  # arbitrarily large value
+                if fcodes:
+                    self._check_fcodes(fcodes)
+                    max_size = self.max_size(fcodes)
+                # Save result to the hints dictionary before returning it
+                result = matches_, matched, max_size
+                key = self.hints.keyer(name, self.site, hintcodes)
+                self.hints[key] = result
+                return result
+            '''
+            # Deprecated--way too many calls to the GeoNames webservice
+            master = self.site
+            results = []
+            for i, val in enumerate(self.site.state_province):
+                data = {'state_province': val}
+                self.site = master.clone(data, copy_missing_fields=True)
+                kwargs['adminCode1'] = self.site.admin_code_1
+                result = self._match_one(*args, **kwargs)
+                if result[0]:
+                    results.append(result)
+            self.site = master
+            if len(results) == 1:
+                return results[0]
+            '''
+            return [], [], 1e8
+        return self._match_one(name, field, force_codes, **kwargs)
+
+
+    def _match_one(self, name, field, force_codes=None, **kwargs):
+        """Matches one name-field pair"""
+        # Check the hint dictionary
+        if is_directions(name):
+            hintcodes = ['DIR']
+        elif force_codes:
+            hintcodes = force_codes
+        elif self.site.country:
+            hintcodes = self.config['codes'][field]
+        else:
+            hintcodes = self.config['codes']['undersea']
+        try:
+            return self.hints[self.hints.keyer(name, self.site, hintcodes)]
+        except KeyError:
+            pass
         # Is this name actually directions?
         if is_directions(name):
             # Parse directions and matched the referenced feature
