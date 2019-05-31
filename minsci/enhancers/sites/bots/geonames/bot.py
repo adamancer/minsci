@@ -103,7 +103,11 @@ class GeoNamesBot(Bot):
                     self.cache.delete_url(response.url)
                     time.sleep(30)
                     return self._query_geonames(url, **params)
-        raise ValueError('Bad response: {}'.format(response.status_code))
+                else:
+                    raise ValueError('Bad response:'
+                                     ' {} ({})'.format(status, response.url))
+        raise ValueError('Bad response: {} ({})'.format(response.status_code,
+                                                        response.url))
 
 
     def get_by_id(self, geoname_id, style='MEDIUM'):
