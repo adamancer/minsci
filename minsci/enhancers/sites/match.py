@@ -541,6 +541,14 @@ class Matcher(object):
         return self
 
 
+    def dedupe_matches(self, matches=None):
+        """Removes duplicate matches (i.e., same value in multiple fields)"""
+        if matches is None:
+            matches = self.matches
+        sites = [m.record for m in matches]
+        return [m for i, m in enumerate(matches) if m.record not in sites[:i]]
+
+
     def update_terms(self, matches=None):
         """Updates list of terms found and matched if matches removed"""
         if matches is None:
