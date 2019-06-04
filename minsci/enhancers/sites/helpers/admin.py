@@ -196,13 +196,21 @@ class AdminParser(object):
     def get_admin_name(self, *args, **kwargs):
         """Gets the name of the given administrative division"""
         kwargs['search_name'] = True
-        return self.get_admin_div(*args, **kwargs)
+        div = self.get_admin_div(*args, **kwargs)
+        try:
+            return div.code
+        except AttributeError:
+            return [d.code for d in div]
 
 
     def get_admin_code(self, *args, **kwargs):
         """Gets the code for the given administrative division"""
         kwargs['search_name'] = False
-        return self.get_admin_div(*args, **kwargs)
+        div = self.get_admin_div(*args, **kwargs)
+        try:
+            return div.code
+        except AttributeError:
+            return [d.code for d in div]
 
 
     def map_archaic(self, val, keys, callback, *args, **kwargs):
