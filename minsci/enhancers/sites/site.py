@@ -463,18 +463,25 @@ class Site(dict):
             name, code = mapped
             if not isinstance(name, dict):
                 self.state_province, self.admin_code_1 = name, code
-                try:
-                    self.admin_code_1 = self.admin_code_1.code
-                except AttributeError:
-                    self.admin_code_1 = [c.code for c in self.admin_code_1]
             else:
                 name.setdefault('state_province', '')
                 self.update_from_dict(name)
                 return self.get_admin_codes()
             admin['adminCode1'] = self.admin_code_1
-        # Check county name
-        val = self.county.replace(' Co.', '')
-        if val and self.country_code != 'AQ':
+        # Limit list of states to one if possible
+        self._state_from_county()
+        # Check county name. Some GeoNames records contain weird/specious
+        # names, so we filter those out by checking if the name countains
+        # a number.
+        try:
+            val = self.county.replace(' Co.', '')
+        except AttributeError:
+            val = [s.replace(' Co.', '') for s in self.county]
+            has_digit = any([any([c.isdigit() for c in val])
+                             for s in self.county])
+        else:
+            has_digit = any([c.isdigit() for c in val])
+        if val and not has_digit and self.country_code != 'AQ':
             mapped = map_archaic(val,
                                  keys=['counties',
                                        self.country,
@@ -857,7 +864,22 @@ class Site(dict):
         return self
 
 
+    def _state_from_county(self):
+        """Updates state based on county name"""
+        if isinstance(self.state_province, list) and self.county:
+            results = self.gn_bot.search(self.county,
+                                         country=self.country_code,
+                                         features=['ADM2', 'ADM3', 'ADM4'])
+            sites = [self.__class__(rec) for rec in results]
+            states = [site.state_province for site in sites]
+            if len(set(states)) == 1 and states[0] in self.state_province:
+                self.state_province = states[0]
+                func = self.adm_parse.get_admin_code
+                self.admin_code_1 = func(states[0], 'ADM1', self.country)
+
+
     def classify(self):
+        """Classifies a record based on specificity of locality info"""
         # Checks if fields contain directional info instead of just place names
         for attr in self._attributes:
             if attr == 'site_names':
