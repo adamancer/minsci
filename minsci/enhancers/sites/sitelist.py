@@ -9,6 +9,7 @@ from collections import namedtuple, MutableSequence
 
 from unidecode import unidecode
 
+from .helpers import eq
 from ...standardizer import LocStandardizer
 
 
@@ -192,7 +193,7 @@ class SiteList(MutableSequence):
     def score_one(self, val1, val2, points=1):
         score = 0
         if bool(val1) == bool(val2):
-            score = points if self.std(val1) == self.std(val2) else -points
+            score = points if self._eq(val1, val2) else -points
         eq = '==' if score >= 0 else '!='
         logger.debug('{} {} {}'.format(val1, eq, val2))
         return score
@@ -208,6 +209,7 @@ class SiteList(MutableSequence):
         """Creates a list of names customized for the field being match on"""
         words = {
             'island': ['isla', 'isle', 'island'],
+            'water_body': ['ocean', 'sea'],
             'volcano': ['mt', 'mount', 'mountain', 'volcano']
         }
         name = self.std(name)
@@ -221,6 +223,8 @@ class SiteList(MutableSequence):
 
     def _eq(self, val1, val2):
         """Tests if values match by equals or in"""
+        return eq(val1, val2, std=self._std, strict=False)
+        # Code below is deprecated
         val1 = self.std(val1)
         val2 = self.std(val2)
         if isinstance(val1, list) and not isinstance(val2, list):
