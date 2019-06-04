@@ -1501,13 +1501,16 @@ class Matcher(object):
         mentioned in the record are outstanding. This is distinct from the
         sequencing in the match method because it can catch admin info/large
         areas that are contained in general fields like Precise Locality.
+
+        Localities determined by parsing a direction string are excluded
+        from this check.
         """
         fcodes = [m.record.site_kind for m in self.matches]
         if (len(self.terms) != len(self.matched)
             and self.min_size(fcodes) >= 100):
                 missed = list(set(self.terms) - set(self.matched))
-                logger.warning('Match invalid (matched {},'
-                               ' missed {})'.format(self.matched, missed))
-                self.reset(reset_all=True)
-                return False
+                missed = [t for t in missed if not 'ocean' in t.lower()]
+                if missed:
+                    raise ValueError('Match invalid (matched {},'
+                                     ' missed {})'.format(self.matched, missed))
         return True
