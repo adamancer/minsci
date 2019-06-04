@@ -16,6 +16,7 @@ from titlecase import titlecase
 
 from .shapes import MultiPoint
 from ....helpers import oxford_comma
+from ....standardizer import Standardizer
 
 
 PointWithUncertainty = namedtuple('PointWithUncertainty', ['latitude',
@@ -356,3 +357,28 @@ def distance_on_unit_sphere(lat1, lng1, lat2, lng2, unit='km'):
         'km': 6371.
     }
     return arc * units[unit]
+
+
+def eq(val1, val2, std=None, strict=True):
+    """Tests if values are equivalent for the purposes of comparing sites"""
+    if std is None:
+        std = Standardizer()
+    # Standardize values
+    vals = [val1, val2]
+    for i, val in enumerate(vals):
+        if isinstance(val, (list, set)):
+            vals[i] = set([std(s) for s in val])
+        elif isinstance(val, dict):
+            vals[i] = {std(k): std(v) for k, v in val.items()}
+        else:
+            vals[i] = std(val)
+    val1, val2 = vals
+    # Compare values
+    if isinstance(val1, set) and isinstance(val2, set):
+        return val1 == val2 if strict else val1.intersection(val2)
+    elif isinstance(val1, set):
+        return val2 in val1
+    elif isinstance(val2, set):
+        return val1 in val2
+    else:
+        return val1 == val2
