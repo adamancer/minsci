@@ -782,6 +782,7 @@ class Matcher(object):
             'county',
             'state_province',
             'country',
+            'country_code',
             'undersea feature'
         ]
         # Exlcude all keys starting with _
@@ -799,6 +800,8 @@ class Matcher(object):
                 # Make county a little more descriptive
                 if feature == 'county':
                     feature = 'district/county'
+                elif feature == 'country_code':
+                    feature = 'country'
                 break
         else:
             raise ValueError('No feature detected: {}'.format(filters))
