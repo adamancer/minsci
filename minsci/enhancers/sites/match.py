@@ -117,6 +117,21 @@ class Matcher(object):
 
 
     def match(self, force_field=None, force_codes=None, **kwargs):
+        """Wraps _match method to handle errors"""
+        msg = 'No match found'
+        try:
+            self._match(force_field, force_codes, **kwargs)
+        except ValueError as e:
+            self.reset(True)
+            msg = str(e)
+        if not self.matches:
+            self.fallback()
+        if not self.matches:
+            raise ValueError(msg)
+        return self
+
+
+    def _match(self, force_field=None, force_codes=None, **kwargs):
         """Matches a site against GeoNames"""
         threshold = -1   # size
         min_size = 0      # lower values = less specific
@@ -668,6 +683,27 @@ class Matcher(object):
         #        return self.encompass(max_distance_km, high_grade=False)
         raise ValueError('Could not encompass all sites'
                          ' ({} km radius)'.format(max_distance_km))
+
+
+    def fallback(self, fields=None, max_distance_km=100):
+        if fields is None:
+            fields = ['county', 'state_province']
+        for field in fields:
+            kwargs = {
+                'country': self.site.country_code,
+                'adminCode1': self.site.admin_code_1
+            }
+            terms = self.terms
+            self.reset(True)
+            self._match(field, **kwargs)
+            if len(self.matches) == 1:
+                self.latitude, self.longitude = self.get_coords(self.matches[0])
+                self.radius = self.get_radius(self.matches[0])
+                if self.radius <= max_distance_km:
+                    self.terms.extend(terms)
+                    return self.matches
+            self.reset(True)
+            self.terms = terms
 
 
     def high_grade_syn(self, matches):
