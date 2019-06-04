@@ -307,14 +307,19 @@ class Site(dict):
             except ValueError:
                 parsed = None
             if parsed is None:
-                labels = [lbl.split(' ')[0] for lbl in labels]
-                rows = zip(labels, rec('MapOtherCoordA_tab'))
-                plss = {lbl: val for lbl, val in rows}
-                rows = zip(labels, rec('MapOtherCoordB_tab'))
-                plss['range'] = {lbl: val for lbl, val in rows}['township']
-                mask = '{quarter} Sec. {section} {township} {range}'
-                div = mask.format(**plss)
-                self.locality = '{}; {}'.format(self.locality.rstrip('; '), div)
+                try:
+                    labels = [lbl.split(' ')[0] for lbl in labels]
+                    rows = zip(labels, rec('MapOtherCoordA_tab'))
+                    plss = {lbl: val for lbl, val in rows}
+                    rows = zip(labels, rec('MapOtherCoordB_tab'))
+                    plss['range'] = {lbl: val for lbl, val in rows}['township']
+                    mask = '{quarter} Sec. {section} {township} {range}'
+                    div = mask.format(**plss)
+                except KeyError:
+                    pass
+                else:
+                    loc = self.locality.rstrip('; ')
+                    self.locality = '{}; {}'.format(loc, div)
         # Map to additional fields
         self.mine = rec('LocMineName')
         self.mining_district = rec('LocMiningDistrict')
@@ -601,7 +606,11 @@ class Site(dict):
         # Prepare higher locality info
         country = self.country
         state_province = self.state_province
+        if isinstance(state_province, list):
+            state_province = '/'.join(state_province)
         county = self.county
+        if isinstance(county, list):
+            county = '/'.join(county)
         if (county
             and self.country == 'United States'
             and not county.endswith('Co.')):
