@@ -25,7 +25,8 @@ from .helpers import (
     get_point_from_box,
     get_size,
     is_directions,
-    read_config)
+    read_config,
+    eq)
 from .sitelist import SiteList
 from ...standardizer import LocStandardizer
 
@@ -99,6 +100,13 @@ class Site(dict):
             self.from_dwc(data)
         else:
             self.from_site(data)
+
+
+    def __eq__(self, other):
+        for attr in self._attributes:
+            if getattr(self, attr) != getattr(other, attr):
+                return False
+        return True
 
 
     def __str__(self):
@@ -728,16 +736,6 @@ class Site(dict):
                                                 2))
 
 
-    def compare(self, other):
-        """Checks if two sites are equivalent"""
-        n = max([len(attr) for attr in self._attributes])
-        for attr in self._attributes:
-            val1 = getattr(self, attr)
-            val2 = getattr(other, attr)
-            if val1 or val2 and val1 != val2:
-                print(u'{}: {} <=> {}'.format(attr.ljust(n), val1, val2))
-
-
     def contains(self, other=None, lat=None, lng=None, check_radius=False):
         """Checks if this site contains another site or point"""
         # FIXME: This will fail on the international dateline
@@ -751,13 +749,13 @@ class Site(dict):
             #if names & admin:
             #    result = True
             if (self.site_kind.startswith('PCL')
-                and other.country in names):
+                and self._eq(other.country, names)):
                     result = True
             elif (self.site_kind == 'ADM1'
-                and other.state_province in names):
+                  and self._eq(other.state_province, names)):
                     result = True
             elif (self.site_kind == 'ADM2'
-                  and other.county in names):
+                  and self._eq(other.county, names)):
                     result = True
         # Check if the other site falls within this site's uncertainty
         polygon = self.polygon(dec_places=None, for_plot=True)
@@ -1018,6 +1016,12 @@ class Site(dict):
             }
             self.latitude = '{:.4f}'.format(sum(lats) / len(lats))
             self.longitude = '{:.4f}'.format(sum(lngs) / len(lngs))
+
+
+    def _eq(self, val1, val2):
+        return eq(val1, val2, std=self.std, strict=False)
+
+
 
 
 SiteList.itemclass = Site
