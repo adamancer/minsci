@@ -87,6 +87,7 @@ class Matcher(object):
         self.std = site.std
         # Match metadata
         self.matches = []
+        self.orig = []
         self.count = 0
         self.latitude = None
         self.longitude = None
@@ -279,6 +280,9 @@ class Matcher(object):
         Records that list an archaic state/province may need to check multiple
         ADM1s. This requires some jiggery-pokery with the site attribute.
         """
+        # Check for blanks
+        if self.std(name) in ['not-stated', 'undetermined']:
+            return [], [], 1e8
         # Check the hint dictionary
         if is_directions(name):
             hintcodes = ['DIR']
@@ -522,13 +526,15 @@ class Matcher(object):
 
     def finalize_match(self, matches, threshold, terms, matched):
         """Determines coordinates and uncertainty by comparing matches"""
-        self.matches = matches
+        matched = ['"{}"'.format(t) if is_directions(t) else t for t in matched]
+        self.matches = self.dedupe_matches(matches)
         self.orig = matches[:]
         self.threshold = threshold
         self.terms = sorted(list(set(terms)))
         self.matched = sorted(list(set(matched)))
         self.missed = sorted(list(set(terms) - set(matched)))
         if self.threshold > 0:
+            logger.debug('{:,} matches found'.format(len(self.matches)))
             if self.matches:
                 self._validate()
             if len(self.matches) == 1:
@@ -536,8 +542,6 @@ class Matcher(object):
                 self.radius = self.get_radius(matches[0])
             elif len(self.matches) > 1:
                 self.encompass()
-            else:
-                raise ValueError('No match found')
         return self
 
 
@@ -668,7 +672,7 @@ class Matcher(object):
                 #    min_size = 1
                 #if self.radius <= min_size:
                 #    size = min_size * 2
-                #    logging.debug('Increasing radius from {}'
+                #    logger.debug('Increasing radius from {}'
                 #                  ' to {} km'.format(self.radius, size))
                 #    self.radius = size
                 #self.note('Encompassed results')
@@ -741,7 +745,7 @@ class Matcher(object):
             if min_size <= min(max_sizes):
                 matches.extend(item[-1])
             else:
-                logging.debug('Discarded matches on {}'.format(item[0]))
+                logger.debug('Discarded matches on {}'.format(item[0]))
         if len(matches) != len(self.matches):
             self.matches = matches
             self.count = len(self.group_by_term())
@@ -1124,6 +1128,8 @@ class Matcher(object):
         # The combined dict MUST have a site name, so force the issue here
         # by assigning a common name from the three sites
         cmb = {k: v[0] if len(set(v)) == 1 else '' for k, v in cmb.items()}
+        cmb = {k: list(v) if isinstance(v, tuple) else v
+               for k, v in cmb.items()}
         if not cmb['site_names']:
             names = []
             for match in args:
@@ -1208,7 +1214,7 @@ class Matcher(object):
     def describe(self):
         """Describes how the coordinates and error radius were determined"""
         if not (self.latitude and self.longitude):
-            raise ValueError('No match found')
+            raise ValueError('No coordinates found')
         if self.threshold < 0:
             description = self.describe_custom()
         elif len(self.matches) == 1:
