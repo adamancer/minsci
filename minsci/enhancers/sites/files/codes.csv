@@ -661,7 +661,7 @@ V,GRVO,FALSE,2 km,olive grove,a planting of olive trees
 V,GRVP,FALSE,2 km,palm grove,a planting of palm trees
 V,GRVPN,FALSE,2 km,pine grove,a planting of pine trees
 V,HTH,FALSE,,heath,an upland moor or sandy area dominated by low shrubby vegetation including heather
-V,MDW,FALSE,,meadow,"a small, poorly drained area dominated by grassy vegetation"
+V,MDW,FALSE,10 km,meadow,"a small, poorly drained area dominated by grassy vegetation"
 V,OCH,FALSE,,orchard(s),a planting of fruit or nut trees
 V,SCRB,FALSE,,scrubland,"an area of low trees, bushes, and shrubs stunted by some environmental limitation"
 V,TREE,FALSE,,tree(s),a conspicuous tree used as a landmark
