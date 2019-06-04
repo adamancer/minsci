@@ -17,6 +17,8 @@ from ....standardizer import LocStandardizer
 
 AdminDiv = namedtuple('AdminDiv', ['name', 'code', 'level'])
 
+STD = LocStandardizer()
+
 
 def _read_countries():
     """Reads ISO country codes from file
@@ -26,14 +28,14 @@ def _read_countries():
     """
     code_to_name = CaseInsensitiveDict()
     name_to_code = CaseInsensitiveDict()
-    with open(os.path.join(FILES, 'countries.txt'), 'r') as f:
+    with open(os.path.join(FILES, 'countries.txt'), 'r', encoding='utf-8') as f:
         for line in f:
             row = line.split('\t')
-            country = unidecode(row[4])
+            country = row[4]
             code = row[0]
             if code and country:
                 code_to_name[code] = country
-                name_to_code[country] = code
+                name_to_code[STD(country)] = code
     return code_to_name, name_to_code
 
 
@@ -45,7 +47,7 @@ def _read_states():
     """
     abbr_to_name = CaseInsensitiveDict()
     name_to_abbr = CaseInsensitiveDict()
-    with open(os.path.join(FILES, 'states.txt'), 'r') as f:
+    with open(os.path.join(FILES, 'states.txt'), 'r', encoding='utf-8') as f:
         for line in f:
             row = line.split('\t')
             state = row[0]
@@ -188,7 +190,7 @@ class AdminParser(object):
 
     def get_country_code(self, country):
         """Gets the ISO country code corresponding to a country name"""
-        return self._to_country_code[unidecode(country)]
+        return self._to_country_code[STD(country)]
 
 
     def get_us_state_abbr(self, state):
@@ -234,7 +236,9 @@ class AdminParser(object):
                 raise ValueError('Unknown {}:'
                                  ' {}, {}'.format(level, term, country))
         # If searching a name, look up the official name as well
-        if len(val) < len(term) or val.isnumeric() or search_name:
+        has_digit = any([c.isdigit() for c in val])
+        is_shorter = len(val) < len(term)
+        if has_digit or is_shorter or search_name:
             try:
                 name = self._admin_divs[country_code][level][self._std(val)]
             except KeyError:
@@ -269,6 +273,16 @@ class AdminParser(object):
         """Maps archaic names to their current equivalents"""
         if not val:
             raise ValueError('map_archaic() requires val')
+        # Handles lists of values
+        if isinstance(val, list):
+            currents = []
+            codes = []
+            for val in val:
+                current, code = self.map_archaic(val, keys, callback,
+                                                 *args, **kwargs)
+                currents.append(current)
+                codes.append(code)
+            return currents, codes
         # Convert args to string for error
         ergs = list(args) + ['{}={}'.format(k, v) for k, v in kwargs.items()]
         # Load the current names reference the first time it's needed
@@ -284,7 +298,7 @@ class AdminParser(object):
                 lookup[key] = {}
                 lookup = lookup[key]
             except TypeError:
-                raise ValueError('Multiple states given')
+                raise ValueError('Multiple values given')
         # Map archaic to current terms
         try:
             current = lookup.get(self._std(val), val)
