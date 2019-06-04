@@ -5,6 +5,7 @@ logger = logging.getLogger(__name__)
 
 import json
 import os
+import time
 from collections import namedtuple
 
 from unidecode import unidecode
@@ -91,6 +92,8 @@ def _read_current():
         raise
     except IOError:
         current = {}
+    if current:
+        _verify_current(current)
     print('Loaded current!')
     return current
 
@@ -98,17 +101,66 @@ def _read_current():
 def _save_current(current):
     """Updates the current names lookup"""
     fp = os.path.join(FILES, 'current.json')
-    json.dump(_remove_empty_keys(current, n=2),
-              open(fp, 'w', encoding='utf-8'),
-              indent=2,
-              sort_keys=True,
-              ensure_ascii=False)
+    while True:
+        try:
+            json.dump(_remove_empty_keys(current, n=2),
+                      open(fp, 'w', encoding='utf-8'),
+                      indent=2,
+                      sort_keys=True,
+                      ensure_ascii=False)
+        except OSError as e:
+            print('Could not save {}. Retrying in 2 seconds...'.format(fp))
+            time.sleep(2)
+        else:
+            break
+
+
+def _verify_current(current):
+    """Verifies that the names in current resolve in GeoNames"""
+    parser = AdminParser()
+    errors = []
+    for key, vals in current['countries'].items():
+        if not isinstance(vals, list):
+            vals = [vals]
+        for val in vals:
+            try:
+                parser.get_country_code(val)
+            except Exception as e:
+                errors.append(str(e))
+    for name, country in current['states'].items():
+        name = name.replace('-', ' ')
+        for key, vals in country.items():
+            if vals and not isinstance(vals, dict):
+                if not isinstance(vals, list):
+                    vals = [vals]
+                for val in vals:
+                    try:
+                        parser.get_admin_div(val, 'ADM1', name)
+                    except Exception as e:
+                        errors.append(str(e))
+    for name, country in current['counties'].items():
+        name = name.replace('-', ' ')
+        for key, state in country.items():
+            for key, vals in state.items():
+                if vals and not isinstance(vals, dict):
+                    if not isinstance(vals, list):
+                        vals = [vals]
+                    for val in vals:
+                        try:
+                            parser.get_admin_div(val, 'ADM2', name)
+                        except Exception as e:
+                            errors.append(str(e))
+    if errors:
+        print('The following values in current.json do not resolve:')
+        input('\n'.join(errors))
 
 
 def _remove_empty_keys(dct, n=1):
     for i in range(n):
         for key in list(dct.keys()):
-            if isinstance(dct[key], dict):
+            if key.endswith('-ca') or key in ['not-stated', 'undetermined']:
+                del dct[key]
+            elif isinstance(dct[key], dict):
                 if not dct[key]:
                     del dct[key]
                 else:
