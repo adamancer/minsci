@@ -1,4 +1,5 @@
 include README.md
+include minsci/logging.yml
 include minsci/*/files/*.p
 include minsci/*/files/*.ttf
 include minsci/*/files/*.txt
