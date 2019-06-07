@@ -24,7 +24,7 @@ PointWithUncertainty = namedtuple('PointWithUncertainty', ['latitude',
                                                            'hull',
                                                            'radius'])
 Corners = namedtuple('Corners', ['ne', 'se', 'sw', 'nw'])
-Dimensions = namedtuple('Dimensions', ['width', 'height'])
+Dimensions = namedtuple('Dimensions', ['width', 'height', 'area'])
 
 
 FILES = os.path.realpath(os.path.join(__file__, '..', '..', 'files'))
@@ -48,7 +48,8 @@ def get_size(polygon):
     crnr = get_corners(polygon)
     width = get_distance(crnr.ne[0], crnr.ne[1], crnr.nw[0], crnr.nw[1])
     height = get_distance(crnr.ne[0], crnr.ne[1], crnr.se[0], crnr.sw[1])
-    return Dimensions(width, height)
+    area = width * height
+    return Dimensions(width, height, area)
 
 
 def dec2dms(dec, is_lat):
