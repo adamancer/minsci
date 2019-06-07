@@ -90,21 +90,22 @@ class SiteList(MutableSequence):
         orig_filters = self.filters()[:]
         logging.debug('Matching {}={}...'.format(attr if attr else 'val', name))
         while True:
-            self._filters = orig_filters
-            if site is not None:
-                self._match_site(site)
-            if name is not None:
+            self._filters = orig_filters[:]
+            # Match from most to least specific attribute
+            if name is not None and self._obj:
                 self._match_name(name, attr=attr)
+            if site is not None and self._obj:
+                self._match_site(site)
             # If match fails, query geonames for additional synonyms and retry
             if not self and syndex:
                 self.get_additional_synonyms()
                 syndex = None
             else:
                 break
-        orig_filters = self.dedupe(orig_filters)
+        filters = self.filters()[:]
         logger.debug('{}/{} records matched {}'.format(len(self._obj),
                                                        len(self.orig),
-                                                       orig_filters))
+                                                       filters))
         return self
 
 
@@ -125,26 +126,36 @@ class SiteList(MutableSequence):
 
 
     def _match_name(self, name, attr=None):
-        logger.debug('Matching name={}...'.format(name))
-        matches = []
-        orig = name
-        name = self._std_to_field(name, attr)
-        for site in self:
-            names = [self._std_to_field(n, attr)
-                     for n in site.site_names + site.synonyms]
-            matched = name in names
-            if matched:
-                matches.append(site)
-            stnames = str(names)[:60] + '...'
-            in_ = 'in' if matched else 'not in'
-            logger.debug('{} {} {}'.format(name, in_, names))
-        self._obj = matches
-        self._filters.extend([{'_name': orig}, {attr: 1}])
+        if self._obj:
+            logger.debug('Matching name={}...'.format(name))
+            matches = []
+            orig = name
+            name = self._std_to_field(name, attr)
+            for site in self:
+                names = [self._std_to_field(n, attr)
+                         for n in site.site_names + site.synonyms]
+                matched = name in names
+                if matched:
+                    matches.append(site)
+                stnames = str(names)[:60] + '...'
+                in_ = 'in' if matched else 'not in'
+                logger.debug('{} {} {}'.format(name, in_, names))
+            self._obj = matches
+            self._filters.extend([{'_name': orig}, {attr: 1}])
         return self
 
 
     def _match_site(self, site):
-        logger.debug('Matching site...')
+        # Match countires/ADM2
+        if site.admin_code_2:
+            self.match_attr(site, 'admin_code_2')
+        elif site.county:
+            self.match_attr(site, 'county')
+        # Match states/ADM1
+        if site.admin_code_1:
+            self.match_attr(site, 'admin_code_1')
+        elif site.state_province:
+            self.match_attr(site, 'state_province')
         # Match countries/REQUIRED
         if site.country_code:
             self.match_attr(site, 'country_code')
@@ -156,28 +167,19 @@ class SiteList(MutableSequence):
             pass
         else:
             raise ValueError('Country/ocean missing: {}'.format(repr(site)))
-        # Match states/ADM1
-        if site.admin_code_1:
-            self.match_attr(site, 'admin_code_1')
-        elif site.state_province:
-            self.match_attr(site, 'state_province')
-        # Match countires/ADM2
-        if site.admin_code_2:
-            self.match_attr(site, 'admin_code_2')
-        elif site.county:
-            self.match_attr(site, 'county')
         return self
 
 
     def match_attr(self, site, attr):
-        refval = getattr(site, attr)
-        scored = [self.score_one(refval, getattr(s, attr)) for s in self]
-        maxscore = max(scored) if scored else 0
-        self._filters.append({attr: maxscore})
-        if maxscore >= 0:
-            self._obj = [m for m, s in zip(self, scored) if s == maxscore]
-        else:
-            self._obj = []
+        if self._obj:
+            refval = getattr(site, attr)
+            scored = [self.score_one(refval, getattr(s, attr)) for s in self]
+            maxscore = max(scored) if scored else 0
+            self._filters.append({attr: maxscore})
+            if maxscore >= 0:
+                self._obj = [m for m, s in zip(self, scored) if s == maxscore]
+            else:
+                self._obj = []
         return self
 
 
