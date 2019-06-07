@@ -7,6 +7,7 @@ import re
 
 from titlecase import titlecase
 
+from ....helpers import oxford_comma
 from ....standardizer import LocStandardizer
 
 
@@ -48,6 +49,7 @@ class DirectionParser(object):
         self.unit = unit
         self.bearing = bearing
         self.feature = feature
+        self.kind = 'directions'
 
 
     def __str__(self):
@@ -132,7 +134,8 @@ class DirectionParser(object):
         if min_dist is None and max_dist is None:
             min_dist = self.defaults['min_dist_km'] / self._to_km[unit]
             max_dist = self.defaults['max_dist_km'] / self._to_km[unit]
-        dists = [float(d) for d in [min_dist, max_dist] if d is not None]
+        dists = [float(d.replace(',', '')) if isinstance(d, str) else d
+                 for d in [min_dist, max_dist] if d is not None]
         return sum(dists) / len(dists)
 
 
@@ -147,6 +150,8 @@ class DirectionParser(object):
         try:
             coefficient, fraction = dist.split(' ')
         except (AttributeError, ValueError):
+            if dist and '.' not in dist:
+                return '{:,}'.format(int(dist))
             return dist
         else:
             numerator, denominator = fraction.split('/')
@@ -198,7 +203,8 @@ class DirectionParser(object):
     def parse(self, text):
         """Parses a simple directional string"""
         self.verbatim = text
-        mod1 = r'(?:about|approx(?:\.|imately)|around|ca\.?|collected|found|just)'
+        #mod1 = r'(?:about|approx(?:\.|imately)|around|ca\.?|collected|found|just)'
+        mod1 = r'(?:(?:\W\.?){0,2})'
         mod2 = r'(?: or so)?'
         num = r'(\d+(?:\.\d+| \d/\d)?)'
         nums = r'{0}(?: ?(?:\-|or|to) ?{0})?'.format(num)
@@ -254,6 +260,58 @@ class DirectionParser(object):
         return self
 
 
+
+
+class BetweenParser(object):
+
+    def __init__(self, names=None):
+        self.verbatim = None
+        self.features = None
+        self.kind = 'between'
+
+
+    def __str__(self):
+        if self.features:
+            return 'Between {}'.format(oxford_comma(self.features))
+        return ''
+
+
+    def __repr__(self):
+        return str({
+            'verbatim': self.verbatim,
+            'features': self.features
+        })
+
+
+    def parse(self, text):
+        self.verbatim = text
+        # Extract between string and test feature names
+        between = re.split('between', text, flags=re.I)[-1].rstrip('() ')
+        delim = r'(?:\band\b|&|\+|,|;)'
+        features = re.split(delim, between, flags=re.I)
+        features = [s.strip() for s in features if s.strip()]
+        if not features:
+            raise ValueError('Could not parse "{}"'.format(text))
+        # Test for bad feature names
+        for feature in features:
+            if any([c.isdigit() for c in feature]):
+                raise ValueError('Could not parse "{}"'.format(text))
+        # Identify feature
+        if ' ' in features[-1] and features[-1].endswith('s'):
+            name, feature = features[-1].rsplit(' ', 1)
+            features[-1] = name
+            endings = ('es', 's')
+            for ending in endings:
+                if feature.endswith(ending):
+                    feature = feature[:-len(ending)]
+                    features = ['{} {}'.format(n, feature) for n in features]
+                    break
+        self.features = features
+        return self
+
+
+
+
 def is_directions(val):
     """Tests if a string contains specific locality info"""
     # Classify records with directional info as specific
@@ -302,4 +360,6 @@ def is_directions(val):
 
 def parse_directions(val):
     """Parses a simple directional string"""
+    if 'between' in val.lower():
+        return BetweenParser().parse(val)
     return DirectionParser().parse(val)
