@@ -26,6 +26,7 @@ class SiteList(MutableSequence):
         self.orig = self._obj[:]
         self._std = LocStandardizer(remove_collations=True)
         self._filters = []
+        self._aggressive = False
 
 
     def __getitem__(self, i):
@@ -85,6 +86,15 @@ class SiteList(MutableSequence):
 
 
     def match(self, name=None, site=None, attr=None, syndex=3):
+        self._match(name, site=site, attr=attr, syndex=syndex)
+        if not self:
+            self._aggressive = True
+            self._match(name, site=site, attr=attr, syndex=syndex)
+            self._aggressive = False
+        return self
+
+
+    def _match(self, name=None, site=None, attr=None, syndex=3):
         """Finds the best match for a given name in this list"""
         assert self._check_codes()
         orig_filters = self.filters()[:]
@@ -110,6 +120,7 @@ class SiteList(MutableSequence):
 
 
     def get_additional_synonyms(self, syndex=3):
+        logger.debug('Looking for synonyms (n={} records)...'.format(syndex))
         self._obj = self.orig[:3]
         for site in self._obj:
             site.find_synonyms()
@@ -215,10 +226,13 @@ class SiteList(MutableSequence):
             'volcano': ['mt', 'mount', 'mountain', 'volcano']
         }
         name = self.std(name)
-        for word in words.get(attr, []):
+        words = words.get(attr, [])
+        if self._aggressive:
+            words.extend(['mt'])
+        for word in words:
             pattern = r'\b{}\b'.format(word)
             name = re.sub(pattern, '', name)
-        name = self._std.strip_words(name, ['area', 'near', 'nr'])
+        name = self._std.strip_words(name, ['area', 'near', 'nr', 'off'])
         name = name.replace('-', '')
         return name
 
