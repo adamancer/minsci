@@ -73,7 +73,7 @@ class Hints(dict):
 
 
 class Matcher(object):
-    strip_words = ['area', 'near', 'nr']
+    strip_words = ['area', 'near', 'nr', 'off']
     hints = Hints()
 
 
