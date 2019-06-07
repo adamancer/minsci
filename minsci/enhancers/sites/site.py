@@ -44,7 +44,7 @@ class Site(dict):
         'municipality': '',
         'island': '',
         'island_group': '',
-        'water_body': '',
+        'water_body': [],
         'features': [],
         'mine': '',
         'mining_district': '',
@@ -221,7 +221,7 @@ class Site(dict):
         # Manually set attributes not populated from this source
         self.classification = 'site'
         self.municipality = ''
-        self.water_body = ''
+        self.water_body = []
         self.island = ''
         self.island_group = ''
         self.mine = ''
@@ -245,7 +245,7 @@ class Site(dict):
                     self.sea = ocean_sea
         # Validate that all required attributes are present
         self.classification = self.classify()
-        self._check_attributes()
+        self._finalize()
 
 
     def from_emu(self, rec):
@@ -259,7 +259,7 @@ class Site(dict):
         self.municipality = rec('LocTownship')
         self.island = rec('LocIslandName')
         self.island_group = rec('LocIslandGrouping')
-        self.water_body = rec('LocBaySound')
+        self.water_body = [rec('LocBaySound')]
         self.locality = rec('LocPreciseLocation')
         # Latitude and longitude use the centroid
         self.latitude = ''
@@ -366,7 +366,7 @@ class Site(dict):
         # Check if site is an event
         self.classification = self._classify_emu_record(rec)
         # Validate that all required attributes are present
-        self._check_attributes()
+        self._finalize()
 
 
     def from_geolocate(self, rec, params):
@@ -385,7 +385,7 @@ class Site(dict):
         self.municipality = ''
         self.island = ''
         self.island_group = ''
-        self.water_body = ''
+        self.water_body = []
         self.features = []
         self.mine = ''
         self.volcano = ''
@@ -393,7 +393,7 @@ class Site(dict):
         self.ocean = ''
         self.maps = []
         # Validate that all required attributes are present
-        self._check_attributes()
+        self._finalize()
 
 
     def from_dwc(self, rec):
@@ -414,7 +414,7 @@ class Site(dict):
         self.bbox = []
         self.fill()
         self.classification = self.classify()
-        self._check_attributes()
+        self._finalize()
 
 
     def from_site(self, rec):
@@ -426,7 +426,7 @@ class Site(dict):
         self.bbox = []
         self.fill()
         self.classification = self.classify()
-        self._check_attributes()
+        self._finalize()
 
 
     def get_admin_codes(self):
@@ -759,6 +759,9 @@ class Site(dict):
         result = False
         # If this is an admin div, compare its name to the other site
         if other and self.site_kind.startswith(('ADM', 'PCL')):
+            # Forbid contains relationship if same admin code
+            if self.site_kind == other.site_kind:
+                return False
             # Look for the official names of the state and county
             names = set(self.site_names + self.synonyms)
             #admin = set([other.country, other.state_province, other.county])
@@ -815,8 +818,40 @@ class Site(dict):
                 or self.distance_from(other) < distance_km)
 
 
-    def is_nsew_of(self, other, bearing, distance_km=100):
-        pass
+    def is_oceanic(self):
+        # Define regex patterns to find oceans/seas
+        oceans = re.compile(r'(^(atlantic|pacific|ocean)'
+                            r'|(atlantic|pacific|\bocean)$)', flags=re.I)
+        sea_gulfs = re.compile(r'(^(gulf|sea)|(gulf|sea)$)', flags=re.I)
+        # Isolate any oceanic place names for the list of water bodies
+        wtr_bodies = [s for s in [self.ocean, self.sea] + self.water_body if s]
+        oceanic = [w for w in wtr_bodies
+                   if oceans.search(w) or sea_gulfs.search(w)]
+        if oceanic:
+            if not self.ocean:
+                try:
+                    self.ocean = [w for w in oceanic if oceans.search(w)][0]
+                except IndexError:
+                    pass
+            if not self.sea:
+                try:
+                    self.sea = [w for w in oceanic if sea_gulfs.search(w)]
+                except IndexError:
+                    pass
+            self.water_body = [w for w in wtr_bodies
+                               if w not in self.ocean and w not in self.sea]
+            # Check locality for terrestrial features
+            pattern = re.compile(r'(bays?|islands?|ports?)', flags=re.I)
+            if not (pattern.search(self.locality + '|'.join(self.features))
+                    or self.county
+                    or self.island
+                    or self.island_group
+                    or self.mine
+                    or self.mining_district
+                    or self.municipality
+                    or self.volcano):
+                return True
+        return False
 
 
     def get_point(self, distance_km, bearing,
@@ -1031,10 +1066,22 @@ class Site(dict):
         return classification
 
 
-    def _check_attributes(self):
+    def _finalize(self):
         """Verifies that all required attributes have been defined"""
-        for attr in self._attributes:
-            getattr(self, attr)
+        for attr, kind in self._attributes.items():
+            val = getattr(self, attr)
+            if self.std(val) in ['not-stated', 'undetermined']:
+                setattr(self, attr, '')
+            # Enforce types
+            if isinstance(kind, list) and not isinstance(val, list):
+                val = [s for s in re.split(r' *[;,] *', val) if s]
+                setattr(self, attr, val)
+            elif isinstance(kind, str) and isinstance(val, list):
+                setattr(self, attr, '; '.join(val))
+        # Clear political features if record is oceanic
+        if self.is_oceanic():
+            self.country = ''
+            self.state_province = ''
         # Fix lat-lngs given as lists
         if isinstance(self.latitude + self.longitude, list):
             lats = [float(lat) for lat in self.latitude]
