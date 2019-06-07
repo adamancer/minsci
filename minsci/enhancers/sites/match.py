@@ -121,22 +121,27 @@ class Matcher(object):
         return names
 
 
-    def match(self, force_field=None, force_codes=None, **kwargs):
+    def match(self, force_field=None, force_codes=None,
+              finalize=True, fallback=True, **kwargs):
         """Wraps _match method to handle errors"""
         msg = 'No match found'
         try:
-            self._match(force_field, force_codes, **kwargs)
+            self._match(force_field, force_codes, finalize, **kwargs)
         except ValueError as e:
-            self.reset(True)
+            self.matches = []
+            self.matched = []
             msg = str(e)
-        if not self.matches:
+            logger.debug('Encountered error: {}'.format(msg))
+            #raise Exception('Fatal error') from e
+        if not self.matches and fallback:
             self.fallback()
         if not self.matches:
             raise ValueError(msg)
         return self
 
 
-    def _match(self, force_field=None, force_codes=None, **kwargs):
+    def _match(self, force_field=None, force_codes=None,
+               finalize=True, **kwargs):
         """Matches a site against GeoNames"""
         threshold = -1   # size
         min_size = 0      # lower values = less specific
@@ -148,9 +153,12 @@ class Matcher(object):
         if force_field is not None:
             fields = [force_field]
         # Check US records for PLSS coordinates
+        logger.debug('Checking for PLSS strings')
         plss_strings = []
         if self.site.country_code == 'US' and self.site.admin_code_1:
             for field in fields:
+                continue
+                field = field.rstrip('0123456789')
                 val = getattr(self.site, field)
                 states = self.site.admin_code_1
                 if not isinstance(states, list):
@@ -158,7 +166,7 @@ class Matcher(object):
                 for state in states:
                     try:
                         plss = SectionTownshipRange(val, state)
-                    except (ValueError, TypeError):
+                    except (ValueError, TypeError) as e:
                         pass
                     else:
                         # PLSS coordinates are highly specifc, so stop here
@@ -180,7 +188,9 @@ class Matcher(object):
                             terms.append(term)
                             plss_strings.append(plss.verbatim)
         # Check for directions (10 km W of Washington)
+        logger.debug('Checking directions')
         for field in fields:
+            field = field.rstrip('0123456789')
             val = getattr(self.site, field)
             # Remove PLSS strings
             for verbatim in plss_strings:
@@ -188,18 +198,23 @@ class Matcher(object):
                     val = val.replace(verbatim, '').strip()
                 except AttributeError:
                     val = [s.replace(verbatim, '').strip() for s in val]
-            names = [n for n in self.get_names(val) if is_directions(n)]
+            names = [n for n in self.get_names(val)
+                     if self._is_directions(n, field)]
             for name in names:
                 logger.debug('Checking for directions in "{}"'.format(name))
+                # Update terms regardless of whether the value can be parsed
+                # as a direction
+                terms.append('"{}"'.format(name.strip('" ')))
                 try:
                     parse_directions(name)
                 except ValueError:
-                    pass
+                    logger.debug('Could not parse directions')
                 else:
-                    logger.debug('Matching {}={}...'.format(field, name))
-                    terms.append('"{}"'.format(name.strip('" ')))
+                    logger.debug('Matching direction in'
+                                 ' {}={}...'.format(field, name))
                     match = self.match_one(name, field, **kwargs)
-                    matches_, matched_, max_size = match
+                    matches_, terms_, matched_, max_size = match
+                    terms.extend(terms_)
                     matches.extend(matches_)
                     matched.extend(matched_)
                     if max_size < threshold:
@@ -207,10 +222,25 @@ class Matcher(object):
                                      ' <= {}'.format(max_size))
                         threshold = max_size
         # Create the list of features to test against
-        features = set([parse_directions(m.record.locality).feature
-                        for m in matches])
+        features = []
+        for match in matches:
+            try:
+                parsed = parse_directions(match.record.locality)
+            except ValueError as e:
+                # This error occurs if a direction check has yielded a list
+                # of sites instead of a parsed direction (for example, if
+                # only site X in "Between X and Y" could be found).
+                pass
+            else:
+                try:
+                    features.append(parsed.feature)
+                except AttributeError:
+                    features.extend(parsed.features)
+        features = set(features)
         # Now look for simple (ha) place names
+        logger.debug('Checking place names')
         for field in fields:
+            field = field.rstrip('0123456789')
             val = getattr(self.site, field)
             # Remove PLSS strings
             for verbatim in plss_strings:
@@ -218,7 +248,10 @@ class Matcher(object):
                     val = val.replace(verbatim, '').strip()
                 except AttributeError:
                     val = [s.replace(verbatim, '').strip() for s in val]
-            names = [n for n in self.get_names(val) if not is_directions(n)]
+            names = [n for n in self.get_names(val)
+                     if not self._is_directions(n, field)]
+            #names = [n for n in self.get_names(val)
+            #         if not '"{}"'.format(n) in terms]
             # If this is the first populated value, set the threshold
             # for size. Additional place names must be at least as
             # specific as the largest size in this class.
@@ -254,7 +287,7 @@ class Matcher(object):
                 logger.debug('Matching {}={}...'.format(field, name))
                 terms.append(name)
                 match = self.match_one(name, field, fcodes,**kwargs)
-                matches_, matched_, max_size = match
+                matches_, terms_, matched_, max_size = match
                 # Discard features mentioned in directions
                 modified = matches_[:]
                 for feature in features:
@@ -263,19 +296,14 @@ class Matcher(object):
                 if matches_ != modified:
                     terms.remove(name)
                     continue
+                terms.extend(terms)
                 matches.extend(matches_)
                 matched.extend(matched_)
                 if max_size < threshold:
                     logger.debug('Updating threshold to <= {}'.format(max_size))
                     threshold = max_size
-        self.finalize_match(matches, threshold, terms, matched)
+        self.finalize_match(matches, threshold, terms, matched, finalize)
         return self
-
-
-    def assign(self, geonames_id):
-        match = self.site.get_by_id(geonames_id)
-        description = ('Manually matched this record to the GeoNames record'
-                       ' for...')
 
 
     def match_one(self, name, field, force_codes=None, **kwargs):
@@ -288,7 +316,7 @@ class Matcher(object):
         if self.std(name) in ['not-stated', 'undetermined']:
             return [], [], 1e8
         # Check the hint dictionary
-        if is_directions(name):
+        if self._is_directions(name, field):
             hintcodes = ['DIR']
         elif force_codes:
             hintcodes = force_codes
@@ -306,7 +334,8 @@ class Matcher(object):
             admin_codes = self.site.admin_code_1[:]
             self.site.state_province = ''
             self.site.admin_code_1 = ''
-            matches, _, _ = self._match_one(name, field, force_codes, **kwargs)
+            result = self._match_one(name, field, force_codes, **kwargs)
+            matches = result[0]
             # Reset state/province attributes
             self.site.state_province = state_province
             self.site.admin_code_1 = admin_codes
@@ -330,7 +359,7 @@ class Matcher(object):
                     self._check_fcodes(fcodes)
                     max_size = self.max_size(fcodes)
                 # Save result to the hints dictionary before returning it
-                result = matches_, matched, max_size
+                result = matches_, [], matched, max_size
                 key = self.hints.keyer(name, self.site, hintcodes)
                 self.hints[key] = result
                 return result
@@ -355,8 +384,10 @@ class Matcher(object):
 
     def _match_one(self, name, field, force_codes=None, **kwargs):
         """Matches one name-field pair"""
+        terms = []
+        matched = []
         # Check the hint dictionary
-        if is_directions(name):
+        if self._is_directions(name, field):
             hintcodes = ['DIR']
         elif force_codes:
             hintcodes = force_codes
@@ -368,104 +399,33 @@ class Matcher(object):
             return self.hints[self.hints.keyer(name, self.site, hintcodes)]
         except KeyError:
             pass
-        # Is this name actually directions?
-        if is_directions(name):
+        # Is this name actually a direction string?
+        if self._is_directions(name, field):
             # Parse directions and matched the referenced feature
             parsed = parse_directions(name)
-            # Set defaults for distance calculations
-            parsed.defaults['min_dist_km'] = 0
-            parsed.defaults['max_dist_km'] = 100
-            refsite = self.site.clone({
-                'country': self.site.country,
-                'state_province': self.site.state_province,
-                'county': self.site.county,
-                'locality': parsed.feature
-            })
-            # Find all features matching the feature in the locality string,
-            # then make the distance calculation for each. The final
-            # coordinates and uncertainty will be a circle encompassing the
-            # distance calculated from each site.
-            codes = [
-                self.filter_codes(fclass='P'),
-                self.filter_codes(max_size=10)
-            ]
-            working = refsite.clone({}, copy_missing_fields=True)
-            for attr in [None, 'county', 'state_province']:
-                # Directions may indicate a point outside the political
-                # geography of the reference site. If a match fails, try
-                # again without county and again without state if needed.
-                if attr is not None:
-                    setattr(working, attr, '')
-                    working.get_admin_codes()
-                matcher = Matcher(site=working)
-                stop = False
-                for force_codes in codes:
-                    try:
-                        logger.debug('Matching feature parsed from directions')
-                        matcher.match('locality', force_codes, **kwargs)
-                    except ValueError:
-                        raise
-                    else:
-                        stop = True
-                        break
-                if stop:
-                    break
+            if parsed.kind == 'directions':
+                result = self._match_directions(parsed, **kwargs)
+            elif parsed.kind == 'between':
+                result = self._match_between(parsed, **kwargs)
             else:
-                msg = ('Could not find feature named in'
-                       ' locality string "{}"').format(parsed)
-                logger.warning(msg)
-                raise ValueError(msg)
-            sites = matcher.matches
-            master = self.site.clone({
-                'site_num': 'd{}'.format(sites[0].record.site_num),
-                'site_kind': '_DIRS',
-                'locality': str(parsed),
-                'country': self.site.country,
-                'state_province': self.site.state_province,
-                'county': self.site.county,
-            })
-            master.get_admin_codes()
-            fcodes = [master.site_kind]
-            matches = []
-            for match in matcher.matches:
-                # Summarize site info, pulling political geopgraphy from the
-                # site record being georeferenced
-                try:
-                    distance_km = parsed.avg_distance_km()
-                except ZeroDivisionError:
-                    raise ValueError('Directions do not specify a distance')
-                bearing = parsed.bearing
-                point = match.record.get_point(distance_km, bearing)
-                fakesite = master.clone({'latitude': point.latitude,
-                                         'longitude': point.longitude},
-                                         copy_missing_fields=True)
-                matches.append(Match(fakesite, None, point.radius, name))
-            encircled = self.encircle(matches)
-            master.latitude = encircled.latitude
-            master.longitude = encircled.longitude
-            master.directions_from = sites
-            matches = SiteList([master])
-            # HACK: Set the radius for the _DIRS fcode to the radius
-            # calculated from by encircle()
-            self.codes[master.site_kind] = {'SizeIndex': encircled.radius}
-            # HACK: Set the filter manually since it's needed below but
-            # there's currently no easy way to do a dummy match
-            filters = [f for f in matcher.matches[0].filters
-                       if list(f.keys())[0] != '_name']
-            matches._filters = filters + [{'locality': 1, '_name': name}]
-            msg = ('Parsed direction string "{}" as "{}" and calculated'
-                   ' coordinates and uncertainty for the point at that'
-                   ' distance and bearing from the GeoNames records'
-                   ' matching {} (n={}).')
+                raise ValueError('Unknown parser: {}'.format(parsed.kind))
+            # Add results to bookkeeping variables
+            matches, terms_, matched_, fcodes = result
+            terms.extend(terms_)
+            matched.extend(matched_)
+            name = matches._filters[-1]['_name']
         else:
-            stname = self.std(name).replace('-', ' ')
-            stname = self.std.strip_words(name, self.strip_words)
+            stname = self.std(name)
+            stname = self.std.strip_words(stname, self.strip_words)
             logger.debug('Standardized "{}"'
                          ' to "{}"'.format(name, stname))
             # Search GeoNames for matching records
-            matches = SiteList(self.gn_bot.search(stname, **kwargs))
+            logger.debug('Searching GeoNames for {}'.format(stname))
+            matches = self.gn_bot.search(stname, **kwargs)
             if not matches:
-                stname2 = stname
+                # Remove parentheicals
+                stname2 = self.std(name).replace('-', ' ')
+                stname2 = self.std.strip_words(stname2, self.strip_words)
                 # Custom mountain search
                 if stname2.startswith('mt-'):
                     stname2 = re.sub(r'\bmt\b', '', stname2)
@@ -476,11 +436,17 @@ class Matcher(object):
                 if stname2.endswith('island'):
                     stname2 = stname2.replace('island', '').strip()
                     force_codes = self.config['codes']['island']
-                if stname != stname2:
+                if stname != stname2 or field == 'water_body':
                     stname2 = stname2.strip('-')
                     logger.debug('Standardized "{}"'
                                  ' to "{}"'.format(name, stname2))
-                    matches = SiteList(self.gn_bot.search(stname2, **kwargs))
+                    logger.debug('Searching GeoNames for {}'.format(stname2))
+                    # Oceans and seas do not specify a country
+                    if field != 'water_body':
+                        matches = self.gn_bot.search(stname2, **kwargs)
+                    else:
+                        matches = self.gn_bot.search(stname2)
+                    stname = stname2
             # Filter matches based on field-specifc feature codes
             if force_codes:
                 logger.debug('Using a custom set of featureCodes'
@@ -492,6 +458,7 @@ class Matcher(object):
                 fcodes = self.config['codes']['undersea']
                 field = 'undersea feature'
             # Get rid of less likely codes
+            matches = SiteList(matches)
             matches = SiteList([m for m in matches if m.site_kind in fcodes])
             if len(matches) > 1:
                 subset = matches[:]
@@ -506,29 +473,208 @@ class Matcher(object):
                     match.bot = self.gn_bot
                     match.get_admin_codes()
                 # Filter matches on name
-                matches.match(name=name, site=self.site, attr=field)
+                matches.match(name=stname, site=self.site, attr=field)
                 #self.note('Found {:,} sites matching.')
             fcodes = [m.site_kind for m in matches]
         # Format matches
         matches_ = []
-        matched = []
         for match in matches:
             fcodes.append(match.site_kind)
             #radius = self.codes[match.site_kind]['SizeIndex']
             radius = self.get_radius(match)
             matches_.append(Match(match, matches.filters(), radius, name))
-            matched.append(name)
+            if not name.startswith('feature in'):
+                matched.append(name)
         max_size = 1e8  # arbitrarily large value
         if fcodes:
             self._check_fcodes(fcodes)
             max_size = self.max_size(fcodes)
         # Save result to the hints dictionary before returning it
-        result = matches_, matched, max_size
+        result = matches_, terms, matched, max_size
         self.hints[self.hints.keyer(name, self.site, hintcodes)] = result
         return result
 
 
-    def finalize_match(self, matches, threshold, terms, matched):
+    def _match_directions(self, parsed, **kwargs):
+        name = str(parsed)
+        # Set defaults for distance calculations
+        parsed.defaults['min_dist_km'] = 0
+        parsed.defaults['max_dist_km'] = 100
+        refsite = self.site.clone({
+            'country': self.site.country,
+            'state_province': self.site.state_province,
+            'county': self.site.county,
+            'locality': parsed.feature
+        })
+        # Find all features matching the feature in the locality string,
+        # then make the distance calculation for each. The final
+        # coordinates and uncertainty will be a circle encompassing the
+        # distance calculated from each site.
+        codes = [
+            self.filter_codes(fclass='P'),
+            self.filter_codes(max_size=10)
+        ]
+        working = refsite.clone({}, copy_missing_fields=True)
+        for attr in [None, 'county', 'state_province']:
+            # Directions may indicate a point outside the political
+            # geography of the reference site. If a match fails, try
+            # again without county and again without state if needed.
+            # FIXME: I don't think this works the way it's supposed to--the
+            # kwargs are inherited from the outer scope.
+            if attr is not None:
+                setattr(working, attr, '')
+                working.get_admin_codes()
+            matcher = Matcher(site=working)
+            stop = False
+            for force_codes in codes:
+                try:
+                    logger.debug('Matching feature parsed from directions')
+                    matcher.match('locality', force_codes, **kwargs)
+                except ValueError:
+                    raise
+                else:
+                    stop = True
+                    break
+            if stop:
+                break
+        else:
+            msg = ('Could not find feature named in'
+                   ' locality string "{}"').format(parsed)
+            logger.warning(msg)
+            raise ValueError(msg)
+        sites = matcher.matches
+        master = self.site.clone({
+            'site_num': 'd{}'.format(sites[0].record.site_num),
+            'site_kind': '_DIRS',
+            'locality': str(parsed),
+            'country': self.site.country,
+            'state_province': self.site.state_province,
+            'county': self.site.county,
+        })
+        master.get_admin_codes()
+        fcodes = [master.site_kind]
+        matches = []
+        for match in matcher.matches:
+            # Summarize site info, pulling political geopgraphy from the
+            # site record being georeferenced
+            try:
+                distance_km = parsed.avg_distance_km()
+            except ZeroDivisionError:
+                raise ValueError('Directions do not specify a distance')
+            bearing = parsed.bearing
+            point = match.record.get_point(distance_km, bearing)
+            fakesite = master.clone({'latitude': point.latitude,
+                                     'longitude': point.longitude},
+                                     copy_missing_fields=True)
+            matches.append(Match(fakesite, None, point.radius, name))
+        encircled = self.encircle(matches)
+        master.latitude = encircled.latitude
+        master.longitude = encircled.longitude
+        master.directions_from = sites
+        matches = SiteList([master])
+        # HACK: Set the radius for the _DIRS fcode to the radius
+        # calculated from by encircle()
+        self.codes[master.site_kind] = {'SizeIndex': encircled.radius}
+        # HACK: Set the filter manually since it's needed below but
+        # there's currently no easy way to do a dummy match
+        filters = [f for f in matcher.matches[0].filters
+                   if list(f.keys())[0] != '_name']
+        matches._filters = filters + [{'locality': 1, '_name': name}]
+        #msg = ('Parsed direction string "{}" as "{}" and calculated'
+        #       ' coordinates and uncertainty for the point at that'
+        #       ' distance and bearing from the GeoNames records'
+        #       ' matching {} (n={}).')
+        return matches, [], [], fcodes
+
+
+    def _match_between(self, parsed, **kwargs):
+        """Matches direction strings like 'Between X and Y'"""
+        # Find all features matching the locality string. Only proceed if
+        # all features can be matched.
+        codes = [
+            self.filter_codes(fclass='P'),
+            self.filter_codes(max_size=10)
+        ]
+        # Process features one at a time since all need to match but they
+        # don't need to have the same feature code
+        matches = []
+        terms = []
+        matched = []
+        found = 0
+        for feature in parsed.features:
+            terms.append(feature)
+            refsite = self.site.clone({
+                'country': self.site.country,
+                'state_province': self.site.state_province,
+                'county': self.site.county,
+                'locality': feature
+            })
+            working = refsite.clone({}, copy_missing_fields=True)
+            matcher = Matcher(site=working)
+            for force_codes in codes:
+                try:
+                    logger.debug('Matching feature parsed from directions')
+                    matcher.match('locality',
+                                  force_codes,
+                                  finalize=False,
+                                  fallback=False,
+                                  **kwargs)
+                except ValueError as e:
+                    pass
+                else:
+                    matches.extend(matcher.matches)
+                    matched.append(feature)
+                    matcher.threshold = 1e8
+                    break
+        # Check if all features are accounted for
+        if not matched:
+            msg = ('Could not find any features named in'
+                   ' locality string "{}"').format(feature, parsed)
+            raise ValueError(msg)
+        # Construct a new matcher object from the list of matches
+        if terms == matched:
+            master = self.site.clone({
+                'site_num': 'multiple',
+                'site_kind': '_DIRS',
+                'locality': str(parsed),
+                'country': self.site.country,
+                'state_province': self.site.state_province,
+                'county': self.site.county,
+            })
+            master.get_admin_codes()
+            matcher = Matcher(site=master)
+            matcher.matches = matches
+            matcher.terms = matcher.matched = [parsed.verbatim]
+            matcher.encompass()
+            fcodes = [master.site_kind]
+            master.latitude = matcher.latitude
+            master.longitude = matcher.longitude
+            master.directions_from = matches
+            matches = SiteList([master])
+            # HACK: Set the radius for the _DIRS fcode to the radius calculated
+            # from by encompass(). Adjust the radius based on whether all
+            # parsed all features were found.
+            radius = matcher.radius
+            if len(terms) == len(matched):
+                radius /= 2
+            self.codes[master.site_kind] = {'SizeIndex': radius}
+            # HACK: Set the filter manually since it's needed below but
+            # there's currently no easy way to do a dummy match
+            filters = [f for f in matcher.matches[0].filters
+                       if list(f.keys())[0] != '_name']
+            matches._filters = filters + [{'locality': 1, '_name': str(parsed)}]
+        else:
+            # Set up filters, etc. for partial match
+            filters = [f for f in matches[0].filters
+                       if list(f.keys())[0] != '_name']
+            matches = SiteList([m.record for m in matches])
+            name = 'feature in "{}"'.format(str(parsed))
+            matches._filters = filters + [{'locality': 1, '_name': name}]
+            fcodes = [m.site_kind for m in matches]
+        return matches, terms, matched, fcodes
+
+
+    def finalize_match(self, matches, threshold, terms, matched, finalize=True):
         """Determines coordinates and uncertainty by comparing matches"""
         matched = ['"{}"'.format(t) if is_directions(t) else t for t in matched]
         self.matches = self.dedupe_matches(matches)
@@ -537,8 +683,8 @@ class Matcher(object):
         self.terms = sorted(list(set(terms)))
         self.matched = sorted(list(set(matched)))
         self.missed = sorted(list(set(terms) - set(matched)))
-        if self.threshold > 0:
-            logger.debug('{:,} matches found'.format(len(self.matches)))
+        logger.debug('{:,} matches found'.format(len(self.matches)))
+        if self.threshold > 0 and finalize:
             if self.matches:
                 self._validate()
             if len(self.matches) == 1:
@@ -629,8 +775,10 @@ class Matcher(object):
         for matches, distance in self.get_distances():
             # Test if one of the matches is a direction string
             directions = [m for m in matches if m.record.site_kind == '_DIRS']
-            if len(directions) == 1 and distance <= max_distance_km / 2:
-                count += 1
+            if (len(directions) == 1
+                and distance < directions[0].radius * 2
+                and distance <= max_distance_km / 2):
+                    count += 1
             else:
                 break
         else:
@@ -643,9 +791,9 @@ class Matcher(object):
                     s = 's'
                 distance = round(distance) if distance > 1 else 1
                 mask = (' determined that {} located within {} km of'
-                        ' another locality mentioned in this record ({}),'
+                        ' another locality mentioned in this record ("{}"),'
                         ' which is interpreted as approximate directions'
-                        ' to the named feature{}')
+                        ' to the named feature{}.')
                 self.explanation = mask.format(feature, distance, loc, s)
                 self.matches = [m for m in self.matches
                                 if m not in directions]
@@ -701,23 +849,27 @@ class Matcher(object):
                          ' ({} km radius)'.format(max_distance_km))
 
 
-    def fallback(self, fields=None, max_distance_km=100):
-        if fields is None:
-            fields = ['county', 'state_province']
-        for field in fields:
-            kwargs = {
-                'country': self.site.country_code,
-                'adminCode1': self.site.admin_code_1
-            }
+    def fallback(self, max_distance_km=100):
+        """Falls back to county or state if more specific matches fail"""
+        kwargs = {
+            'country': self.site.country_code,
+            'adminCode1': self.site.admin_code_1
+        }
+        # Fall back to county or state (if state is small)
+        for field in ['county', 'state_province']:
+            name = getattr(self.site, field)
             terms = self.terms
             self.reset(True)
-            self._match(field, **kwargs)
-            if len(self.matches) == 1:
-                self.latitude, self.longitude = self.get_coords(self.matches[0])
-                self.radius = self.get_radius(self.matches[0])
-                if self.radius <= max_distance_km:
-                    self.terms.extend(terms)
-                    return self.matches
+            if name:
+                logger.debug('Checking fallback {}={}'.format(field, name))
+                self._match(field, **kwargs)
+                if len(self.matches) == 1:
+                    self.radius = self.get_radius(self.matches[0])
+                    if self.radius <= max_distance_km:
+                        coords = self.get_coords(self.matches[0])
+                        self.latitude, self.longitude = coords
+                        self.terms.extend(terms)
+                        return self.matches
             self.reset(True)
             self.terms = terms
 
@@ -1011,45 +1163,67 @@ class Matcher(object):
         return related[0] if len(related) == 1 else None
 
 
-
     def get_related(self, m1, m2=None, swap_order=True):
         """Checks if any match is contained by any other match"""
         related = []
         if m2 is None:
             m2 = m1[1:]
             m1 = m1[:1]
-        admins = [m for m in m2
-                  if (m.record.site_kind.startswith('ADM')
-                      or m.record.polygon())]
-        if admins:
-            for site, admin in self.find_combinations([m1, admins]):
-                if admin.record.contains(site.record):
-                    related.append([site, admin, True])
+        for site, other in self.find_combinations([m1, m2]):
+            # Contains forbidden for admin divs of same level
+            if site.record.site_kind != other.record.site_kind:
+                # Order sites as larger, smaller
+                larger, smaller = self.order_matches(site, other)
+                if larger.record.contains(smaller.record):
+                    related.append([smaller, larger, True])
                     continue
-                # Check if the lat-long of the site falls into the radius/box
-                # of the admin
+                # Check if the lat-long of the smaller falls into the
+                # radius/box of the larger
                 try:
-                    lat = float(site.record.latitude)
-                    lng = float(site.record.longitude)
+                    lat = float(smaller.record.latitude)
+                    lng = float(smaller.record.longitude)
                 except ValueError:
                     pass
                 else:
-                    if admin.record.contains(lat=lat, lng=lng):
-                        related.append([site, admin, True])
-        if swap_order:
-            related.extend(self.get_related(m2, m1, False))
+                    if larger.record.contains(lat=lat, lng=lng):
+                        related.append([smaller, larger, True])
         # If neither site contains the other, check if they are close together
         if not related:
-            for site, admin in self.find_combinations([m1, admins]):
-                if admin.record.is_close_to(site.record):
-                    # Check that the sites are ordered correctly. The
-                    # comparison here relies on the ordering of the ADM
-                    # fields in GeoNames.
-                    if (not admin.record.site_kind.startswith('ADM')
-                        or (admin.record.site_kind < site.record.site_kind)):
-                            site, admin = admin, site
-                    related.append([site, admin, False])
+            for site, other in self.find_combinations([m1, m2]):
+                larger, smaller = self.order_matches(site, other)
+                if larger.record.is_close_to(smaller.record):
+                    related.append([smaller, larger, False])
         return related
+
+
+    @staticmethod
+    def order_matches(match, other):
+        """Orders sites by as larger, smaller"""
+        try:
+            site_area = match.record.get_size().area
+            other_area = other.record.get_size().area
+        except TypeError:
+            site_admin = match.record.site_kind.startswith('ADM')
+            other_admin = other.record.site_kind.startswith('ADM')
+            if site_admin and not other_admin:
+                return match, other
+            elif not site_admin and other_admin:
+                return other, match
+            elif site_admin and match.record.site_kind > other.record.site_kind:
+                return other, match
+            elif site_admin and match.record.site_kind < other.record.site_kind:
+                return match, other
+            elif match.radius < other.radius:
+                return other, match
+            elif match.radius > other.radius:
+                return match, other
+            elif other.record.polygon():
+                return other, match
+            else:
+                return match, other
+        else:
+            return (match, other) if site_area > other_area else (other, match)
+
 
 
     def group_by_term(self, matches=None):
@@ -1524,3 +1698,9 @@ class Matcher(object):
                     raise ValueError('Match invalid (matched {},'
                                      ' missed {})'.format(self.matched, missed))
         return True
+
+
+    def _is_directions(self, name, field):
+        if field not in ['country', 'state_province', 'county']:
+            return is_directions(name)
+        return False
