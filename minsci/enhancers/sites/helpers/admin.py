@@ -5,6 +5,7 @@ logger = logging.getLogger(__name__)
 
 import json
 import os
+import re
 import time
 from collections import namedtuple
 
@@ -91,6 +92,7 @@ def _read_current():
     try:
         current = json.load(open(fp, 'r', encoding='utf-8'))
     except json.decoder.JSONDecodeError as e:
+        input(str(e))
         raise
     except IOError:
         current = {}
@@ -157,7 +159,7 @@ def _verify_current(current):
         input('\n'.join(errors))
 
 
-def _remove_empty_keys(dct, n=1):
+def _remove_empty_keys(dct, n=1, remove_empty=False):
     for i in range(n):
         for key in list(dct.keys()):
             if key.endswith('-ca') or key in ['not-stated', 'undetermined']:
@@ -167,6 +169,8 @@ def _remove_empty_keys(dct, n=1):
                     del dct[key]
                 else:
                     _remove_empty_keys(dct[key])
+            elif remove_empty and not dct[key]:
+                del dct[key]
     return dct
 
 
@@ -181,6 +185,7 @@ class AdminParser(object):
     _to_country_code = _read_countries()[1]
     _to_state_name = _read_states()[0]
     _to_state_abbr = _read_states()[1]
+    _hints = {}
 
 
     def get_country(self, country_code):
@@ -216,37 +221,46 @@ class AdminParser(object):
             return [self.get_admin_div(t, level, country, search_name, suffixes)
                     for t in term]
         term_ = self._std(term)
+        # Check hints
+        i = '1' if search_name else '0'
+        key = '|'.join([term, level, country, i, suffixes])
         try:
-            country_code = self.get_country_code(country)
-        except IndexError as e:
-            logger.error('Unrecognized country', exc_info=True)
-            raise
-        try:
-            val = self._admin_divs[country_code][level][term_]
+            return self._hints[key]
         except KeyError:
-            for level in [level + s for s in suffixes]:
-                try:
-                    val = self._admin_divs[country_code][level][term_]
-                except KeyError:
-                    pass
-                else:
-                    break
-            else:
-                level = level.rstrip(suffixes)
-                raise ValueError('Unknown {}:'
-                                 ' {}, {}'.format(level, term, country))
-        # If searching a name, look up the official name as well
-        has_digit = any([c.isdigit() for c in val])
-        is_shorter = len(val) < len(term)
-        if has_digit or is_shorter or search_name:
             try:
-                name = self._admin_divs[country_code][level][self._std(val)]
+                country_code = self.get_country_code(country)
+            except IndexError as e:
+                logger.error('Unrecognized country', exc_info=True)
+                raise
+            try:
+                val = self._admin_divs[country_code][level][term_]
             except KeyError:
-                level = level.rstrip(suffixes)
-                raise ValueError('Unknown {}:'
-                                 ' {}, {}'.format(level, val, country))
-            return AdminDiv(name, val, level)
-        return AdminDiv(val, term, level)
+                for level in [level + s for s in suffixes]:
+                    try:
+                        val = self._admin_divs[country_code][level][term_]
+                    except KeyError:
+                        pass
+                    else:
+                        break
+                else:
+                    level = level.rstrip(suffixes)
+                    raise ValueError('Unknown {}:'
+                                     ' {}, {}'.format(level, term, country))
+            # If searching a name, look up the official name as well
+            has_digit = any([c.isdigit() for c in val])
+            is_shorter = len(val) < len(term)
+            if has_digit or is_shorter or search_name:
+                try:
+                    name = self._admin_divs[country_code][level][self._std(val)]
+                except KeyError:
+                    level = level.rstrip(suffixes)
+                    raise ValueError('Unknown {}:'
+                                     ' {}, {}'.format(level, val, country))
+                div = AdminDiv(name, val, level)
+            else:
+                div = AdminDiv(val, term, level)
+            #self._hints[key] = div
+            return div
 
 
     def get_admin_name(self, *args, **kwargs):
@@ -323,6 +337,12 @@ class AdminParser(object):
                     except ValueError as e:
                         logger.error(str(e), exc_info=True)
                         raise ValueError('Unknown #1 {}: {}'.format(ergs, val))
+                elif '-' in val or ' and ' in val:
+                    # Handle multiple values in an admin div field
+                    vals = re.split(r'(?:\band\b|-)', val)
+                    vals = [val.strip('- ') for val in vals]
+                    return self.map_archaic(vals, keys, callback,
+                                            *args, **kwargs)
                 lookup[self._std(val)] = current
                 _save_current(self._current)
                 if not current:
