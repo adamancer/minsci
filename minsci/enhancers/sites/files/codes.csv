@@ -25,7 +25,7 @@ A,TERR,FALSE,100 km,territory,
 A,ZN,FALSE,100 km,zone,
 A,ZNB,FALSE,100 km,buffer zone,a zone recognized as a buffer between two nations in which military presence is minimal or absent
 H,AIRS,TRUE,1 km,seaplane landing area,a place on a waterbody where floatplanes land and take off
-H,ANCH,FALSE,,anchorage,an area where vessels may anchor
+H,ANCH,FALSE,1 km,anchorage,an area where vessels may anchor
 H,BAY,TRUE,10 km,bay,"a coastal indentation between two capes or headlands, larger than a cove but smaller than a gulf"
 H,BAYS,FALSE,,bays,"coastal indentations between two capes or headlands, larger than a cove but smaller than a gulf"
 H,BGHT,TRUE,100 km,bight(s),an open body of water forming a slight recession in a coastline
@@ -128,8 +128,8 @@ H,SEA,TRUE,100 km,sea,a large body of salt water more or less confined by contin
 H,SHOL,FALSE,10 km,shoal(s),a surface-navigation hazard composed of unconsolidated material
 H,SILL,FALSE,,sill,"the low part of an underwater gap or saddle separating basins, including a similar feature at the mouth of a fjord"
 H,SPNG,TRUE,1 km,spring(s),a place where ground water flows naturally out of the ground
-H,SPNS,FALSE,,sulphur spring(s),a place where sulphur ground water flows naturally out of the ground
-H,SPNT,FALSE,,hot spring(s),a place where hot ground water flows naturally out of the ground
+H,SPNS,FALSE,1 km,sulphur spring(s),a place where sulphur ground water flows naturally out of the ground
+H,SPNT,FALSE,1 km,hot spring(s),a place where hot ground water flows naturally out of the ground
 H,STM,TRUE,50 km,stream,a body of running water moving to a lower level in a channel on land
 H,STMA,FALSE,,anabranch,a diverging branch flowing out of a main stream and rejoining it downstream
 H,STMB,FALSE,1 km,stream bend,a conspicuously curved or bent segment of a stream

@@ -44,6 +44,16 @@ codes:
     - T
     - U
     - V
+  municipality2:
+    - A
+    - H
+    - L
+    - P
+    - R
+    - S
+    - T
+    - U
+    - V
   volcano:
     - CLDA
     - CONE
