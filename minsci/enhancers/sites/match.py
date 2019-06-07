@@ -107,6 +107,10 @@ class Matcher(object):
     def get_names(self, names):
         """Splits a name string on common delimiters to get a list of names"""
         if not isinstance(names, list):
+            # Remove thousands separators
+            names = re.sub(r'(\d),(\d\d\d)\b', r'\1\2', names)
+            # Identify distinct clauses strings joined by and
+            names = re.sub(r' and (\d)', r'; \1', names)
             try:
                 parse_directions(names)
             except ValueError:
