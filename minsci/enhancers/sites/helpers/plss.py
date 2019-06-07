@@ -247,35 +247,34 @@ class PLSSParser(object):
 
     def __init__(self):
         # Define patterns used to identify and parse PLSS patterns
-        bad_prefixes = '((loc)|(hole)|(hwy)|(quads?:?)|(us)|#)'
-        centers = '(cen\.?(ter)?)'
-        corners = '(([NS][EW] *((1?/4)|(cor\.?(ner)?))?( of)?)(?![c0-9]))'
-        quarters = '(([NS][EW] *((1?/4)|(q(uarter)?))?( of)?)(?![c0-9]))'
-        halves = '([NSEW] *((1?/[23])|half))'
-        townships = '(((T(ownship)?\.? *)?[0-9]{1,3} *[NS])(?![NSEW]))'
-        ranges = '(((R(ange)?\.? *)?[0-9]{1,3} *[EW])(?![NSEW]))'
-        sections = ('((?<!/)(((((s(ection)?)|(se?ct?s?))\.? *)'
-                    '|\\b)[0-9]{1,3})(?!(-\d+[^NEWS]|\.\d)))')
+        bad_prefixes = r'((loc)|(hole)|(hwy)|(quads?:?)|(us)|#)'
+        centers = r'(cen\.?(ter)?)'
+        quarters = (r'(([NS][EW] *((1?/4)|(cor\.?(ner)?|(q(uarter)?)))?'
+                    r'( of)?)(?![c0-9]))')
+        halves = r'([NSEW] *((1?/[23])|half))'
+        townships = r'(((T(ownship)?\.? *)?[0-9]{1,3} *[NS])\.?(?![NSEW]))'
+        ranges = r'(((R(ange)?\.? *)?[0-9]{1,3} *[EW])\.?(?![NSEW]))'
+        sections = (r'((?<!/)(((((s(ection)?)|(se?ct?s?))\.? *)'
+                    r'|\b)[0-9]{1,3})(?!(-\d+[^NEWS]|\.\d)))')
         # Define quarter section
-        qtr = ('\\b((((N|S|E|W|NE|SE|SW|NW)[, \-]*)'
-               '((cor\.?|corner|half|q(uarter)?|(1?/[234]))'
-               '[, /\-]*(of *)?)?)+)\\b')
-        qtr_sections = ('((|[0-9]+){0}|{0}(?:(sec|[0-9]+[, /\-]'
-                        '|T[0-9]|R[0-9])))').format(qtr)
+        qtr = (r'\b((((N|S|E|W|NE|SE|SW|NW)[, \-]*)'
+               r'((cor\.?|corner|half|q(uarter)?|(1?/[234]))'
+               r'[, /\-]*(of *)?)?)+)\b')
+        qtr_sections = (r'((|[0-9]+){0}|{0}(?:(sec|[0-9]+[, /\-]'
+                        r'|T\.? *?[0-9]|R\.? *?[0-9])))').format(qtr)
         # Create full string baed on patterns
         pattern = [
             bad_prefixes,
             centers,
-            corners,
             quarters,
             halves,
             townships,
             ranges,
             sections
             ]
-        full = ('\\b((' +
-                '|'.join(['(' + s + '[,;: /\.\-]*' + ')' for s in pattern]) +
-                ')+)\\b')
+        full = (r'\b((' +
+                r'|'.join(['(' + s + '[,;: /\.\-]*' + ')' for s in pattern]) +
+                r')+)\b')
         # Define class attributes
         self.sec_twn_rng = re.compile(full, re.I)
         self.townships = re.compile(townships, re.I)
@@ -307,6 +306,10 @@ class PLSSParser(object):
             # section numbers
             match = self.bad_prefixes.sub('', match)
             verbatim = self._format_verbatim(match)
+            # Clean up match to make parsing quarter sections easier
+            pattern = r'\b([TR])\.? *?(\d{1,2})\.? *?([NSEW])\.?'
+            match = re.sub(pattern, r'\1\2\3', match, flags=re.I)
+            # Parse the string
             twp = self._format_township(match)
             rng = self._format_range(match)
             sec = self._format_section(match)
@@ -367,10 +370,10 @@ class PLSSParser(object):
     def _format_quarter_section(self, match):
         """Formats quarter section as NW SE NE"""
         matches = self.quarter_sections.findall(match)
-        if matches:
+        if len(matches) == 1:
             qtrs_1 = [val[0] for val in matches if val[0]]
             qtrs_2 = [val for val in matches if '/' in val]
-            qtrs = [qtrs for qtrs in (qtrs_1, qtrs_2) if len(matches) == 1]
+            qtrs = [qtrs for qtrs in (qtrs_1, qtrs_2)]
             try:
                 qtr = qtrs[0][0]
             except IndexError:
