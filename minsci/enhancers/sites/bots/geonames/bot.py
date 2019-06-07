@@ -77,7 +77,8 @@ class GeoNamesBot(Bot):
             status = content.get('status')
             if status is None:
                 results = content.get('geonames', content)
-                logger.info('Found {} records'.format(len(results)))
+                if not isinstance(results, dict):
+                    logger.info('Found {} records'.format(len(results)))
                 return results
             elif response.from_cache:
                 # If bad response comes from cache, delete that entry and
