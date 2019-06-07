@@ -128,7 +128,7 @@ class LocStandardizer(Standardizer):
         'r': 'river',
         'reg': 'region',
         'st': 'saint',
-        'ste': 'saint',
+        'ste': 'sainte',
         'the': '',
         'twp': 'township'
     }
