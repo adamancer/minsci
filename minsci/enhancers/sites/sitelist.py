@@ -85,7 +85,7 @@ class SiteList(MutableSequence):
         return self.dedupe(self._filters)
 
 
-    def match(self, name=None, site=None, attr=None, syndex=3):
+    def filter(self, name=None, site=None, attr=None, syndex=3):
         self._match(name, site=site, attr=attr, syndex=syndex)
         if not self:
             self._aggressive = True
@@ -98,13 +98,14 @@ class SiteList(MutableSequence):
         """Finds the best match for a given name in this list"""
         assert self._check_codes()
         orig_filters = self.filters()[:]
-        logging.debug('Matching {}={}...'.format(attr if attr else 'val', name))
+        field = attr if attr else 'value'
+        logging.debug('Filtering on {}="{}"...'.format(field, name))
         while True:
             self._filters = orig_filters[:]
             # Match from most to least specific attribute
-            if name is not None and self._obj:
+            if name is not None and self:
                 self._match_name(name, attr=attr)
-            if site is not None and self._obj:
+            if site is not None and self:
                 self._match_site(site)
             # If match fails, query geonames for additional synonyms and retry
             if not self and syndex:
@@ -112,15 +113,12 @@ class SiteList(MutableSequence):
                 syndex = None
             else:
                 break
-        filters = self.filters()[:]
-        logger.debug('{}/{} records matched {}'.format(len(self._obj),
-                                                       len(self.orig),
-                                                       filters))
+        logger.debug('{}/{} records matched filter'.format(len(self._obj),
+                                                           len(self.orig)))
         return self
 
 
     def get_additional_synonyms(self, syndex=3):
-        logger.debug('Looking for synonyms (n={} records)...'.format(syndex))
         self._obj = self.orig[:3]
         for site in self._obj:
             site.find_synonyms()
@@ -131,14 +129,14 @@ class SiteList(MutableSequence):
         if len(matches) == 1:
             return matches[0]
         elif len(matches) > 1:
-            raise ValueError('Could not match name uniquely')
+            raise ValueError('Multiple records matched filter')
         else:
-            raise ValueError('Could not match name')
+            raise ValueError('No records matched filter')
 
 
     def _match_name(self, name, attr=None):
         if self._obj:
-            logger.debug('Matching name={}...'.format(name))
+            logger.debug('Filtering on name="{}"...'.format(name))
             matches = []
             orig = name
             name = self._std_to_field(name, attr)
