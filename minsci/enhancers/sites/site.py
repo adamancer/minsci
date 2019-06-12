@@ -49,7 +49,7 @@ class Site(dict):
         'mine': '',
         'mining_district': '',
         'volcano': '',
-        'sea': '',
+        'sea_gulf': '',
         'ocean': '',
         'maps': [],
         'locality': '',
@@ -227,7 +227,7 @@ class Site(dict):
         self.mine = ''
         self.mining_district = ''
         self.volcano = ''
-        self.sea = ''
+        self.sea_gulf = ''
         self.ocean = ''
         self.maps = []
         self.locality = ''
@@ -242,7 +242,7 @@ class Site(dict):
                 if ocean_sea.endswith(' Ocean'):
                     self.ocean = ocean_sea
                 else:
-                    self.sea = ocean_sea
+                    self.sea_gulf = ocean_sea
         # Validate that all required attributes are present
         self.classification = self.classify()
         self._finalize()
@@ -324,7 +324,7 @@ class Site(dict):
         self.mine = rec('LocMineName')
         self.mining_district = rec('LocMiningDistrict')
         self.volcano = rec('VolVolcanoName')
-        self.sea = rec.get('LocSeaGulf')
+        self.sea_gulf = rec.get('LocSeaGulf')
         self.ocean = rec.get('LocOcean')
         self.maps = [rec(k) for k in ['LocQUAD', 'MapName'] if rec(k)]
         # Map features
@@ -389,7 +389,7 @@ class Site(dict):
         self.features = []
         self.mine = ''
         self.volcano = ''
-        self.sea = ''
+        self.sea_gulf = ''
         self.ocean = ''
         self.maps = []
         # Validate that all required attributes are present
@@ -442,9 +442,9 @@ class Site(dict):
         self.admin_div_2 = ''
         self.admin_code_2 = ''
         # Exclude ocean records from admin code checks
-        if (self.ocean or self.sea) and not self.country:
+        if (self.ocean or self.sea_gulf) and not self.country:
             return {}
-        if self.country is None:
+        if not self.country:
             raise ValueError('Unknown country/ocean/sea')
         map_archaic = self.adm_parse.map_archaic
         mapped = map_archaic(self.country,
@@ -818,13 +818,18 @@ class Site(dict):
                 or self.distance_from(other) < distance_km)
 
 
-    def is_oceanic(self):
+    def _set_oceanic(self):
+        """Sets ocean and sea_gulf based on water_body"""
         # Define regex patterns to find oceans/seas
         oceans = re.compile(r'(^(atlantic|pacific|ocean)'
                             r'|(atlantic|pacific|\bocean)$)', flags=re.I)
         sea_gulfs = re.compile(r'(^(gulf|sea)|(gulf|sea)$)', flags=re.I)
+        oceans = re.compile(r'(^(atlantic|pacific|ocean)'
+                            r'|(atlantic|pacific|\bocean)$)', flags=re.I)
+        sea_gulfs = re.compile(r'(^(gulf|sea)|(gulf|sea)$)', flags=re.I)
         # Isolate any oceanic place names for the list of water bodies
-        wtr_bodies = [s for s in [self.ocean, self.sea] + self.water_body if s]
+        wtr_bodies = [s for s in
+                      [self.ocean, self.sea_gulf] + self.water_body if s]
         oceanic = [w for w in wtr_bodies
                    if oceans.search(w) or sea_gulfs.search(w)]
         if oceanic:
@@ -833,25 +838,42 @@ class Site(dict):
                     self.ocean = [w for w in oceanic if oceans.search(w)][0]
                 except IndexError:
                     pass
-            if not self.sea:
+            if not self.sea_gulf:
                 try:
-                    self.sea = [w for w in oceanic if sea_gulfs.search(w)]
+                    self.sea_gulf = [w for w in oceanic if sea_gulfs.search(w)]
                 except IndexError:
                     pass
             self.water_body = [w for w in wtr_bodies
-                               if w not in self.ocean and w not in self.sea]
-            # Check locality for terrestrial features
-            pattern = re.compile(r'(bays?|islands?|ports?)', flags=re.I)
-            if not (pattern.search(self.locality + '|'.join(self.features))
-                    or self.county
-                    or self.island
-                    or self.island_group
-                    or self.mine
-                    or self.mining_district
-                    or self.municipality
-                    or self.volcano):
-                return True
-        return False
+                               if (w not in self.ocean
+                                   and w not in self.sea_gulf)]
+
+
+    def is_oceanic_feature(self, name, field=None):
+        """Checks if given field=name appears to be from the ocean"""
+        pattern = re.compile(r'(^off\b'
+                             r'|banks?'
+                             r'|basins?'
+                             r'|channels?'
+                             r'|canyons?'
+                             r'|gulfs?'
+                             r'|guyots?'
+                             r'|oceans?'
+                             r'|plains?'
+                             r'|plateuas?'
+                             #r'|reefs?'
+                             r'|rises?'
+                             r'|ridges?'
+                             r'|seamounts?'
+                             r'|seas?'
+                             r'|shelfs?'
+                             r'|shoals?'
+                             r'|trench(es)?'
+                             r'|troughs?'
+                             r'|valleys?'
+                             r'|zones?)', flags=re.I)
+        return ((self.ocean or self.sea_gulf)
+                and (field in ['ocean', 'sea_gulf']
+                     or pattern.search(name)))
 
 
     def get_point(self, distance_km, bearing,
@@ -1045,10 +1067,11 @@ class Site(dict):
             'NteAttributedToRef_nesttab',
             'NteMetadata_tab'
         ]
-        try:
-            rec.grid(cols).delete(NteType_tab='Legacy Volcano Data')
-        except IndexError:
-            pass
+        for label in ['Legacy Volcano Data', 'Mine Specifics']:
+            try:
+                rec.grid(cols).delete(NteType_tab=label)
+            except IndexError:
+                pass
         classification = self.classify()
         # Check if site/station number is populated by the collector
         classes =  ['collection event', 'expedition', 'site', 'specific']
@@ -1067,7 +1090,8 @@ class Site(dict):
 
 
     def _finalize(self):
-        """Verifies that all required attributes have been defined"""
+        """Finalizes site record by checking attributes and common errors"""
+        # Verifies that all required attributes have been defined
         for attr, kind in self._attributes.items():
             val = getattr(self, attr)
             if self.std(val) in ['not-stated', 'undetermined']:
@@ -1078,10 +1102,8 @@ class Site(dict):
                 setattr(self, attr, val)
             elif isinstance(kind, str) and isinstance(val, list):
                 setattr(self, attr, '; '.join(val))
-        # Clear political features if record is oceanic
-        if self.is_oceanic():
-            self.country = ''
-            self.state_province = ''
+        # Move data in wrong fields
+        self._set_oceanic()
         # Fix lat-lngs given as lists
         if isinstance(self.latitude + self.longitude, list):
             lats = [float(lat) for lat in self.latitude]

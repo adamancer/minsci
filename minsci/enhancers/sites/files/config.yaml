@@ -4,13 +4,16 @@ ordered:
   - municipality
   - features
   - volcano
+  - municipality2
   - water_body
   - island
   - mining_district
   - county
   - state_province
   - country
+  - sea_gulf
   - continent
+  - ocean
 codes:
   locality:
     - A
@@ -112,7 +115,7 @@ codes:
     - PCLI
     - PCLIX
     - PCLS
-  sea:
+  sea_gulf:
     - SEA
     - GULF
   ocean:
