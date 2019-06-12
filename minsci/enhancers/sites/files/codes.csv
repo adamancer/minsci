@@ -82,17 +82,17 @@ H,LGNX,FALSE,,section of lagoon,
 H,LK,TRUE,10 km,lake,a large inland body of standing water
 H,LKC,TRUE,10 km,crater lake,a lake in a crater or caldera
 H,LKI,TRUE,1 km,intermittent lake,
-H,LKN,FALSE,,salt lake,an inland body of salt water with no outlet
-H,LKNI,FALSE,,intermittent salt lake,
-H,LKO,FALSE,,oxbow lake,a crescent-shaped lake commonly found adjacent to meandering streams
-H,LKOI,FALSE,,intermittent oxbow lake,
-H,LKS,TRUE,10 km,lakes,large inland bodies of standing water
-H,LKSB,FALSE,,underground lake,a standing body of water in a cave
-H,LKSC,FALSE,,crater lakes,lakes in a crater or caldera
-H,LKSI,FALSE,,intermittent lakes,
-H,LKSN,FALSE,,salt lakes,inland bodies of salt water with no outlet
-H,LKSNI,FALSE,,intermittent salt lakes,
-H,LKX,FALSE,,section of lake,
+H,LKN,FALSE,10 km,salt lake,an inland body of salt water with no outlet
+H,LKNI,FALSE,1 km,intermittent salt lake,
+H,LKO,FALSE,1 km,oxbow lake,a crescent-shaped lake commonly found adjacent to meandering streams
+H,LKOI,FALSE,1 km,intermittent oxbow lake,
+H,LKS,TRUE,25 km,lakes,large inland bodies of standing water
+H,LKSB,FALSE,1 km,underground lake,a standing body of water in a cave
+H,LKSC,FALSE,25 km,crater lakes,lakes in a crater or caldera
+H,LKSI,FALSE,25 km,intermittent lakes,
+H,LKSN,FALSE,25 km,salt lakes,inland bodies of salt water with no outlet
+H,LKSNI,FALSE,25 km,intermittent salt lakes,
+H,LKX,FALSE,1 km,section of lake,
 H,MFGN,FALSE,,salt evaporation ponds,diked salt ponds used in the production of solar evaporated salt
 H,MGV,FALSE,,mangrove swamp,a tropical tidal mud flat characterized by mangrove vegetation
 H,MOOR,FALSE,10 km,moor(s),an area of open ground overlaid with wet peaty soils
@@ -174,7 +174,7 @@ L,COLF,FALSE,,coalfield,a region in which coal deposits of possible economic val
 L,CONT,TRUE,10000 km,continent,"continent: Europe, Africa, Asia, North America, South America, Oceania, Antarctica"
 L,CST,TRUE,100 km,coast,a zone of variable width straddling the shoreline
 L,CTRB,FALSE,1 km,business center,a place where a number of businesses are located
-L,DEVH,FALSE,,housing development,a tract of land on which many houses of similar design are built according to a development plan
+L,DEVH,FALSE,1 km,housing development,a tract of land on which many houses of similar design are built according to a development plan
 L,FLD,TRUE,10 km,field(s),an open as opposed to wooded area
 L,FLDI,FALSE,,irrigated field(s),a tract of level or terraced land which is irrigated
 L,GASF,FALSE,,gasfield,an area containing a subterranean store of natural gas of economic value
@@ -558,7 +558,7 @@ T,PK,TRUE,1 km,peak,"a pointed elevation atop a mountain, ridge, or other hypsog
 T,PKS,FALSE,,peaks,"pointed elevations atop a mountain, ridge, or other hypsographic features"
 T,PLAT,TRUE,10 km,plateau,"an elevated plain with steep slopes on one or more sides, and often with incised streams"
 T,PLATX,FALSE,1 km,section of plateau,
-T,PLDR,FALSE,,polder,an area reclaimed from the sea by diking and draining
+T,PLDR,FALSE,10 km,polder,an area reclaimed from the sea by diking and draining
 T,PLN,TRUE,50 km,plain(s),"an extensive area of comparatively level to gently undulating land, lacking surface irregularities, and usually adjacent to a higher area"
 T,PLNX,FALSE,,section of plain,
 T,PROM,FALSE,1 km,promontory(-ies),a bluff or prominent hill overlooking or projecting into a lowland

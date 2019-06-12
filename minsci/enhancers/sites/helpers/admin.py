@@ -18,7 +18,8 @@ from ....standardizer import LocStandardizer
 
 AdminDiv = namedtuple('AdminDiv', ['name', 'code', 'level'])
 
-STD = LocStandardizer()
+STD_READ = LocStandardizer(minlen=1, sort_terms=False)
+STD_WRITE = LocStandardizer(minlen=1, sort_terms=False)
 
 
 def _read_countries():
@@ -36,7 +37,7 @@ def _read_countries():
             code = row[0]
             if code and country:
                 code_to_name[code] = country
-                name_to_code[STD(country)] = code
+                name_to_code[STD_READ(country)] = code
     return code_to_name, name_to_code
 
 
@@ -62,7 +63,6 @@ def _read_admin_divs(standardize=False):
     """Reads and if necessary formats the list of admin codes"""
     print('Loading admin codes...')
     fp = os.path.join(FILES, 'admin_codes_std.json')
-    std = LocStandardizer()
     # Standardize keys
     if standardize:
         orig = os.path.join(FILES, 'admin_codes.json')
@@ -72,13 +72,14 @@ def _read_admin_divs(standardize=False):
             print('Processing {}...'.format(country))
             for level, names in levels.items():
                 for key, code in list(names.items()):
-                    if std(key) != key:
-                        names[std(key)] = code
+                    if STD_READ(key) != key:
+                        names[STD_READ(key)] = code
                         del names[key]
         json.dump(admin_codes,
                   open(fp, 'w', encoding='utf-8'),
                   indent=2,
-                  sort_keys=True)
+                  sort_keys=True,
+                  ensure_ascii=False)
     else:
         admin_codes = json.load(open(fp, 'r', encoding='utf-8'))
     print('Loaded codes!')
@@ -105,9 +106,10 @@ def _read_current():
 def _save_current(current):
     """Updates the current names lookup"""
     fp = os.path.join(FILES, 'current.json')
+    _remove_empty_keys(current, n=2)
     while True:
         try:
-            json.dump(_remove_empty_keys(current, n=2),
+            json.dump(current,
                       open(fp, 'w', encoding='utf-8'),
                       indent=2,
                       sort_keys=True,
@@ -159,7 +161,7 @@ def _verify_current(current):
         input('\n'.join(errors))
 
 
-def _remove_empty_keys(dct, n=1, remove_empty=False):
+def _remove_empty_keys(dct, n=1, remove_blank=False):
     for i in range(n):
         for key in list(dct.keys()):
             if key.endswith('-ca') or key in ['not-stated', 'undetermined']:
@@ -169,7 +171,7 @@ def _remove_empty_keys(dct, n=1, remove_empty=False):
                     del dct[key]
                 else:
                     _remove_empty_keys(dct[key])
-            elif remove_empty and not dct[key]:
+            elif remove_blank and not dct[key]:
                 del dct[key]
     return dct
 
@@ -178,7 +180,6 @@ def _remove_empty_keys(dct, n=1, remove_empty=False):
 
 class AdminParser(object):
     """Defines methods for determining administrative divisions and codes"""
-    _std = LocStandardizer()
     _admin_divs = None
     _current = None
     _to_country_name = _read_countries()[0]
@@ -195,7 +196,7 @@ class AdminParser(object):
 
     def get_country_code(self, country):
         """Gets the ISO country code corresponding to a country name"""
-        return self._to_country_code[STD(country)]
+        return self._to_country_code[STD_READ(country)]
 
 
     def get_us_state_abbr(self, state):
@@ -220,7 +221,7 @@ class AdminParser(object):
         if isinstance(term, list):
             return [self.get_admin_div(t, level, country, search_name, suffixes)
                     for t in term]
-        term_ = self._std(term)
+        term_ = STD_READ(term)
         # Check hints
         i = '1' if search_name else '0'
         key = '|'.join([term, level, country, i, suffixes])
@@ -251,7 +252,7 @@ class AdminParser(object):
             is_shorter = len(val) < len(term)
             if has_digit or is_shorter or search_name:
                 try:
-                    name = self._admin_divs[country_code][level][self._std(val)]
+                    name = self._admin_divs[country_code][level][STD_READ(val)]
                 except KeyError:
                     level = level.rstrip(suffixes)
                     raise ValueError('Unknown {}:'
@@ -305,7 +306,7 @@ class AdminParser(object):
         # Get the lookup for the current term
         lookup = self._current
         for key in keys:
-            key = self._std(key)
+            key = STD_READ(key)
             try:
                 lookup = lookup[key]
             except KeyError:
@@ -315,14 +316,14 @@ class AdminParser(object):
                 raise ValueError('Multiple values given')
         # Map archaic to current terms
         try:
-            current = lookup.get(self._std(val), val)
+            current = lookup.get(STD_READ(val), val)
             code = None
             if current and not isinstance(current, dict):
                 code = callback(current, *args, **kwargs)
                 logger.debug('Mapped "{}" to {}'.format(val, code))
         except ValueError:
             try:
-                lookup[self._std.strip_word(self._std(val), 'ca')]
+                lookup[STD_READ.strip_word(STD_READ(val), 'ca')]
             except KeyError:
                 if val.endswith('Ca.'):
                     current = val[:-3].rstrip()
@@ -343,7 +344,7 @@ class AdminParser(object):
                     vals = [val.strip('- ') for val in vals]
                     return self.map_archaic(vals, keys, callback,
                                             *args, **kwargs)
-                lookup[self._std(val)] = current
+                lookup[STD_WRITE(val)] = current
                 _save_current(self._current)
                 if not current:
                     raise ValueError('Unknown #2 {}: {}'.format(ergs, val))
