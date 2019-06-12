@@ -88,6 +88,12 @@ class SiteList(MutableSequence):
     def filter(self, name=None, site=None, attr=None, syndex=3):
         self._match(name, site=site, attr=attr, syndex=syndex)
         if not self:
+            # Test name against blacklist before attempting a more
+            # aggressive search
+            if name in set(['township',
+                            'village']):
+                return self
+            self._filters = []
             self._aggressive = True
             self._match(name, site=site, attr=attr, syndex=syndex)
             self._aggressive = False
@@ -143,14 +149,17 @@ class SiteList(MutableSequence):
             for site in self:
                 names = [self._std_to_field(n, attr)
                          for n in site.site_names + site.synonyms]
-                matched = name in names
+                matched = self._eq(name, names)
                 if matched:
                     matches.append(site)
                 stnames = str(names)[:60] + '...'
                 in_ = 'in' if matched else 'not in'
-                logger.debug('{} {} {}'.format(name, in_, names))
+                logger.debug('{} {} {}...'.format(name, in_, str(names)[:80]))
             self._obj = matches
-            self._filters.extend([{'_name': orig}, {attr: 1}])
+            if self._obj:
+                if self._aggressive:
+                    orig = '%{}%'.format(orig)
+                self._filters.extend([{'_name': orig}, {attr: 1}])
         return self
 
 
@@ -230,30 +239,16 @@ class SiteList(MutableSequence):
         for word in words:
             pattern = r'\b{}\b'.format(word)
             name = re.sub(pattern, '', name)
-        name = self._std.strip_words(name, ['area', 'near', 'nr', 'off'])
+        name = self._std.strip_words(name, ['area', 'near', 'nr', 'off',
+                                            'vicinity', 'vicinity'])
         name = name.replace('-', '')
         return name
 
 
     def _eq(self, val1, val2):
         """Tests if values match by equals or in"""
-        return eq(val1, val2, std=self._std, strict=False)
-        # Code below is deprecated
-        val1 = self.std(val1)
-        val2 = self.std(val2)
-        if isinstance(val1, list) and not isinstance(val2, list):
-            return val2 in val1
-        elif not isinstance(val1, list) and isinstance(val2, list):
-            return val1 in val2
-        elif isinstance(val1, list):
-            return set(val1) == set(val2)
-        else:
-            return val1 == val2
-
-
-
-
-class MatchList(SiteList):
-
-    def __init__(self, *args, **kwargs):
-        pass
+        return eq(val1,
+                  val2,
+                  std=self._std,
+                  strict=False,
+                  aggressive=self._aggressive)
