@@ -14,15 +14,17 @@ class Standardizer(object):
 
     def __init__(self, terms=None, force_lower=True, force_ascii=True,
                  remove_chars=' !"#$%&()*+,-./:;<=>?@[\\]^_`{|}~\'\t\n',
-                 remove_collations=False, minlen=3, delim='-', dedelimit=False):
+                 remove_collations=False, minlen=2, delim='-',
+                 dedelimit=False, sort_terms=False):
         self.terms = None
         self.update_terms(terms)
         self.force_lower = force_lower
         self.force_ascii = force_ascii
         self.remove_chars = remove_chars
         self.remove_collations = remove_collations
-        self.minlen = 2
+        self.minlen = minlen
         self.delim = '-'
+        self.sort_terms = sort_terms
         self.dedelimit = dedelimit
 
 
@@ -69,20 +71,23 @@ class Standardizer(object):
                 val = func(val)
         # Reduce multiple hyphens in a row to a single hyphen
         val = re.sub('-+', self.delim, val).strip(self.delim)
+        # Sort terms
+        if self.sort_terms:
+            val = self.delim.join(sorted(val.split(self.delim)))
         # Limit to terms >= minimum length. This should always be done after
         # substitutions.
         if minlen is None:
             minlen = self.minlen
         if minlen and len(val) > self.minlen:
             val = self.delim.join([s for s in val.split(self.delim)
-                            if s.isnumeric() or len(s) >= self.minlen])
+                                   if s.isnumeric() or len(s) >= self.minlen])
         if self.dedelimit:
             val = val.replace(self.delim, '')
         return val
 
 
     def strip_words(self, val, words, before=True, after=True):
-        for word in words:
+        for word in sorted(words, key=len, reverse=True):
             val = self.strip_word(val, word, before, after)
         return val
 
@@ -94,7 +99,15 @@ class Standardizer(object):
             val = val[len(word):]
         if after and val.endswith(word):
             val = val[:-len(word)]
-        return val.strip('- ')
+        val = val.strip(self.delim + ' ')
+        # Check if val now starts/ends with an illegal string
+        illegal = ('and', 'of', 'the')
+        while val.startswith(illegal):
+            val = self.delim.join(val.split(self.delim)[1:])
+        while val.endswith(illegal):
+            val = self.delim.join(val.split(self.delim)[:-1])
+        return val.strip(self.delim + ' ')
+
 
 
     def update_terms(self, terms):
@@ -113,7 +126,6 @@ class LocStandardizer(Standardizer):
         'dept': 'department',
         'dist': 'district',
         'historical': '',
-        'i': '',
         'isla': '',
         'island': '',
         'islands': '',
@@ -134,7 +146,6 @@ class LocStandardizer(Standardizer):
     }
 
     def __init__(self, *args, **kwargs):
-        kwargs.setdefault('minlen', 3)
         super(LocStandardizer, self).__init__(*args, **kwargs)
 
 
@@ -232,8 +243,9 @@ if __name__ == '__main__':
         'St. Francois Co.',
         'Himalaya Mtns',
         'Sierra de Cordoba (Mtn.)',
-        'Bock Mtns. (Sw Of)'
+        'Bock Mtns. (Sw Of)',
+        'Region I'
     ]
-    std = LocStandardizer(minlen=0)
+    std = LocStandardizer(minlen=1, sort_terms=True)
     for val in vals:
         print(val, '=>', std(val))
