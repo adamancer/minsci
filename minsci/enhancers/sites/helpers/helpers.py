@@ -360,8 +360,10 @@ def distance_on_unit_sphere(lat1, lng1, lat2, lng2, unit='km'):
     return arc * units[unit]
 
 
-def eq(val1, val2, std=None, strict=True):
+def eq(val1, val2, std=None, strict=True, aggressive=False):
     """Tests if values are equivalent for the purposes of comparing sites"""
+    if aggressive:
+        strict = False
     if std is None:
         std = Standardizer()
     # Standardize values
@@ -378,8 +380,19 @@ def eq(val1, val2, std=None, strict=True):
     if isinstance(val1, set) and isinstance(val2, set):
         return val1 == val2 if strict else val1.intersection(val2)
     elif isinstance(val1, set):
+        if aggressive and len(val2) >= 6:
+            return bool([s for s in val1
+                         if s.startswith(val2) or s.endswith(val2)])
         return val2 in val1
     elif isinstance(val2, set):
+        if aggressive and len(val1) >= 6:
+            return bool([s for s in val2
+                         if s.startswith(val1) or s.endswith(val1)])
         return val1 in val2
     else:
+        if aggressive:
+            vals = sorted([val1, val2], key=len)
+            if len(vals[0]) >= 6:
+                return (vals[1].startswith(vals[0]) or
+                        vals[1].endswith(vals[0]))
         return val1 == val2
