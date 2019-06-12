@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 import re
 
 from titlecase import titlecase
+from unidecode import unidecode
 
 from ....helpers import oxford_comma
 from ....standardizer import LocStandardizer
@@ -44,6 +45,8 @@ class DirectionParser(object):
             'unit': 'km'
         }
         self.verbatim = None
+        self.matched = None
+        self.unconsumed = None
         self.min_dist = min_dist
         self.max_dist = max_dist
         self.unit = unit
@@ -68,6 +71,8 @@ class DirectionParser(object):
     def __repr__(self):
         return str({
             'verbatim': self.verbatim,
+            'matched': self.matched,
+            'unconsumed': self.unconsumed,
             'min_dist': self.min_dist,
             'max_dist': self.max_dist,
             'unit': self.unit,
@@ -203,6 +208,7 @@ class DirectionParser(object):
     def parse(self, text):
         """Parses a simple directional string"""
         self.verbatim = text
+        ascii_text = unidecode(text)
         #mod1 = r'(?:about|approx(?:\.|imately)|around|ca\.?|collected|found|just)'
         mod1 = r'(?:(?:\W\.?){0,2})'
         mod2 = r'(?: or so)?'
@@ -217,16 +223,25 @@ class DirectionParser(object):
                               mod2=mod2,
                               units=units,
                               dirs=dirs)
-        feature = r'((?:mt\.? )?[a-z \-]+)\.?'
+        feature = r'((?:mt\.? )?[a-z \-]+?)'
         patterns = [
             r'{0} (?:of|from) {1}',
-            r'{1} \({0}(?: (?:of|from))?\)',
+            r'{1} \({0}(?: (?:of|from))? *\)',
             r'{1}, {0}(?: (?:of|from))?',
         ]
-        mask = r'^(?:{})$'
+        #mask = r'^(?:{})\.?$'
+        mask = r'^(?:{})(?=(?:$|\.| \d| (?:N|S|E|W){{1,3}}\b))'
         pattern = mask.format('|'.join(patterns).format(bearing, feature))
-        match = re.search(pattern, text, flags=re.I)
+        match = re.search(pattern, ascii_text, flags=re.I)
+        # Try to extract a complete pattern from a string that contains
+        # additional information
+        #if match is None:
+        #    mask = r'^(?:{})(?=(?:$|\.| \d| (?:N|S|E|W){{1,3}}\b))'
+        #    pattern = mask.format('|'.join(patterns).format(bearing, feature))
+        #    match = re.search(pattern, text, flags=re.I)
         if match is not None:
+            self.matched = match.group(0).strip('. ')
+            self.unconsumed = text[len(self.matched):].strip('. ')
             parts = []
             for i in range(1, 17):
                 try:
@@ -266,6 +281,8 @@ class BetweenParser(object):
 
     def __init__(self, names=None):
         self.verbatim = None
+        self.matched = None
+        self.unconsumed = None
         self.features = None
         self.kind = 'between'
 
@@ -279,6 +296,8 @@ class BetweenParser(object):
     def __repr__(self):
         return str({
             'verbatim': self.verbatim,
+            'matched': self.matched,
+            'unconsumed': self.unconsumed,
             'features': self.features
         })
 
@@ -314,6 +333,8 @@ class BetweenParser(object):
 
 def is_directions(val):
     """Tests if a string contains specific locality info"""
+    if not val:
+        return False
     # Classify records with directional info as specific
     blacklist = [
         # Units of distance
@@ -326,6 +347,7 @@ def is_directions(val):
         'miles',
         # Direction info
         r'[ns]\d+[ew]',
+        r'(north|south|east|west) of',
         # Relational terms uncommon in place names
         'above',
         'at',
@@ -360,6 +382,26 @@ def is_directions(val):
 
 def parse_directions(val):
     """Parses a simple directional string"""
-    if 'between' in val.lower():
-        return BetweenParser().parse(val)
-    return DirectionParser().parse(val)
+    parsed = []
+    while True:
+        err = None
+        try:
+            if 'between' in val.lower():
+                parsed.append(BetweenParser().parse(val))
+            else:
+                parsed.append(DirectionParser().parse(val))
+        except ValueError:
+            if not parsed:
+                raise
+            break
+        except AttributeError:
+            # Handle lists
+            parsed = []
+            for val in [parse_directions(s) for s in val]:
+                parsed.extend(parsed)
+            return parsed
+        else:
+            val = parsed[-1].unconsumed
+            if not is_directions(val):
+                break
+    return parsed
