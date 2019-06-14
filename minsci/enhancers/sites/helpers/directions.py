@@ -152,6 +152,9 @@ class DirectionParser(object):
 
     def _format_distance(self, dist, dec_places=2):
         """Formats distance to decimal for display"""
+        # Format fraction with no coefficient
+        if dist and '/' in dist and not ' ' in dist:
+            dist = '0 {}'.format(dist)
         try:
             coefficient, fraction = dist.split(' ')
         except (AttributeError, ValueError):
@@ -208,20 +211,24 @@ class DirectionParser(object):
     def parse(self, text):
         """Parses a simple directional string"""
         self.verbatim = text
+        if re.match(r'^\(.*?\)$', text):
+            text = text[1:-1]
         ascii_text = unidecode(text)
         #mod1 = r'(?:about|approx(?:\.|imately)|around|ca\.?|collected|found|just)'
         mod1 = r'(?:(?:\W\.?){0,2})'
         mod2 = r'(?: or so)?'
-        num = r'(\d+(?:\.\d+| \d/\d)?)'
+        mod3 = r'(?: due )?'
+        num = r'(\d+/\d+|\d+(?:\.\d+| \d/\d)?)'
         nums = r'{0}(?: ?(?:\-|or|to) ?{0})?'.format(num)
         units = '|'.join(list(self._units.keys()))
         dirs = '|'.join(list(self._bearings.keys()))
         dirs = r'(?:{0}){{1,2}}(?: ?\d* ?(?:{0}))?'.format(dirs)
-        mask = r'(?:{mod1} )?(?:{nums}{mod2} ?({units}) )?({dirs})'
+        mask = r'(?:{mod1} )?(?:{nums}{mod2} ?({units}) )?{mod3}({dirs})'
         bearing = mask.format(mod1=mod1,
                               nums=nums,
                               mod2=mod2,
                               units=units,
+                              mod3=mod3,
                               dirs=dirs)
         feature = r'((?:mt\.? )?[a-z \-]+?)'
         patterns = [
@@ -272,6 +279,7 @@ class DirectionParser(object):
                 raise ValueError('Could not parse "{}"'.format(text))
         else:
             raise ValueError('Could not parse "{}"'.format(text))
+        logger.debug('Successfully parsed "{}"'.format(self.verbatim))
         return self
 
 
@@ -333,7 +341,7 @@ class BetweenParser(object):
 
 def is_directions(val):
     """Tests if a string contains specific locality info"""
-    if not val:
+    if not val or isinstance(val, (float, int)) or len(val) < 3:
         return False
     # Classify records with directional info as specific
     blacklist = [
@@ -382,6 +390,7 @@ def is_directions(val):
 
 def parse_directions(val):
     """Parses a simple directional string"""
+    logger.debug('Checking for directions in "{}"'.format(val))
     parsed = []
     while True:
         err = None
