@@ -1200,6 +1200,9 @@ class Matcher(object):
                 if m != self.std.strip_words(m, self.strip_words)]
         if near:
             return False
+        # Check if any of the maatched terms used wildcards
+        if self._check_wildcards():
+            return False
         max_size = self.max_size([m.radius for m in matches])
         grouped = self.group_by_term()
         all_terms_matched = len(self.terms) == len(self.matched) == len(grouped)
@@ -1335,7 +1338,8 @@ class Matcher(object):
             if '%' in fltr:
                 aggressive.append(matched)
         if aggressive:
-            mask = ' Matches on {} were made using before-and-after wildcards.'
+            mask = (' Matching {} required using'
+                    ' before-and-after wildcards.')
             aggressive = sorted(list(set(aggressive)))
             description += mask.format(oxford_comma(aggressive))
         logger.info('Description: {}'.format(description))
@@ -1557,14 +1561,15 @@ class Matcher(object):
         grouped = set([self.std.strip_words(self.std(t), self.strip_words)
                        for t in grouped])
         one_name = len(terms) == len(matched) == len(grouped) == 1
-        if one_name and len(self.matches) > 1:
+        #used_wildcards = self._check_wildcards()
+        if one_name and (len(self.matches) > 1 or len(self.terms) > 1):
             return ('This was the most specific place name found'
                     ' in this record. ')
-        elif one_name:
-            return ('This was the most specific match possible based on'
-                    ' information available in this record. ')
+        #elif one_name:
+        #    return ('This is a strong match based on the information'
+        #            ' available in this record. ')
         elif self.explanation:
-            logger.debug('No explanation of specificty made'
+            logger.debug('No explanation of specificity made'
                          ' (matched={}, terms={})'.format(matched, terms))
             return ''
         elif len(terms) == len(matched) >= len(grouped):
@@ -1616,6 +1621,17 @@ class Matcher(object):
         for fcode in [m.record.site_kind for m in matches]:
             if not fcode.startswith('_') and not self.codes[fcode]['SizeIndex']:
                 logger.error('Unmapped featureCode: {}'.format(fcode))
+
+
+    def _check_wildcards(self):
+        """Checks if any match used wildcards"""
+        matches = self.matches[:]
+        for match in self.matches:
+            matches.extend(match.record.directions_from)
+        fltrs = [(m.matched, str(m.filters)) for m in matches]
+        for matched, fltr in fltrs:
+            if '%' in fltr:
+                return True
 
 
     def _check_excluded(self, val, field):
