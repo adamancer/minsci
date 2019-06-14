@@ -130,7 +130,16 @@ class Matcher(object):
             try:
                 parse_directions(names)
             except ValueError:
-                names = [s.strip() for s in re.split('[,;:|]', names)]
+                # Look for strings that use the format "Rainier, Mount"
+                pattern = re.compile(r'(\W ){1,3}, M(oun)?t\.?')
+                if pattern.match(names):
+                    names = [name]
+                else:
+                    delim = r'[,;:|]'
+                    # Look for strings that use both semicolons and commas
+                    if ';' in names and ';' in names:
+                        delim = r'[;:|]'
+                    names = [s.strip() for s in re.split(delim, names)]
             else:
                 names = [names]
         names = [n for n in names if n.strip() and n not in self._exclude]
@@ -780,9 +789,8 @@ class Matcher(object):
         logger.debug('Searching GeoNames for {}'.format(stname))
         matches = self.gn_bot.search(stname, **kwargs)
         if not matches:
-            stname2 = self._clean_name(name, field)
-            matches = self.gn_bot.search(stname2, **kwargs)
-            stname = stname2
+            stname, force_codes = self._clean_name(name, field)
+            matches = self.gn_bot.search(stname, **kwargs)
         # Filter matches based on field-specifc feature codes
         if force_codes:
             logger.debug('Customized feature codes (field={}):'
@@ -828,7 +836,7 @@ class Matcher(object):
             stname2 = stname2.replace('island', '').strip()
             force_codes = self.config['codes']['island']
         logger.debug('Standardized "{}" to "{}"'.format(name, stname2))
-        return stname2.strip('-')
+        return stname2.strip('-'), force_codes
 
 
     def read_filters(self, match):
