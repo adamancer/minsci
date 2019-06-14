@@ -355,6 +355,7 @@ class Site(dict):
                 for word in ['ft', 'm', 'meters', 'km', 'mi', 'mile', 'miles']:
                     if re.search(r'\b{}\b'.format(word), val, flags=re.I):
                         self.locality += '; ' + val
+                        self.locality = self.locality.lstrip('; ')
                         logger.info('Moved {} from {} to {}'.format(val, attr, 'locality'))
                         break
                 else:
@@ -513,7 +514,8 @@ class Site(dict):
                 if isinstance(orig, list):
                     setattr(self, key, orig + [val])
                 else:
-                    setattr(self, key, orig.rstrip('; ') + '; ' + val)
+                    val = '; '.join(orig.rstrip('; '), val).lstrip('; ')
+                    setattr(self, key, val)
             elif key in ['features', 'site_names']:
                 setattr(self, key, val)
             else:
