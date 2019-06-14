@@ -789,8 +789,10 @@ class Matcher(object):
         logger.debug('Searching GeoNames for {}'.format(stname))
         matches = self.gn_bot.search(stname, **kwargs)
         if not matches:
-            stname, force_codes = self._clean_name(name, field)
+            stname, force_codes_ = self._clean_name(name, field)
             matches = self.gn_bot.search(stname, **kwargs)
+            if force_codes_:
+                force_codes = force_codes_
         # Filter matches based on field-specifc feature codes
         if force_codes:
             logger.debug('Customized feature codes (field={}):'
@@ -825,6 +827,7 @@ class Matcher(object):
         # Remove parentheicals
         stname2 = self.std(name).replace('-', ' ')
         stname2 = self.std.strip_words(stname2, self.strip_words)
+        force_codes = []
         # Custom mountain search
         if stname2.startswith('mt-'):
             stname2 = re.sub(r'\bmt\b', '', stname2)
