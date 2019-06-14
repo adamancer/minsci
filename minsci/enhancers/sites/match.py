@@ -95,7 +95,7 @@ class Matcher(object):
         self.longitude = None
         self.distance = 0
         self.radius = None
-        self.threshold = -1
+        self.threshold = 1e8
         self._exclude = []
         self.most_specific = False
         self.radius_from_bbox = False
@@ -169,6 +169,7 @@ class Matcher(object):
         self.terms = sorted(list(set(self.terms)))
         self.matched = sorted(list(set(self.matched)))
         self.missed = sorted(list(set(self.terms) - set(self.matched)))
+        self._exclude = sorted(list(set(self._exclude)))
         # Validate matches
         self._check_fcodes()
         return self
@@ -177,9 +178,8 @@ class Matcher(object):
     def finalize_match(self):
         """Determines coordinates and uncertainty by comparing matches"""
         logger.debug('Matched {:,} records'.format(len(self.matches)))
-        if self.threshold > 0:
-            if self.matches:
-                self._validate()
+        if self.matches and not self._is_too_large():
+            self._validate()
             if len(self.matches) == 1:
                 self.latitude, self.longitude = self.get_coords(self.matches[0])
                 self.radius = self.get_radius(self.matches[0])
@@ -364,6 +364,7 @@ class Matcher(object):
                         self.latitude, self.longitude = coords
                         self.terms.extend(terms)
                         return self.matches
+                logger.debug('Fallback rejected (not found or too big)')
             self.reset(True)
             self.terms = terms
 
@@ -411,7 +412,7 @@ class Matcher(object):
             self.group_by_term()
             self.terms = []
             self.matched = []
-            self.threshold = -1
+            self.threshold = 1e8
             self._exclude = []
         return self
 
@@ -433,6 +434,7 @@ class Matcher(object):
             for state in states:
                 self._match_plss(fields, state)
                 if self.latitude and self.longitude:
+                    self.threshold = -1  # must be < 0 for custom description
                     return self
         self._match_directions(fields, **kwargs)
         self._match_names(fields, force_codes, **kwargs)
@@ -511,8 +513,8 @@ class Matcher(object):
                             try:
                                 parsed.extend(parse_directions(name))
                             except ValueError:
-                                terms.append('"{}"'.format(val))
-                                exclude.append(val)
+                                terms.append('"{}"'.format(name))
+                                exclude.append(name)
         # Attempt to map the directions in each parsed string
         for parsed in parsed:
             if parsed.kind == 'directions':
@@ -617,6 +619,7 @@ class Matcher(object):
         master.latitude = encircled.latitude
         master.longitude = encircled.longitude
         master.directions_from = sites
+        threshold = encircled.radius
         # Use filters from matcher to construct a Match object and return
         filters = matcher.matches[0].filters
         filters = [f for f in filters if list(f.keys())[0] != '_name']
@@ -707,8 +710,12 @@ class Matcher(object):
         for field in fields:
             field = field.rstrip('0123456789')
             val = getattr(self.site, field)
-            val = self._check_excluded(val, field)
-            if not any(val):
+            # Don't match on state or above if the record has other info
+            if (terms or self.terms) and field in ['state_province',
+                                                   'country',
+                                                   'ocean',
+                                                   'continent']:
+                logger.debug('Rejected field={} (found others)'.format(field))
                 continue
             # If this is the first populated value, set the threshold
             # for size. Additional place names must be at least as
@@ -718,17 +725,16 @@ class Matcher(object):
                 fcode = force_codes
             min_size = self.min_size(fcodes)
             max_size = self.max_size(fcodes)
-            if threshold < 0:
+            if threshold == 1e8:
                 logger.debug('Threshold set <= {} ({})'.format(max_size, field))
                 threshold = max_size
             elif min_size > threshold:
                 logger.debug('Rejected {} (less specific)'.format(field))
                 continue
-            elif terms and field in ['state_province',
-                                     'country',
-                                     'ocean',
-                                     'continent']:
-                logger.debug('Rejected field={} (found others)'.format(field))
+            # Remove excluded terms. Do this after setting threshold to
+            # prevent bad matches on state, etc.
+            val = self._check_excluded(val, field)
+            if not any(val):
                 continue
             # Reset codes to defaults if using field-based featureCodes
             if not force_codes:
@@ -1127,7 +1133,6 @@ class Matcher(object):
                 return match, other
         else:
             return (match, other) if site_area > other_area else (other, match)
-
 
 
     def group_by_term(self, matches=None):
@@ -1612,15 +1617,26 @@ class Matcher(object):
         if val in self._exclude:
             return ''
         # Remove terms from the global exclude list
-        for term in self._exclude:
+        for term in sorted(self._exclude, key=len, reverse=True):
             try:
                 val = val.replace(term, '').strip(' ;,')
-            except AttributeError:
+            except (AttributeError, TypeError):
                 val = [s.replace(term, '').strip(' ;,') for s in val]
                 val = [s for s in val if s]
         if orig != val:
-            print(orig, '=>', val)
+            logger.warning('{} => {} (exclude: {})'.format(orig,
+                                                           val,
+                                                           self._exclude))
         return val
+
+
+    def _is_too_large(self):
+        """Checks if a state was matched incorrectly"""
+        states = [m for m in self.matches if m.record.site_kind == 'ADM1']
+        if self.min_size() > 100 and self.missed and states:
+            raise ValueError('Proposed match is too large')
+        return False
+
 
 
     def _validate(self):
