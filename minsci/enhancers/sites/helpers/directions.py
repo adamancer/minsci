@@ -218,7 +218,7 @@ class DirectionParser(object):
         mod1 = r'(?:(?:\W\.?){0,2})'
         mod2 = r'(?: or so)?'
         mod3 = r'(?: due )?'
-        num = r'(\d+/\d+|\d+(?:\.\d+| \d/\d)?)'
+        num = r'(\d+/\d+|\d*(?:\.\d+| \d/\d)?)'
         nums = r'{0}(?: ?(?:\-|or|to) ?{0})?'.format(num)
         units = '|'.join(list(self._units.keys()))
         dirs = '|'.join(list(self._bearings.keys()))
@@ -231,14 +231,14 @@ class DirectionParser(object):
                               mod3=mod3,
                               dirs=dirs)
         feature = r'((?:mt\.? )?[a-z \-]+?)'
+        mod = r'(?: [a-z]+ (?:of|in))?'
         patterns = [
-            r'{0} (?:of|from) {1}',
-            r'{1} \({0}(?: (?:of|from))? *\)',
-            r'{1}, {0}(?: (?:of|from))?',
+            r'{0} (?:of|from){2} {1}',
+            r'{1} \({0}(?: (?:of|from){2})? *\)',
+            r'{1}, {0}(?: (?:of|from){2})?',
         ]
-        #mask = r'^(?:{})\.?$'
         mask = r'^(?:{})(?=(?:$|\.| \d| (?:N|S|E|W){{1,3}}\b))'
-        pattern = mask.format('|'.join(patterns).format(bearing, feature))
+        pattern = mask.format('|'.join(patterns).format(bearing, feature, mod))
         match = re.search(pattern, ascii_text, flags=re.I)
         # Try to extract a complete pattern from a string that contains
         # additional information
