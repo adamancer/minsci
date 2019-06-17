@@ -717,8 +717,8 @@ class Matcher(object):
         matches, terms, matched, exclude = [], [], [], []
         threshold = self.threshold
         for field in fields:
-            field = field.rstrip('0123456789')
-            val = getattr(self.site, field)
+            # Get feature codes BEFORE stripping numbers used for repeats
+            val = getattr(self.site, field.rstrip('0123456789'))
             # Don't match on state or above if the record has other info
             if (terms or self.terms) and field in ['state_province',
                                                    'country',
@@ -729,9 +729,7 @@ class Matcher(object):
             # If this is the first populated value, set the threshold
             # for size. Additional place names must be at least as
             # specific as the largest size already found.
-            fcodes = self.config['codes'][field]
-            if force_codes:
-                fcode = force_codes
+            fcodes = force_codes if force_codes else self.config['codes'][field]
             min_size = self.min_size(fcodes)
             max_size = self.max_size(fcodes)
             if threshold == 1e8:
@@ -863,7 +861,12 @@ class Matcher(object):
         # Find the feature name used to make the match
         for candidate in features:
             if filters.pop(candidate, -1) > 0:
-                feature = candidate.rstrip('s23456789').replace('_', '/')
+                # Numeric suffixes indicate a broadening of a field beyond its
+                # original definition (for example, searching for features in
+                # municipality).
+                if candidate[-1].isdigit():
+                    candidate = candidate.rstrip('s23456789') + '_feature'
+                feature = candidate.rstrip('s').replace('_', '/')
                 # Make county a little more descriptive
                 if feature == 'county':
                     feature = 'district/county'
