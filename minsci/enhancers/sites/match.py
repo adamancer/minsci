@@ -296,7 +296,7 @@ class Matcher(object):
                 mask = (' determined that {} located within {} km of'
                         ' another locality mentioned in this record ("{}"),'
                         ' which is interpreted as approximate directions'
-                        ' to the named feature{}.')
+                        ' to the named feature{}')
                 self.explanation = mask.format(feature, distance, loc, s)
                 self.matches = [m for m in self.matches
                                 if m not in directions]
@@ -716,7 +716,11 @@ class Matcher(object):
     def _match_names(self, fields, force_codes=None, **kwargs):
         matches, terms, matched, exclude = [], [], [], []
         threshold = self.threshold
+        skip = []
         for field in fields:
+            # Skip repeats if that field has already been matched
+            if field.rstrip('0123456789') in skip:
+                continue
             # Get feature codes BEFORE stripping numbers used for repeats
             val = getattr(self.site, field.rstrip('0123456789'))
             # Don't match on state or above if the record has other info
@@ -751,28 +755,41 @@ class Matcher(object):
                 name = self._check_excluded(name, field)
                 if not name:
                     continue
-                # Exclude values that match country
+                # Exclude values that appear more specifically elsewhere
+                stname = self.stname(name)
                 if field == 'country':
                     kwargs.pop('adminCode1', None)
-                elif self.std(name) == self.std(self.site.country):
+                elif (stname == self.stname(self.site.country)
+                      or (field in ['features', 'locality']
+                          and stname == self.stname(self.site.municipality))):
                     continue
                 # Check GeoNames for place name
-                logger.debug('Matching place name {}="{}"...'.format(field,
-                                                                     name))
+                logger.debug('Matching {}="{}"...'.format(field, name))
                 terms.append(name)
                 matches_ = self._match_name(name, field, fcodes,**kwargs)
                 if matches_:
                     for match in matches_:
+                        radius = self.get_radius(match)
+                        # Enforce minimum radius on repeats
+                        if field[-1].isdigit() and radius < 10:
+                            radius = 10
                         matches.append(Match(match,
                                              matches_.filters(),
-                                             self.get_radius(match),
+                                             radius,
                                              name))
                     matched.append(name)
                     max_size = self.max_size(matches_)
                     if max_size < threshold:
                         logger.debug('Threshold now <= {}'.format(max_size))
                         threshold = max_size
+                    skip.append(field)
         return self.update_match(matches, terms, matched, threshold, exclude)
+
+
+    def stname(self, name):
+        stname = self.std(name)
+        stname = self.std.strip_words(stname, self.strip_words)
+        return stname
 
 
     def _match_name(self, name, field, force_codes=None, **kwargs):
@@ -1518,7 +1535,7 @@ class Matcher(object):
         if self.radius_from_bbox:
             return ('The uncertainty radius represents the center-to-corner'
                     ' distance of the bounding box ({}). '.format(radius))
-        return ('An arbitrary uncertainty of {} was assigned to all {}'
+        return ('A minimum uncertainty of {} was assigned to all {}'
                 ' records matched using the script. '.format(radius, feature))
 
 
@@ -1579,7 +1596,7 @@ class Matcher(object):
                          ' (matched={}, terms={})'.format(matched, terms))
             return ''
         elif len(terms) == len(matched) >= len(grouped):
-            logger.debug('No explanation of specificty made'
+            logger.debug('No explanation of specificity made'
                          ' (matched={}, terms={})'.format(matched, terms))
             # The code below seems to be redundant, but keeping it just in case
             return ''
