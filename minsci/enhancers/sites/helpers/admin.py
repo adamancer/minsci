@@ -340,7 +340,7 @@ class AdminParser(object):
                         raise ValueError('Unknown #1 {}: {}'.format(ergs, val))
                 elif '-' in val or ' and ' in val:
                     # Handle multiple values in an admin div field
-                    vals = re.split(r'(?:\band\b|-)', val)
+                    vals = re.split(r'(?:\band\b|\bor\b|-)', val)
                     vals = [val.strip('- ') for val in vals]
                     return self.map_archaic(vals, keys, callback,
                                             *args, **kwargs)
