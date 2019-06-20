@@ -578,9 +578,9 @@ T,SHOR,TRUE,10 km,shore,"a narrow zone bordering a waterbody which covers and un
 T,SINK,FALSE,1 km,sinkhole,a small crater-shape depression in a karst area
 T,SLID,FALSE,,slide,"a mound of earth material, at the base of a slope and the associated scoured area"
 T,SLP,FALSE,1 km,slope(s),a surface with a relatively uniform slope angle
-T,SPIT,FALSE,,spit,"a narrow, straight or curved continuation of a beach into a waterbody"
+T,SPIT,FALSE,1 km,spit,"a narrow, straight or curved continuation of a beach into a waterbody"
 T,SPUR,TRUE,1 km,spur(s),"a subordinate ridge projecting outward from a hill, mountain or other elevation"
-T,TAL,FALSE,,talus slope,a steep concave slope formed by an accumulation of loose rock fragments at the base of a cliff or steep slope
+T,TAL,FALSE,1 km,talus slope,a steep concave slope formed by an accumulation of loose rock fragments at the base of a cliff or steep slope
 T,TRGD,FALSE,,interdune trough(s),a long wind-swept trough between parallel longitudinal dunes
 T,TRR,FALSE,,terrace,"a long, narrow alluvial platform bounded by steeper slopes above and below, usually overlooking a waterbody"
 T,UPLD,TRUE,100 km,upland,an extensive interior region of high land with low to moderate surface relief
