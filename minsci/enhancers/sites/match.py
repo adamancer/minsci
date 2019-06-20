@@ -1257,6 +1257,10 @@ class Matcher(object):
                 names.extend(match.record.site_names)
             name = '/'.join(sorted(list(set(names))))
             cmb['site_names'] = [name]
+        # Alternatively, if this was a wildcard match deal with that here
+        aggressive = self._find_wildcards()
+        if len(aggressive) == 1 and '/' in cmb['site_names'][0]:
+            cmb['site_names'] = [self.quote(aggressive[0])]
         return self.site.__class__(cmb)
 
 
@@ -1351,20 +1355,6 @@ class Matcher(object):
             description = self.describe_one_name()
         elif self.count > 1:
             description = self.describe_multiple_names()
-        # Note aggressive matches
-        aggressive = []
-        matches = self.matches[:]
-        for match in self.matches:
-            matches.extend(match.record.directions_from)
-        fltrs = [(m.matched, str(m.filters)) for m in matches]
-        for matched, fltr in fltrs:
-            if '%' in fltr:
-                aggressive.append(matched)
-        if aggressive:
-            mask = (' Matching {} required using'
-                    ' before-and-after wildcards.')
-            aggressive = sorted(list(set(aggressive)))
-            description += mask.format(oxford_comma(aggressive))
         logger.info('Description: {}'.format(description))
         return description
 
@@ -1399,13 +1389,16 @@ class Matcher(object):
             'digits': self.num_digits,
             'radius': self._describe_radius(feature=fm_feature),
             'explanation': explanation,
-            'synonyms': self._describe_synonyms([match])
+            #'synonyms': self._describe_synonyms([match]),
+            #'wildcards': self._describe_wildcards([match]),
+            'mods': self._describe_modifications([match])
         }
         mask = ('Matched to the GeoNames record for {name} based on {criteria}'
-                ' using the situate.py script. {explanation}{specificity}'
-                ' {geometry} coordinates were rounded to {digits}'
-                ' decimal places from the values given by GeoNames.'
-                ' {radius}{synonyms}')
+                ' using the situate.py script.'
+                ' {explanation}{mods}{specificity}'
+                '{geometry} coordinates were rounded'
+                ' to {digits} decimal places from the values given by'
+                ' GeoNames. {radius}')
         return mask.format(**info).strip().replace('  ', ' ')
 
 
@@ -1438,13 +1431,15 @@ class Matcher(object):
             'digits': self.num_digits,
             #'radius': self._describe_radius(feature=fm_feature),
             'explanation': explanation,
-            'synonyms': self._describe_synonyms(site.directions_from)
+            #'synonyms': self._describe_synonyms(site.directions_from),
+            #'wildcards': self._describe_wildcards(site.directions_from),
+            'mods': self._describe_modifications(site.directions_from)
         }
         mask = ('Mapped coordinates and uncertainty for the locality string'
                 ' {name} using the situate.py script based on coordinates'
-                ' given by GeoNames. {explanation}{specificity}Point'
-                ' coordinates were rounded to {digits} decimal places from'
-                ' the calculated values. {synonyms}')
+                ' given by GeoNames. {explanation}{mods}{specificity}'
+                'Point coordinates were rounded to {digits} decimal places'
+                ' from the calculated values.')
         return mask.format(**info).strip().replace('  ', ' ')
 
 
@@ -1461,9 +1456,10 @@ class Matcher(object):
         count = len(self.matches)
         specificity = self._describe_specificity()
         # Create the explanation of the match
-        explanation = ('was unable to distinguish between these localities,'
-                       ' and the coordinates and error radius given here'
-                       ' describe a circle encompassing {count} localities')
+        explanation = ('was unable to distinguish between the matched'
+                       ' localities, and the coordinates and error radius'
+                       ' given here describe a circle encompassing {count}'
+                       ' localities')
         if self.explanation.strip():
             explanation += '. ' + self.explanation.strip()
             subset = self.encompass()
@@ -1478,11 +1474,13 @@ class Matcher(object):
             'count': 'both' if count == 2 else 'all {}'.format(count),
             'specificity': specificity,
             'explanation': explanation,
-            'synonyms': self._describe_synonyms()
+            #'synonyms': self._describe_synonyms(),
+            #'wildcards': self._describe_wildcards(),
+            'mods': self._describe_modifications(),
         }
         info['explanation'] = explanation.format(**info)
         mask = ('Multiple records from GeoNames matched the locality {name},'
-                ' including {urls}. {explanation}{specificity}{synonyms}')
+                ' including {urls}. {mods}{explanation}{specificity}')
         return mask.format(**info).strip().replace('  ', ' ')
 
 
@@ -1500,12 +1498,11 @@ class Matcher(object):
             before = ('Multiple features of similar apparent specificity'
                       ' were matched to GeoNames records using the situate.py'
                       ' script, including {names_with_counts}.'
-                      ' {explanation}')
+                      ' {explanation}{mods}{specificity}')
             after = ('The coordinates and uncertainty given here describe a'
                      ' circle encompassing the combination of localities'
-                     ' matching {count} localities with the smallest maximum'
-                     ' distance between them (~{distance} km).'
-                     ' {specificity}{synonyms}')
+                     ' matching {count} place names with the smallest'
+                     ' maximum distance between them (~{distance} km).')
             specificity = self._describe_specificity()
         # Round radius
         distance = '{:.1f}'.format(self.distance)
@@ -1519,7 +1516,9 @@ class Matcher(object):
             'specificity': specificity,
             'count': 'both' if self.count == 2 else 'all {}'.format(self.count),
             'explanation': self.explanation.strip(),
-            'synonyms': self._describe_synonyms()
+            #'synonyms': self._describe_synonyms(),
+            #'wildcards': self._describe_wildcards(),
+            'mods': self._describe_modifications(),
         }
         info['before'] = before.format(**info)
         info['after'] = after.format(**info)
@@ -1528,6 +1527,9 @@ class Matcher(object):
 
 
     def _describe_radius(self, feature=None):
+         # Enforce a minimum radius for wildcard matches
+        if self._check_wildcards and self.radius < 10:
+            self.radius = 10
         if self.radius > 5 or self.radius == int(self.radius):
             radius = '{} km'.format(int(self.radius))
         else:
@@ -1535,8 +1537,11 @@ class Matcher(object):
         if self.radius_from_bbox:
             return ('The uncertainty radius represents the center-to-corner'
                     ' distance of the bounding box ({}). '.format(radius))
-        return ('A minimum uncertainty of {} was assigned to all {}'
-                ' records matched using the script. '.format(radius, feature))
+        elif self._check_wildcards and self.radius == 10:
+            return ('A minimum uncertainty of {} was assigned to all records'
+                    ' matched using wildcards. '.format(radius, feature))
+        return ('A minimum uncertainty of {} was assigned to all {} records'
+                ' matched using the script. '.format(radius, feature))
 
 
     def _describe_specificity(self):
@@ -1618,22 +1623,70 @@ class Matcher(object):
         raise ValueError('Could not determine specificity: {}'.format(criteria))
 
 
+    def _describe_modifications(self, matches=None):
+        """Describes the wildcards and equivalent terms used to make match"""
+        mods = [self._describe_wildcards(matches),
+                self._describe_synonyms(matches)]
+        mods = [s for s in mods if s]
+        if len(mods) == 2:
+            mods[0] = mods[0].rstrip('. ') + ','
+            mods[1] = mods[1][0].lower() + mods[1][1:]
+        if mods:
+            return oxford_comma(mods) + ' '
+        return ''
+
+
     def _describe_synonyms(self, matches=None):
         """Notes any synonyms used when matching feature names"""
-        synonyms = []
+        synonyms = {}
         for match in matches if matches is not None else self.matches:
             if match.record.is_synonym_for(match.matched):
                 name = match.record.summarize('{name}')
                 syn = match.matched
                 # Filter out instances where the name appears in the synonym
                 # or vice versa
-                if (self.std(name) not in self.std(syn)
-                    and self.std(syn) not in self.std(name)):
-                        mask = '{} as a synonym for {}'
-                        synonyms.append(mask.format(syn, name))
-                        logger.debug(synonyms[-1])
+                stname = self.std(name)
+                stsyn = self.std(syn)
+                if stname not in stsyn and stsyn not in stname:
+                    synonyms.setdefault(syn, []).append(name)
         if synonyms:
-            return 'The script interepreted {}. '.format(oxford_comma(synonyms))
+            logger.debug('Synonyms: {}'.format(synonyms))
+            syns = []
+            delim = ','
+            for syn, names in synonyms.items():
+                syn = self.quote(syn)
+                names = oxford_comma(sorted(list(set(names))))
+                if len(names) > 1:
+                    delim = ';'
+                syns.append('{} as a synonym for {}'.format(syn, names))
+            syns = oxford_comma(syns, delim=delim)
+            return 'The script interepreted {}. '.format(syns)
+        return ''
+
+
+    def _find_wildcards(self, matches=None):
+        """Returns the list of terms that matched on wildcards"""
+        if matches is None:
+            matches = self.matches[:]
+        aggressive = []
+        for match in self.matches:
+            matches.extend(match.record.directions_from)
+        fltrs = [(m.matched, str(m.filters)) for m in matches]
+        for matched, fltr in fltrs:
+            if '%' in fltr:
+                aggressive.append(matched)
+        return sorted(list(set(aggressive)))
+
+
+    def _describe_wildcards(self, matches=None):
+        """Notes which matches relied on wildcards"""
+        aggressive = self._find_wildcards(matches)
+        if aggressive:
+            mask = 'Matching {} required using before-and-after wildcards. '
+            aggressive = [self.quote(s) for s in aggressive]
+            if self.radius < 10:
+                self.radius = 10
+            return mask.format(oxford_comma(aggressive))
         return ''
 
 
@@ -1646,10 +1699,13 @@ class Matcher(object):
                 logger.error('Unmapped featureCode: {}'.format(fcode))
 
 
-    def _check_wildcards(self):
+    def _check_wildcards(self, matches=None):
         """Checks if any match used wildcards"""
-        matches = self.matches[:]
-        for match in self.matches:
+        if matches is None:
+            matches = self.matches
+        matches_ = matches[:]
+        matches = []
+        for match in matches_:
             matches.extend(match.record.directions_from)
         fltrs = [(m.matched, str(m.filters)) for m in matches]
         for matched, fltr in fltrs:
@@ -1671,9 +1727,8 @@ class Matcher(object):
                 val = [s.replace(term, '').strip(' ;,') for s in val]
                 val = [s for s in val if s]
         if orig != val:
-            logger.warning('{} => {} (exclude: {})'.format(orig,
-                                                           val,
-                                                           self._exclude))
+            msg = '{} => {} (exclude: {})'
+            logger.warning(msg.format(orig, val, self._exclude))
         return val
 
 
@@ -1683,7 +1738,6 @@ class Matcher(object):
         if self.min_size() > 100 and self.missed and states:
             raise ValueError('Proposed match is too large')
         return False
-
 
 
     def _validate(self):
