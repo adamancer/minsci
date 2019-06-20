@@ -1762,6 +1762,12 @@ class Matcher(object):
         return True
 
 
+    @staticmethod
+    def quote(val):
+        pattern = re.compile(r'[,;"\.\(\)]')
+        return '"{}"'.format(val.strip('" ')) if pattern.search(val) else val
+
+
     def _is_directions(self, name, field):
         if field not in ['country', 'state_province', 'county']:
             return is_directions(name)
