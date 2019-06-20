@@ -103,7 +103,10 @@ class Site(dict):
 
 
     def __eq__(self, other):
+        # Check all attributes except synonyms
         for attr in self._attributes:
+            if attr == 'synonyms':
+                continue
             if getattr(self, attr) != getattr(other, attr):
                 return False
         return True
