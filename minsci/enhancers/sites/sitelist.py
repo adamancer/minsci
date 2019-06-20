@@ -125,9 +125,10 @@ class SiteList(MutableSequence):
 
 
     def get_additional_synonyms(self, syndex=3):
-        self._obj = self.orig[:3]
-        for site in self._obj:
-            site.find_synonyms()
+        self._obj = self.orig[:]
+        for i, site in enumerate(self._obj):
+            if i < syndex:
+                site.find_synonyms()
 
 
     def match_one(self, name=None, site=None, attr=None, **kwargs):
