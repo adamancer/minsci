@@ -804,8 +804,8 @@ class Matcher(object):
         logger.debug('Searching GeoNames for {}'.format(stname))
         matches = self.gn_bot.search(stname, **kwargs)
         if not matches:
-            stname, force_codes_ = self._clean_name(name, field)
-            matches = self.gn_bot.search(stname, **kwargs)
+            stname2, force_codes_ = self._clean_name(name, field)
+            matches = self.gn_bot.search(stname2, **kwargs)
             if force_codes_:
                 force_codes = force_codes_
         # Filter matches based on field-specifc feature codes
@@ -844,10 +844,10 @@ class Matcher(object):
         stname2 = self.std.strip_words(stname2, self.strip_words)
         force_codes = []
         # Custom mountain search
-        if stname2.startswith('mt-'):
-            stname2 = re.sub(r'\bmt\b', '', stname2)
-            stname2 = re.sub(r'\bmont\b', '', stname2)
-            stname2 = re.sub(r'\bmonte\b', '', stname2)
+        words = ['monte?', 'mts?', 'mtns?', 'mountains?', 'peaks?']
+        pattern = re.compile(r'\b({})\b'.format('|'.join(words)))
+        if pattern.search(stname2):
+            stname2 = pattern.sub('', stname2).strip('-')
             force_codes = ['HLL', 'MT', 'MTS', 'PK', 'VLC']
         # Custom island search
         if stname2.endswith('island'):
@@ -1682,7 +1682,7 @@ class Matcher(object):
         """Notes which matches relied on wildcards"""
         aggressive = self._find_wildcards(matches)
         if aggressive:
-            mask = 'Matching {} required using before-and-after wildcards. '
+            mask = 'Matching {} required using a wildcard search. '
             aggressive = [self.quote(s) for s in aggressive]
             if self.radius < 10:
                 self.radius = 10

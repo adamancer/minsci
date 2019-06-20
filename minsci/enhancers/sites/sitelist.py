@@ -234,12 +234,23 @@ class SiteList(MutableSequence):
             'volcano': ['mt', 'mount', 'mountain', 'volcano']
         }
         name = self.std(name)
+        # Field-specific words
         words = words.get(attr, [])
-        if self._aggressive:
-            words.extend(['mt'])
         for word in words:
             pattern = r'\b{}\b'.format(word)
             name = re.sub(pattern, '', name)
+        # Terms related to mountains are by far the most likely to miss due
+        # to formatting/voacab issues, so standardize them here
+        if self._aggressive:
+            words = ['mont', 'monte', 'mountains?', 'mount', 'mts', 'mt']
+            for word in words:
+                pattern = r'\b{}\b'.format(word)
+                name = re.sub(pattern, 'mt', name)
+            if 'mt' in name:
+                words = [w for w in name.split('-') if w !='mt']
+                words.insert(0, 'mt')
+                name = '-'.join(words)
+        # Strip neighborhood terms
         name = self._std.strip_words(name, ['area', 'near', 'nr', 'off',
                                             'vicinity', 'vicinity'])
         name = name.replace('-', '')
