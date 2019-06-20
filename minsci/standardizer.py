@@ -229,6 +229,7 @@ class LocStandardizer(Standardizer):
             'department',
             'district',
             'oblast',
+            'parish',
             'prefecture',
             'province',
             'township'
