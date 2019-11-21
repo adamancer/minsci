@@ -444,6 +444,11 @@ def mongo2xmu(doc, container):
             #}]})
             container({'ClaScientificName': taxon.get('idetx')})
         )
+    # Map relationships
+    relob = [int(irn) for irn in doc.get('relob', [])]
+    cat['RelObjectsRef_tab'] = [container({'irn': irn}) for irn in relob]
+    cat['RelRelationship_tab'] = doc.get('relrl', [])
+    cat['RelRelationshipToMe_tab'] = doc.get('reltm', [])
     # Set collector(s)
     parties = doc.getpath('biopr', [])
     cat['BioEventSiteRef']['ColParticipantRef_tab'] = [
