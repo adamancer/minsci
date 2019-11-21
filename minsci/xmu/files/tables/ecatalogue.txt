@@ -5,6 +5,7 @@ GUIDs,AdmGUIDValue_tab
 OtherCounts,CatOtherCountsType_tab
 OtherCounts,CatOtherCountsValue_tab
 OtherNumbers,CatOtherNumbersType_tab
+OtherNumbers,CatOtherNumbersSource_tab
 OtherNumbers,CatOtherNumbersValue_tab
 Taxonomy,IdeTaxonRef_tab
 Taxonomy,IdeNamedPart_tab
@@ -20,11 +21,13 @@ Measurements,MeaOf_tab
 Measurements,MeaType_tab
 Measurements,MeaVerbatimValue_tab
 Measurements,MeaVerbatimUnit_tab
+Measurements,MeaVerbatimModifier_tab
 Measurements,MeaStandardizedValue_tab
 Measurements,MeaStandardizedUnit_tab
 Measurements,MeaRemarks_tab
+Measurements,MeaByRef_tab
+Measurements,MeaDate0
 Measurements,MeaCurrent_tab
-Measurements,MeaVerbatimModifier_tab
 Color,MinColor_tab
 Multimedia,MulMultiMediaRef_tab
 Notes,NotNmnhText0
