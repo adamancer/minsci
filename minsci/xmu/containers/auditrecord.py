@@ -2,6 +2,7 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import datetime as dt
 from collections import namedtuple
 
 from lxml import etree
@@ -105,3 +106,14 @@ class AuditRecord(XMuRecord):
                            and not fld.endswith(endswith))}
         self.changes = changes
         return changes
+
+
+    def is_fy(self, fiscal_year=None):
+        """Tests if changed occurred in the given fiscal year"""
+        if fiscal_year is None:
+            # Defaults to current year
+            fiscal_year = dt.datetime.now().year
+        start_date = dt.datetime(fiscal_year - 1, 10, 1)
+        end_date = dt.datetime(fiscal_year, 9, 30)
+        aud_date = dt.datetime.strptime(self('AudDate'), '%Y-%m-%d')
+        return start_date <= aud_date <= end_date
