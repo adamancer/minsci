@@ -235,24 +235,26 @@ class XMu(object):
             self.fast_iter(**kwargs)
 
 
-    def save(self, fp=None):
+    def save(self, fp=None, encoding='utf-8'):
         """Save attributes listed in the self.keep as json"""
         if fp is None:
             fp = os.path.splitext(self.path)[0] + '.json'
         logger.info('Saving data to {}...'.format(fp))
         data = {key: getattr(self, key) for key in self.keep}
-        json.dump(data, open(fp, 'w'), cls=ABCEncoder)
+        with open(fp, 'w', encoding=encoding) as f:
+            json.dump(data, f, ensure_ascii=False, cls=ABCEncoder)
 
 
-    def load(self, fp=None):
+    def load(self, fp=None, encoding='utf-8'):
         """Load data from json file created by self.save"""
         if fp is None:
             fp = os.path.splitext(self.path)[0] + '.json'
         # Always recreate the JSON if XML is newer
         if os.path.getmtime(fp) <= os.path.getmtime(self.path):
             raise IOError
-        data = json.load(open(fp, 'r'))
         logger.info('Reading data from {}...'.format(fp))
+        with open(fp, 'r', encoding=encoding) as f:
+            data = json.load(f)
         for attr, val in data.items():
             setattr(self, attr, val)
         self.from_json = True
