@@ -346,12 +346,15 @@ class XMu(object):
             self.read(root, keys, result[self.module], counter)
             return result
         for child in root:
-            # Skip nodes with no populated descendants. This gets around
-            # the bad XML reported by EMu for certain empty attachments.
-            if not any([s.strip() for s in child.itertext()]):
-                continue
             # Process nodes with populated descendants
             name = child.get('name')
+            # Skip nodes with no populated descendants. This gets around
+            # some bad XML reported by EMu for certain empty attachments,
+            # but introduces a bug where empty cells are not read correctly.
+            if (name is not None
+                and name.endswith(('Ref', 'Ref_tab'))
+                and not any([s.strip() for s in child.itertext()])):
+                    continue
             # Check for unnamed tuples, which represent rows inside a table
             if name is None:
                 path = tuple(keys)
