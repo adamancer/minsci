@@ -47,6 +47,7 @@ class XMuFields(object):
         defaults = {
             'blacklist': [
                 #'eaccessionlots',
+                'ecollectionindex',
                 'edocuments',
                 'eevents',
                 'eexhibitobjects',
@@ -93,6 +94,7 @@ class XMuFields(object):
             # Tables are stored as tuples
             self.tables = {}              # maps tables to modules
             self.map_tables = {}          # maps container paths to fields
+            self.map_table_names = {}     # maps table names to columns
             self.hashed_tables = {}       # maps hash of tables to tables
             self.tables = self._read_tables()
             self._map_fields_to_tables()  # adds table fields to schema dict
@@ -107,7 +109,8 @@ class XMuFields(object):
                     'schema': self.schema,
                     'tables': self.tables,
                     'map_tables': map_tables,
-                    'hashed_tables': self.hashed_tables,
+                    'map_table_names': self.map_table_names,
+                    'hashed_tables': self.hashed_tables
                 }
                 with open(cache_path, 'w', encoding='utf-8') as f:
                     # HACK: JSON hack for 2/3 compatibility
@@ -115,6 +118,7 @@ class XMuFields(object):
                         serialize.dump(fields, f)
                     except TypeError as e:
                         f.write(serialize.dumps(fields, ensure_ascii=False))
+        self.module_specific_fields = self._get_module_specific_fields()
 
 
     def __call__(self, *args):
@@ -298,45 +302,25 @@ class XMuFields(object):
     def _read_tables(self):
         """Read data about tables from text files in files/tables"""
         tables = {}
+        lookup = {}
         for fp in glob.iglob(os.path.join(self._fpath, 'tables', 'e*.txt')):
-            module_name = os.path.splitext(os.path.basename(fp))[0]
+            module = os.path.splitext(os.path.basename(fp))[0]
             _tables = {}
             with open(fp, 'r', encoding='utf-8') as f:
                 for line in [line.strip() for line in f.read().splitlines()
                              if ',' in line and not line.startswith('#')]:
                     table, column = line.split(',')
-                    column = (module_name, column)
+                    column = (module, column)
                     _tables.setdefault(table, []).append(column)
                     # Map nested tables as well
                     if column[1].endswith('_nesttab'):
                         table += 'Inner'
                         column = (column[0], column[1], column[1] + '_inner')
                         _tables.setdefault(table, []).append(column)
-            for table in list(_tables.values()):
-                self.add_table(table)
-            tables[module_name] = [tuple(sorted(t)) for t in list(_tables.values())]
+            for name, cols in _tables.items():
+                self.add_table(name, cols)
+            tables[module] = [tuple(sorted(t)) for t in list(_tables.values())]
         return tables
-
-
-    '''
-    def _map_tables(self):
-        """Update path-keyed table map"""
-        cprint('Mapping tables...')
-        for module in set(self.tables.keys()) & set(self.schema.keys()):
-            for table in self.tables[module]:
-                for column in table:
-                    try:
-                        paths = self.schema.pathfinder(path=path)
-                    except KeyError:
-                        raise Exception('Table Error: {} not a valid'
-                                        ' column'.format(column))
-                    else:
-                        for path in paths:
-                            data = self.schema(path)
-                            data['related'] = table
-                            self.schema.push(path, data)
-                            self.map_tables[path] = table
-    '''
 
 
     def _map_fields_to_tables(self):
@@ -475,7 +459,7 @@ class XMuFields(object):
     '''
 
 
-    def add_table(self, columns):
+    def add_table(self, name, columns):
         """Update table containers with new table
 
         Args:
@@ -492,6 +476,28 @@ class XMuFields(object):
             self.hashed_tables[hkey] = columns
         for column in columns:
             self.map_tables[column] = columns
+        # Update table name lookup
+        module = columns[0][0]
+        self.map_table_names.setdefault(module, {})[name] = columns
+
+
+    def list_tables(self, module):
+        """Lists tables defined for the given module"""
+        tables = self.map_table_names[module]
+        for key, vals in tables.items():
+            tables[key] = [v[1] for v in vals]
+        return tables
+
+
+    def _get_module_specific_fields(self):
+        """Maps fields that only occur in one module"""
+        fields = {}
+        for module, fields_ in self.schema.items():
+            for field in fields_:
+                fields.setdefault(field, []).append(module)
+        return {k: v[0] for k, v in fields.items() if len(v) == 1}
+
+
 
 
 def is_table(*args):
