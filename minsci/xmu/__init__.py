@@ -2,7 +2,11 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-print('Initializing xmu submodule...')
+import logging
+logger = logging.getLogger(__name__)
+
+logger.debug('Initializing xmu submodule...')
+
 from .xmu import XMu, write, FIELDS
 from .xmungo import XMungo, MongoBot
 from .fields import is_table, is_reference

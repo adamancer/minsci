@@ -5,6 +5,9 @@ from builtins import str
 from builtins import range
 from past.builtins import basestring
 
+import logging
+logger = logging.getLogger(__name__)
+
 import json
 import pprint as pp
 import re

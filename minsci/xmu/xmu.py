@@ -2,6 +2,9 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import logging
+logger = logging.getLogger(__name__)
+
 from builtins import str
 from builtins import range
 from past.builtins import basestring
@@ -92,7 +95,7 @@ class XMu(object):
             try:
                 self.fields(*path)
             except NameError:
-                cprint('Removed invalid path: {}'.format('/'.join(path)))
+                logger.warning('Removed invalid path: {}'.format(xpath))
                 remove.append(path)
         self.xpaths = [xpath for xpath in xpaths if not xpath in remove]
         # Record basic metadata about the import file
@@ -157,12 +160,12 @@ class XMu(object):
         if limit:
             limit += skip
         if skip:
-            print('Skipping the first {:,} records'.format(skip))
+            logger.info('Skipping the first {:,} records'.format(skip))
         if report:
             starttime = datetime.now()
         for fp in self._files:
             if report:
-                cprint('Reading {}...'.format(fp))
+                logger.info('Reading {}...'.format(fp))
             context = etree.iterparse(fp, events=['end'], tag='tuple')
             for _, element in context:
                 # Process children of module table only
@@ -186,8 +189,8 @@ class XMu(object):
                                                  n_success,
                                                  starttime)
                     if limit and not n_processed % limit:
-                        print('Stopped processing before end of file'
-                              ' (limit={:,} records)'.format(limit))
+                        logger.warning('Stopped processing before end of file'
+                                       ' (limit={:,} records)'.format(limit))
                         keep_going = False
                         break
             del context
@@ -236,7 +239,7 @@ class XMu(object):
         """Save attributes listed in the self.keep as json"""
         if fp is None:
             fp = os.path.splitext(self.path)[0] + '.json'
-        print('Saving data to {}...'.format(fp))
+        logger.info('Saving data to {}...'.format(fp))
         data = {key: getattr(self, key) for key in self.keep}
         json.dump(data, open(fp, 'w'), cls=ABCEncoder)
 
@@ -248,8 +251,8 @@ class XMu(object):
         # Always recreate the JSON if XML is newer
         if os.path.getmtime(fp) <= os.path.getmtime(self.path):
             raise IOError
-        print('Reading data from {}...'.format(fp))
         data = json.load(open(fp, 'r'))
+        logger.info('Reading data from {}...'.format(fp))
         for attr, val in data.items():
             setattr(self, attr, val)
         self.from_json = True
@@ -668,7 +671,7 @@ def _check(rec, module=None):
         except KeyError:
             # Check for tables that haven't been included as grids
             if key.endswith('tab'):
-                print('Unassigned column: {}'.format(key))
+                logger.warning('Unassigned column: {}'.format(key))
             # Convert strings to XMuStrings
             #path, val = rec.smart_drill(key)[0]
             #rec.push(rec.pull(*path), *path)
@@ -715,7 +718,7 @@ def write(fp, records, module=None):
     if records:
         _writer(fp, emuize(records, module))
     else:
-        print('xmu.write: No records found')
+        logger.warning('No records found')
 
 
 def _writer(fp, root):

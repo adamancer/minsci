@@ -7,4 +7,7 @@ and scheduling operations.
 from __future__ import print_function
 from __future__ import unicode_literals
 
-print('Initializing xmu.tools submodule...')
+import logging
+logger = logging.getLogger(__name__)
+
+logger.debug('Initializing xmu.tools submodule...')
