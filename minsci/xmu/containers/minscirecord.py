@@ -159,33 +159,6 @@ class MinSciRecord(XMuRecord):
         return oxford_comma(strat)
 
 
-    def get_guid(self, kind='EZID', allow_multiple=False):
-        """Gets value from the GUID table for a given key
-
-        Args:
-            kind (str): name of GUID
-            allow_multiple (bool): if False, raises error if multiple
-                values with same type are found
-
-        Returns:
-            First match from the GUID table for the key (if allow_multiple
-            is False) or the full set of matches (if allow_multiple is True)
-        """
-        args = (kind, 'AdmGUIDType_tab', 'AdmGUIDValue_tab')
-        if kind == 'IGSN':
-            args = (kind, 'CatOtherNumbersType_tab', 'CatOtherNumbersValue_tab')
-        matches = self.get_matching_rows(*args)
-        if len(set(matches)) > 1 and not allow_multiple:
-            raise Exception('Multiple values found for {}'.format(kind))
-        if allow_multiple:
-            return matches
-        else:
-            try:
-                return matches[0]
-            except IndexError:
-                return None
-
-
     def get_collectors(self):
         """Gets all the collector's field numbers for a record"""
         role = ['ColParticipantRole_tab']

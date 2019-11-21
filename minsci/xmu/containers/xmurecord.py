@@ -580,8 +580,18 @@ class XMuRecord(DeepDict):
             is False) or the full set of matches (if allow_multiple is True)
         """
         args = (kind, 'AdmGUIDType_tab', 'AdmGUIDValue_tab')
+        if kind == 'IGSN':
+            args = (kind, 'CatOtherNumbersType_tab', 'CatOtherNumbersValue_tab')
         matches = self.get_matching_rows(*args)
-        if len(set(matches)) and not allow_multiple:
+        # Fallback if type not exported
+        if not matches:
+            if kind == 'EZID' and not self('AdmGUIDType_tab'):
+                matches = [val for val in self('AdmGUIDValue_tab')
+                           if val.startswith('ark:/65665/')]
+            elif kind == 'IGSN' and not self('CatOtherNumbersValue_tab'):
+                matches = [val for val in self('CatOtherNumbersValue_tab')
+                           if re.search(r'^NHB[A-Z0-9]{6}$', val)]
+        if len(set(matches)) > 1 and not allow_multiple:
             raise Exception('Multiple values found for {}'.format(kind))
         if allow_multiple:
             return matches
