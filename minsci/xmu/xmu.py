@@ -157,8 +157,6 @@ class XMu(object):
         keep_going = True
         n_processed = -skip
         n_success = 0
-        if limit:
-            limit += skip
         if skip:
             logger.info('Skipping the first {:,} records'.format(skip))
         if report:
@@ -640,18 +638,22 @@ def _sort(paths):
 
 
 def _check(rec, module=None):
-    """Validate the data in a record, including tables
+    """Validates a record, including tables
 
     Args:
-        rec (xmu.DeepDict): object data
+        rec (dict): object data
         module (str): the backend name of an EMu module
 
     Returns:
         Clean version of the original record
     """
-    # Check for irn, formatting the record to update if present
+    # Ensure that the record is an XMuRecord
+    if not isinstance(rec, XMuRecord):
+        rec = XMuRecord(rec)
+    # Ensure that the module attribute is populated
     if module is None:
         module = rec.module
+    # Ensure that the fields attribute is populated
     try:
         rec.fields
     except AttributeError:
@@ -659,15 +661,8 @@ def _check(rec, module=None):
     else:
         if rec.fields is None:
             rec.fields = FIELDS
-    '''
-    except AttributeError:
-        print 'Warning: Could not check tables'
-        return rec
-    else:
-        if rec.fields is None:
-            print 'Warning: Could not check tables'
-            return rec
-    '''
+    # Ensure that the record is expanded
+    rec.expand()
     # Convert values to XMuStrings and add attributes as needed
     tables = []
     for key in list(rec.keys()):
@@ -701,12 +696,12 @@ def emuize(records, module=None):
     """
     if module is None:
         module = records[0].module
-    checked = [_check(rec, module) for rec in records]
     root = None
-    for rec in checked:
+    for rec in records:
+        rec = _check(rec, module)
         try:
             root = _emuize(rec.expand().wrap(module), root, module=module)
-        except:
+        except Exception:
             rec.pprint()
             raise
     return root
