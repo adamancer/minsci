@@ -2,7 +2,10 @@
 from __future__ import print_function
 from __future__ import unicode_literals
 
-print('Initializing dicts submodule...')
+import logging
+logger = logging.getLogger(__name__)
+
+logger.debug('Initializing dicts submodule...')
 
 from .deepdict import DeepDict
 from .lockabledict import LockableDict
