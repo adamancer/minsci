@@ -14,7 +14,8 @@ import os
 import re
 
 from ..dicts import DeepDict
-from ..helpers import cprint
+
+
 
 
 class XMuFields(object):
@@ -84,7 +85,7 @@ class XMuFields(object):
         # Check cache
         cached = self._check_cache(params) if cache else None
         if cached is None:
-            cprint('Reading EMu schema...')
+            logger.info('Reading EMu schema...')
             # Extend schema based on source file, if specified. This
             # tries to assure that any paths in the source file are included
             # in the resulting XMuFields object.
@@ -97,7 +98,7 @@ class XMuFields(object):
             self._map_fields_to_tables()  # adds table fields to schema dict
             # Cache fields object as JSON
             if cache:
-                cprint('Caching XMuFields object...')
+                logger.info('Caching XMuFields object...')
                 # Convert keys in map_tables to string
                 map_tables = {'|'.join(key): val for key, val
                               in self.map_tables.items()}
@@ -132,14 +133,14 @@ class XMuFields(object):
         except (IOError, OSError):
             json_newer = False
         if json_newer:
-            cprint('Reading cached XMuFields object...')
+            logger.info('Reading cached XMuFields object...')
             try:
                 with open(cache_path, 'r', encoding='utf-8') as f:
                     cached = serialize.load(f)
             except IOError as e:
-                cprint('Cache file not found!')
+                logger.warning('Cache file not found!')
             except ValueError as e:
-                cprint('Cache file not valid JSON!')
+                logger.warning('Cache file not valid JSON!')
             else:
                 # Check logged in the cached file
                 if params != cached.get('params'):
@@ -153,7 +154,7 @@ class XMuFields(object):
                         self.map_tables = map_tables
                         self.hashed_tables = cached['hashed_tables']
                     except KeyError:
-                        cprint('Cache file missing required keys!')
+                        logger.warning('Cache file missing required keys!')
                         cached = None
         return cached
 
@@ -251,7 +252,6 @@ class XMuFields(object):
                 try:
                     schema_data['ItemName']
                 except KeyError:
-                    #cprint('Skipped {}.{}'.format(module_name, field_name))
                     continue
                 # Get additional information about this field
                 path = self._derive_path(schema_data)
@@ -341,7 +341,7 @@ class XMuFields(object):
 
     def _map_fields_to_tables(self):
         """Add table data to field data in self.schema"""
-        cprint('Mapping tables...')
+        logger.info('Mapping tables...')
         for module in set(self.tables.keys()) & set(self.schema.keys()):
             for table in self.tables[module]:
                 for column in table:
@@ -367,7 +367,7 @@ class XMuFields(object):
         Returns:
             Dict of {alias: path} pairs
         """
-        cprint('Reading user-defined aliases...')
+        logger.info('Reading user-defined aliases...')
         aliases = {}
         with open(os.path.join(self._fpath, 'aliases.txt'), 'r', encoding='utf-8') as f:
             for line in [line.strip() for line in f.read().splitlines()
@@ -379,9 +379,9 @@ class XMuFields(object):
                 try:
                     mapping = self.schema(path)
                 except KeyError:
-                    cprint(' Alias error: Path not found: {}'.format(alias))
+                    logger.error('Path specified for alias'
+                                 ' not found: {}'.format(alias))
                 else:
-                    #cprint('{} => {}'.format(alias, path))
                     mapping['alias'] = alias
                     self.schema.push(alias, mapping)
                     aliases[alias] = True
@@ -389,8 +389,8 @@ class XMuFields(object):
                         self(path)['columns']
                     except KeyError:
                         if is_table(path):
-                            cprint((' Alias error: Related table not'
-                                    ' found: {}'.format(alias)))
+                            logger.error(' Table specified for alias'
+                                         ' not found: {}'.format(alias))
                     # Not needed. Table included in data already.
                     #else:
                     #    self.map_columns[alias] = table
