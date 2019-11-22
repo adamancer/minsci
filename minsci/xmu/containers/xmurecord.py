@@ -939,12 +939,27 @@ class XMuGrid():
         if isinstance(key, int):
             return self.rows()[key]
         elif key in self.cols:
-            return self.record[key]
+            return [row[key] for row in self]
+        else:
+            return self.row({self.label: key})
         raise KeyError('{} not in grid'.format(key))
 
 
     def __delitem__(self, i):
         self.delete(i)
+
+
+    @property
+    def label(self):
+        return self._label
+
+
+    @label.setter
+    def label(self, col):
+        if col in self.cols:
+            self._label = col
+        else:
+            raise ValueError('Label column not found: {}'.format(col))
 
 
     @staticmethod
