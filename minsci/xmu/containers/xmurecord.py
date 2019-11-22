@@ -25,8 +25,12 @@ from ..constants import FIELDS
 from ...dicts import DeepDict
 
 
+
+
 Row = namedtuple('Row', ['irn', 'field', 'row', 'val'])
 GridInfo = namedtuple('GridInfo', ['rows', 'cols'])
+
+
 
 
 class XMuRecord(DeepDict):
@@ -537,7 +541,7 @@ class XMuRecord(DeepDict):
     def get_datetime(self, date_from, date_to=None, date_modifier=None,
                      time_from=None, time_to=None, time_modifier=None,
                      conjunction=' to ', format='%Y%m%dT%H%M%S'):
-            pass
+        raise NotImplementedError
 
 
     def get_notes(self, kind):
@@ -590,18 +594,6 @@ class XMuRecord(DeepDict):
                 weight = int(weight)
                 return u'{weight:,} {unit}'.format(weight=weight, unit=unit)
         return u''
-
-
-    @staticmethod
-    def _localize_datetime(date, time, timezone_id, mask):
-        if not (date and time):
-            raise ValueError('Both date and time are required')
-        iso_datetime = '{}T{}'.format(date, time)
-        timestamp = datetime.strptime(iso_datetime, '%Y-%m-%dT%H:%M:%S')
-        localized = timezone(timezone_id).localize(timestamp)
-        if mask is not None:
-            return localized.strftime(mask)
-        return localized
 
 
     def get_guid(self, kind='EZID', allow_multiple=False):
@@ -677,6 +669,18 @@ class XMuRecord(DeepDict):
         self._expand(keep_empty=keep_empty)
         self.verify()
         return self
+
+
+    @staticmethod
+    def _localize_datetime(date, time, timezone_id, mask):
+        if not (date and time):
+            raise ValueError('Both date and time are required')
+        iso_datetime = '{}T{}'.format(date, time)
+        timestamp = datetime.strptime(iso_datetime, '%Y-%m-%dT%H:%M:%S')
+        localized = timezone(timezone_id).localize(timestamp)
+        if mask is not None:
+            return localized.strftime(mask)
+        return localized
 
 
     def _expand(self, keep_empty=False):
