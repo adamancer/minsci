@@ -877,9 +877,9 @@ class XMuRecord(DeepDict):
         return zip_longest(*[self(arg) for arg in args])
 
 
-    def grid(self, cols, **kwargs):
+    def grid(self, cols, default=''):
         """Creates an XMuGrid object based on this record"""
-        return XMuGrid(rec=self, cols=cols, **kwargs)
+        return XMuGrid(rec=self, cols=cols, default=default)
 
 
     def trim(self):
@@ -890,13 +890,33 @@ class XMuRecord(DeepDict):
 
 
 
-class XMuGrid(object):
+class XMuGrid():
 
-    def __init__(self, rec, cols, default=''):
+    def __init__(self, rec, cols, default='', label=None):
         self.record = rec
-        self.cols = sorted(list(set(cols)))
         self.default = default
+        self._label = label if label else cols[0]
+        # Map table name
+        if isinstance(cols, str):
+            try:
+                module, name = cols.split('.')
+            except ValueError:
+                module = rec.module
+            try:
+                cols = [c[1] for c in rec.fields.map_table_names[module][cols]]
+            except KeyError:
+                pp.pprint(rec.fields.list_tables(module))
+                raise KeyError('Table "{}" not found!'.format(cols))
+        self.cols = sorted(list(set(cols)))
         self.pad_grid()
+        # Warn if column list doesn't match info in table definitions
+        refcols = rec.get_table(self.cols[0])
+        ref_not_cols = set(refcols) - set(cols)
+        if ref_not_cols:
+            logger.warning('Missing columns in grid: {}'.format(ref_not_cols))
+        cols_not_ref = set(cols) - set(refcols)
+        if cols_not_ref:
+            logger.warning('Extra columns in grid: {}'.format(cols_not_ref))
 
 
     def __str__(self):
@@ -1004,32 +1024,37 @@ class XMuGrid(object):
                 self.record[col] = [self.default] * num_rows
 
 
-    def pad_row(self, **kwargs):
+    def pad_row(self, row):
         """Fills in missing keys in a row with the classwide default value"""
         if self.default is not None:
             for col in self.cols:
-                kwargs.setdefault(col, self.default)
-        return kwargs
+                row.setdefault(col, self.default)
+        return row
 
 
-    def index(self, **kwargs):
+    def row(self, row):
+        """Returns the row matching the kwargs"""
+        return self[self.index(row)]
+
+
+    def index(self, row):
         """Finds the index of the row matching the kwargs"""
         indexes = []
-        for col, refval in kwargs.items():
+        for col, refval in row.items():
             for i, val in enumerate(self.record(col)):
                 if val == refval:
                     indexes.append(i)
         if not indexes:
-            raise IndexError('No row matches {}'.format(kwargs))
+            raise IndexError('No row matches {}'.format(row))
         if len(indexes) > 1:
-            raise IndexError('Multiple rows match {}'.format(kwargs))
+            raise IndexError('Multiple rows match {}'.format(row))
         return indexes[0]
 
 
-    def append(self, **kwargs):
+    def append(self, row):
         """Appends a row to the grid"""
-        kwargs = self.pad_row(**kwargs)
-        for col, val in kwargs.items():
+        row = self.pad_row(**row)
+        for col, val in row.items():
             val = self.coerce(col, val)
             self._check_type(col, val)
             self.record[col].append(val)
@@ -1042,32 +1067,32 @@ class XMuGrid(object):
             self.append(**row)
 
 
-    def insert(self, index, **kwargs):
+    def insert(self, index, row):
         """Inserts a row into the grid at the given index"""
-        kwargs = self.pad_row(**kwargs)
-        for col, val in kwargs.items():
+        if isinstance(index, dict):
+            index = self.index(index)
+        row = self.pad_row(**row)
+        for col, val in row.items():
             val = self.coerce(col, val)
             self._check_type(col, val)
             self.record[col].insert(index, val)
         self.expand()
 
 
-    def replace(self, index=None, match_on=None, default='', **kwargs):
+    def replace(self, index, row):
         """Replaces the row at the given index"""
-        assert index is not None or match_on
-        if index is None:
-            index = self.index(**match_on)
-        kwargs = self.pad_row(**kwargs)
-        for col, val in kwargs.items():
-            self.recordord(col)[i] = val
+        if isinstance(index, dict):
+            index = self.index(index)
+        row = self.pad_row(**row)
+        for col, val in row.items():
+            self.record(col)[i] = val
         self.expand()
 
 
-    def delete(self, index=None, **kwargs):
+    def delete(self, index):
         """Deletes the row at the given index"""
-        assert index is not None or kwargs
-        if index is None:
-            index = self.index(**kwargs)
+        if isinstance(index, dict):
+            index = self.index(index)
         for col in self.cols:
             self.pad_col(col)
             del self.record[col][index]
