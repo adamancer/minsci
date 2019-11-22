@@ -106,7 +106,7 @@ class MinSciRecord(XMuRecord):
             prefix = self('CatPrefix')
             number = self('CatNumber')
             division = self('CatDivision')
-            if self('MetMeteoriteName') or self('MetMeteoriteType'):
+            if not division and (metnum or self('MetMeteoriteType')):
                 division = 'Meteorites'
             if not number:
                 return u''
