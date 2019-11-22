@@ -474,8 +474,10 @@ class XMuRecord(DeepDict):
         Returns:
             List of values matching the match string
         """
-        labels = self.simple_pull(label_field)
-        values = self.simple_pull(value_field)
+        labels = self(label_field)
+        values = self(value_field)
+        if len(values) < len(labels):
+            raise ValueError('Too few values: {}, {}'.format(labels, values))
         rows = zip_longest(labels, values)
         match = standardize(match)
         return [val for label, val in rows if standardize(label) == match]
