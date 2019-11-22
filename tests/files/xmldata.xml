@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE table
+[
+  <!ELEMENT table	(tuple)*>
+  <!ATTLIST table
+            name	CDATA #REQUIRED
+  >
+
+  <!ELEMENT tuple	(table|tuple|atom)*>
+  <!ATTLIST tuple
+            name	CDATA #IMPLIED
+  >
+
+  <!ELEMENT atom	(#PCDATA)*>
+  <!ATTLIST atom
+            name	CDATA #REQUIRED
+            type	CDATA "text"
+            size	CDATA "short"
+  >
+]
+>
+<?schema
+  table           ecatalogue
+    text short      CatPrefix
+    integer         CatNumber
+    text short      CatSuffix
+    text short      CatDivision
+    text short      CatCatalog
+    table           CatCollectionName_tab
+      text short      CatCollectionName
+    end
+    table           CatOtherNumbersType_tab
+      text short      CatOtherNumbersType
+    end
+    table           CatOtherNumbersValue_tab
+      text short      CatOtherNumbersValue
+    end
+    table           IdeTaxonRef_tab
+      integer         irn
+    end
+    table           IdeNamedPart_tab
+      text short      IdeNamedPart
+    end
+    table           IdeTextureStructure_tab
+      text short      IdeTextureStructure
+    end
+    tuple           LocPermanentLocationRef
+      integer         irn
+    end
+    table           LocLocationRef_tab
+      integer         irn
+    end
+    tuple           BioEventSiteRef
+      integer         irn
+    end
+    table           ZooPreparation_tab
+      text short      ZooPreparation
+    end
+    table           ZooPreparationCount_tab
+      integer         ZooPreparationCount
+    end
+    table           NotNmnhText0
+      text long       NotNmnhText
+    end
+    table           NotNmnhDate0
+      date            NotNmnhDate
+    end
+    table           NotNmnhType_tab
+      text short      NotNmnhType
+    end
+    table           NotNmnhAttributedToRef_nesttab
+      table           NotNmnhAttributedToRef_nesttab_inner
+        integer         irn
+      end
+    end
+  end
+?>
+<!-- Data -->
+<table name="ecatalogue">
+
+  <!-- Row 1 -->
+  <tuple>
+    <atom name="CatPrefix">A</atom>
+    <atom name="CatNumber">12345</atom>
+    <atom name="CatSuffix">00</atom>
+    <atom name="CatDivision">Petrology &amp; Volcanology</atom>
+    <atom name="CatCatalog">Rock &amp; Ore Collections</atom>
+    <table name="CatCollectionName_tab">
+      <tuple>
+        <atom name="CatCollectionName">Unit Test Collection</atom>
+      </tuple>
+    </table>
+    <table name="CatOtherNumbersType_tab">
+      <tuple>
+        <atom name="CatOtherNumbersType">Collector's field number</atom>
+      </tuple>
+      <tuple>
+        <atom name="CatOtherNumbersType"></atom>
+      </tuple>
+      <tuple>
+        <atom name="CatOtherNumbersType">IGSN</atom>
+      </tuple>
+    </table>
+    <table name="CatOtherNumbersValue_tab">
+      <tuple>
+        <atom name="CatOtherNumbersValue">ABC-1</atom>
+      </tuple>
+      <tuple>
+        <atom name="CatOtherNumbersValue"></atom>
+      </tuple>
+      <tuple>
+        <atom name="CatOtherNumbersValue">NHB000ABC</atom>
+      </tuple>
+    </table>
+    <table name="IdeTaxonRef_tab">
+      <tuple>
+        <atom name="irn">1001689</atom>
+      </tuple>
+      <tuple>
+        <atom name="irn">1009644</atom>
+      </tuple>
+      <tuple>
+        <atom name="irn">1004148</atom>
+      </tuple>
+    </table>
+    <table name="IdeNamedPart_tab">
+      <tuple>
+        <atom name="IdeNamedPart">Primary</atom>
+      </tuple>
+      <tuple>
+        <atom name="IdeNamedPart"></atom>
+      </tuple>
+      <tuple>
+        <atom name="IdeNamedPart">Associated</atom>
+      </tuple>
+    </table>
+    <table name="IdeTextureStructure_tab">
+      <tuple>
+        <atom name="IdeTextureStructure"></atom>
+      </tuple>
+      <tuple>
+        <atom name="IdeTextureStructure">Xenocrystic</atom>
+      </tuple>
+    </table>
+    <tuple name="LocPermanentLocationRef">
+      <atom name="irn">1003604</atom>
+    </tuple>
+    <table name="LocLocationRef_tab">
+      <tuple>
+        <atom name="irn">1003604</atom>
+      </tuple>
+      <tuple>
+        <atom name="irn"></atom>
+      </tuple>
+      <tuple>
+        <atom name="irn">1003605</atom>
+      </tuple>
+    </table>
+    <tuple name="BioEventSiteRef">
+        <atom name="irn"></atom>
+    </tuple>
+    <table name="ZooPreparation_tab">
+      <tuple>
+        <atom name="ZooPreparation"></atom>
+      </tuple>
+      <tuple>
+        <atom name="ZooPreparation">Thin Section</atom>
+      </tuple>
+      <tuple>
+        <atom name="ZooPreparation">Probe Mount</atom>
+      </tuple>
+    </table>
+    <table name="ZooPreparationCount_tab">
+      <tuple>
+        <atom name="ZooPreparationCount"></atom>
+      </tuple>
+      <tuple>
+        <atom name="ZooPreparationCount">2</atom>
+      </tuple>
+    </table>
+    <table name="NotNmnhText0">
+      <tuple>
+        <atom name="NotNmnhText">Record with data entry irregularities to use for unit tests of the xmu package</atom>
+      </tuple>
+    </table>
+    <table name="NotNmnhDate0">
+      <tuple>
+        <atom name="NotNmnhDate">2019-11-21</atom>
+      </tuple>
+    </table>
+    <table name="NotNmnhType_tab">
+      <tuple>
+        <atom name="NotNmnhType">Comments</atom>
+      </tuple>
+    </table>
+    <table name="NotNmnhAttributedToRef_nesttab">
+      <tuple>
+        <table name="NotNmnhAttributedToRef_nesttab_inner">
+          <tuple>
+            <atom name="irn"></atom>
+          </tuple>
+          <tuple>
+            <atom name="irn">1006206</atom>
+          </tuple>
+        </table>
+      </tuple>
+    </table>
+  </tuple>
+</table>
