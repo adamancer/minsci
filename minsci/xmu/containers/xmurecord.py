@@ -83,6 +83,24 @@ class XMuRecord(DeepDict):
     '''
 
 
+    @property
+    def module(self):
+        try:
+            assert self._module
+        except AssertionError as e:
+            try:
+                return self._guess_module()
+            except ValueError:
+                raise e
+        else:
+            return self._module
+
+
+    @module.setter
+    def module(self, module):
+        self._module = module
+
+
     def finalize(self, *args, **kwargs):
         pass
 
@@ -142,8 +160,7 @@ class XMuRecord(DeepDict):
 
     def _guess_module(self):
         """Attempts to guess the module if no module attribute set"""
-        # FIXME: Fill out and move to a config file
-        keys = {
+        hints = {
             'ArtTitle': 'ebibliography',
             'CatPrefix': 'ecatalogue',
             'CatNumber': 'ecatalogue',
@@ -159,17 +176,21 @@ class XMuRecord(DeepDict):
             'ShpContactRef': 'eshipments',
             'TraNumber': 'enmnhtransactions'
         }
-        try:
-            assert self.module
-        except AssertionError:
+        if self._module:
+            return self._module
+        if len(self) == 1 and list(self.keys())[0] == 'irn':
+            return None
+        for dct in (hints, FIELDS.module_specific_fields):
             modules = []
-            for key, module in keys.items():
-                if self.get(key) is not None:
-                    modules.append(module)
+            for key in self:
+                try:
+                    modules.append(dct[key])
+                except KeyError:
+                    pass
             if len(set(modules)) == 1:
                 self.module = modules[0]
-            else:
-                raise
+                return modules[0]
+        raise ValueError('Could not guess module: {}'.format(self))
 
 
     def smart_pull(self, *args, **kwargs):
