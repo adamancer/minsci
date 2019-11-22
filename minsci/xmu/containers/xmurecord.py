@@ -39,8 +39,8 @@ class XMuRecord(DeepDict):
         # Set defaults for carryover attributes
         for attr in self._attributes:
             setattr(self, attr, None)
-        self.tabends = ('0', '_nesttab', '_nesttab_inner', '_tab')
-        self.refends = ('Ref', 'Ref_tab')
+        self.tabends = ('_nesttab_inner', '_nesttab', '_tab', '0')
+        self.refends = ('Ref_tab', 'Ref')
         self.fields = FIELDS
 
 
@@ -337,7 +337,6 @@ class XMuRecord(DeepDict):
         return paths
 
 
-
     '''
     def smart_push(self, val, *args):
         """Add value to paths stipulated by args
@@ -387,6 +386,14 @@ class XMuRecord(DeepDict):
     '''
 
 
+    def detab(self, field):
+        """Removes table indicator from a field name"""
+        for tab in self.tabends:
+            if field.endswith(tab):
+                return field[:-len(tab)]
+        return field
+
+
     def get_rows(self, *args):
         """Returns a list of values corresponding to the table rows
 
@@ -409,12 +416,19 @@ class XMuRecord(DeepDict):
             return []
         else:
             rows = []
+            refkey = self.detab(list(args)[-1])
             for row in table:
+                # Confirm that each row is a dict
                 try:
-                    rows.extend(list(row.values()))
+                    row.values()
                 except AttributeError:
-                    raise AttributeError('No values attribute found for {}. Try'
+                    raise AttributeError('{} must contain only dicts. Try'
                                          ' expanding the record.'.format(args))
+                # Test if row only contains the refkey
+                for key in row:
+                    if key != refkey:
+                        return table
+                rows.extend(list(row.values()))
             return rows
 
 
