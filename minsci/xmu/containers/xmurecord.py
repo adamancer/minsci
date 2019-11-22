@@ -638,6 +638,17 @@ class XMuRecord(DeepDict):
             return 'http://n2t.net/{}'.format(ezid)
 
 
+    def has_collection(self, collection, starts_with=True):
+        """Checks if record belongs to a given collection"""
+        collection = collection.lower()
+        for coll in self('CatCollectionName_tab'):
+            coll = coll.lower()
+            if (coll == collection
+                or (starts_with and coll.startswith(collection))):
+                    return True
+        return False
+
+
     def wrap(self, module):
         """Wraps the XMuRecord with name of module
 
