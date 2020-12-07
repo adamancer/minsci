@@ -1,6 +1,4 @@
 """Schedules operations using the EMu Operations module"""
-from __future__ import unicode_literals
-
 from datetime import timedelta
 
 from dateparser import parse

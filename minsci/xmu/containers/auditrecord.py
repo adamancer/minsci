@@ -1,7 +1,4 @@
 """Subclass of DeepDict with methods specific to eaudits"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import datetime as dt
 from collections import namedtuple
 

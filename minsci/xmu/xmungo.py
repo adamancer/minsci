@@ -1,11 +1,4 @@
 """Reads data from NMNH MongoDB collections database"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from builtins import input
-from builtins import str
-from builtins import range
-from builtins import object
 import time
 
 import getpass

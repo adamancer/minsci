@@ -1,8 +1,4 @@
 """Alias handling for processing EMu data that doesn't use full paths"""
-from __future__ import unicode_literals
-
-from past.builtins import basestring
-from builtins import object
 import os
 
 from ...xmu import XMu, MinSciRecord, is_table, is_reference

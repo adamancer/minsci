@@ -1,13 +1,5 @@
 # -*- coding: utf-8 -*-
 """Helper functions used throughout the minsci module"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from builtins import input
-from builtins import next
-from builtins import str
-from builtins import range
-from past.builtins import basestring
 import csv
 import io
 import os

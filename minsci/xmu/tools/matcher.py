@@ -1,8 +1,4 @@
 """Tools to match EMu records for making attachments"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from builtins import range
 import copy
 import json
 import os

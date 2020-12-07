@@ -1,7 +1,4 @@
 """Script to read data from an EMu export file"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import os
 
 from minsci import xmu

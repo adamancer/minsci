@@ -1,8 +1,4 @@
 """Defines methods to request data from the NMNH Geology Collections Data Portal"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from builtins import input
 import codecs
 import csv
 import datetime as dt

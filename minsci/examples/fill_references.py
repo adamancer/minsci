@@ -8,9 +8,6 @@ If the record already contains information, the script checks the author and
 year to verify that the publication is correct. Be careful when overwriting
 existing records!
 """
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import glob
 import os
 import re

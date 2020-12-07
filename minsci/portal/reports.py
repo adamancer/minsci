@@ -1,5 +1,3 @@
-from __future__ import print_function
-from __future__ import unicode_literals
 import csv
 
 from .portal import get, get_simpledwr, encode_for_excel, timestamped

@@ -1,8 +1,4 @@
 """Subclass of dictionary designed to read/store at depth"""
-from __future__ import unicode_literals
-from builtins import input
-from builtins import range
-from past.builtins import basestring
 import pprint as pp
 from collections import Mapping
 

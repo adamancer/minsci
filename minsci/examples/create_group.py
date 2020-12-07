@@ -1,6 +1,4 @@
 """Script to create or update a group via import"""
-from __future__ import unicode_literals
-
 import os
 
 from minsci import xmu

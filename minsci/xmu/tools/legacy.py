@@ -1,9 +1,4 @@
 """Tools to parse legacy data from an EMu export"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from builtins import input
-from builtins import str
 import csv
 import os
 import re

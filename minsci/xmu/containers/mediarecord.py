@@ -1,6 +1,4 @@
 """Subclass of XMuRecord with methods specific to emultimedia"""
-from __future__ import print_function
-from __future__ import unicode_literals
 
 from builtins import str
 from past.builtins import basestring

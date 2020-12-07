@@ -1,10 +1,4 @@
 """Subclass of DeepDict with methods specific to XMu"""
-from __future__ import print_function
-from __future__ import unicode_literals
-from builtins import str
-from builtins import range
-from past.builtins import basestring
-
 import logging
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,4 @@
 """Tools to parse audits data from EMu"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
 from random import randint
 
 from ...xmu import XMu, AuditRecord

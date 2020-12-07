@@ -1,6 +1,4 @@
 """Tools to describe and link multimedia using data from ecatalogue"""
-from __future__ import unicode_literals
-
 import re
 from collections import namedtuple
 from copy import deepcopy

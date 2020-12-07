@@ -1,7 +1,4 @@
 """Subclass of XMuRecord with methods specific to Mineral Sciences"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import re
 try:
     from itertools import zip_longest

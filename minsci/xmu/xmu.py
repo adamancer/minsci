@@ -1,14 +1,4 @@
 """Reads and writes XML formatted for Axiell EMu"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
-import logging
-logger = logging.getLogger(__name__)
-
-from builtins import str
-from builtins import range
-from past.builtins import basestring
-from builtins import object
 import glob
 import hashlib
 import json

@@ -1,7 +1,4 @@
 """Defines module-specific containers for working with EMu data"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import logging
 logger = logging.getLogger(__name__)
 

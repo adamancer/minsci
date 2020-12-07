@@ -13,7 +13,6 @@ setup(name='minsci',
       long_description=long_description,
       classifiers = [
         'License :: OSI Approved :: MIT License',
-        'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.7'
       ],
       url='https://github.com/adamancer/minsci.git',
