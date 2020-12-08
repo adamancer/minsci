@@ -8,7 +8,7 @@ except:
                         ' for more information about the MinSci Toolkit.')
 
 setup(name='minsci',
-      version='0.50',
+      version='0.60',
       description='Tools for data management in Mineral Sciences at NMNH',
       long_description=long_description,
       classifiers = [

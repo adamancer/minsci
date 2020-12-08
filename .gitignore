@@ -27,6 +27,7 @@ tests
 *.json
 *.log
 *.pl
+config.yml
 
 # Documentation
 /docs/_build
