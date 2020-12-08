@@ -1,7 +1,4 @@
 """Provides tools to read, write, and otherwise process EMu XML files"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
 import logging
 logger = logging.getLogger(__name__)
 

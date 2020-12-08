@@ -1,9 +1,9 @@
 """Reads data from NMNH MongoDB collections database"""
-import time
-
 import getpass
 import json
 import os
+import pprint as pp
+import time
 from datetime import datetime
 
 import pymongo
@@ -12,7 +12,8 @@ from pymongo import MongoClient
 from pymongo.operations import ReplaceOne, DeleteOne
 
 from .xmu import XMu, XMuRecord
-from ..helpers import cprint
+
+
 
 
 class MongoBot(object):
@@ -161,11 +162,6 @@ class MongoDoc(dict):
         return doc if doc != {} else default
 
 
-    def pprint(self):
-        """Pretty prints the dict"""
-        cprint(self)
-
-
     def _convert_children(self, obj):
         """Converts nested dictionaries to MongoDoc"""
         if isinstance(obj, dict):
@@ -210,12 +206,13 @@ class XMungo(MongoBot):
 
 
     def finalize(self):
-        """Placeholder for finalize method run at end of iteration"""
+        """Placeholder for method run at end of fast_iter"""
         pass
 
 
     def _fast_iter(self, query=None, func=None, report=0, skip=0, limit=0,
                    callback=None, mongo=None, **kwargs):
+        """Applies a function to all results form a query"""
         if func is None:
             func = self.iterate
         if report:
@@ -337,7 +334,7 @@ def mongo2xmu(doc, container):
     """
     doc = MongoDoc(doc)
     cat = container({
-        'irn': doc.getpath('_id'),
+        'irn': int(doc.getpath('_id')),
         'CatPrefix': doc.getpath('catnb.catpr'),
         'CatNumber': doc.getpath('catnb.catnm'),
         'CatSuffix': doc.getpath('catnb.catsf'),
@@ -451,7 +448,6 @@ def mongo2xmu(doc, container):
     modtime = doc.getpath('admdm')
     cat['AdmDateModified'] = modtime.strftime('%Y-%m-%d')
     cat['AdmTimeModified'] = modtime.strftime('%H:%M:%S')
-    #cat.pprint()
     cat.expand()
-    #cat.pprint(True)
+    cat.modified = []
     return cat

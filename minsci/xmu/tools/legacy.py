@@ -294,7 +294,7 @@ class Legacy(XMu):
                 skipped.append(field)
         if skipped:
             print('\n'.join(sorted(skipped)))
-            input()
+            input('paused')
         self.missing = []
         # Read legacy data automatically
         self.errors = []

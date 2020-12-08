@@ -129,6 +129,7 @@ class Auditor(XMu):
 
 
     def finalize(self):
+        """Summarizes audits as HTML, sampling a subset if specified"""
         html = []
         try:
             combined = self.combine()
@@ -141,13 +142,13 @@ class Auditor(XMu):
                     or randint(1, 100) <= self.percent_to_review):
                     html.extend(self.to_html(rec))
         self._html = html
-        return html
+        return self
 
 
     def to_html(self, rec):
         """Converts an audit record to HTML for display"""
         html = ['<h1>{}: {}</h1>'.format(rec('AudTable'), rec('AudKey'))]
-        html.append(u'<table>')
+        html.append('<table>')
         keys = ['irn', 'AudUser', 'AudOperation']
         for key in keys:
             html.append('<tr><th>{}</th><td colspan="2">{}'
@@ -160,12 +161,12 @@ class Auditor(XMu):
             new = self.format_value(field, change.new)
             # Capture changes only
             if old != new:
-                html.append(u'<tr>')
-                html.append(u'<th>{}</th>'.format(field))
-                html.append(u'<td>{}</td>'.format(old))
-                html.append(u'<td>{}</td>'.format(new))
-                html.append(u'</tr>')
-        html.append(u'</table>')
+                html.append('<tr>')
+                html.append('<th>{}</th>'.format(field))
+                html.append('<td>{}</td>'.format(old))
+                html.append('<td>{}</td>'.format(new))
+                html.append('</tr>')
+        html.append('</table>')
         return html
 
 
@@ -198,6 +199,6 @@ class Auditor(XMu):
         """Formats values pulled from the old/new table for printing"""
         if field.endswith(('0', '_nesttab', '_nesttab_inner', '_tab')):
             vals = val if val is not None else []
-            vals = [u'<li>{}</li>'.format(val) for val in vals]
-            return u'<ol>' + u''.join(vals) + u'</ol>'
+            vals = ['<li>{}</li>'.format(val) for val in vals]
+            return '<ol>' + ''.join(vals) + '</ol>'
         return val

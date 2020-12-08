@@ -4,7 +4,7 @@ import os
 from ...xmu import XMu, MinSciRecord, is_table, is_reference
 
 
-class FieldMapper(object):
+class FieldMapper:
     """Map field aliases to full paths in EMu
 
     Attributes:
@@ -69,7 +69,7 @@ class FieldMapper(object):
             path (str or iterable): the full path
         """
         # Standardize the form of the path
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             path = [path]
         path = tuple(path)
         # Verify the given path
@@ -123,7 +123,7 @@ class FieldMapper(object):
         Returns:
             Alias for a given path, if it exists
         """
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             path = [path]
         return self.paths[tuple(path)]
 

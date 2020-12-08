@@ -23,6 +23,7 @@ README.rst
 # Other files to ignore
 minsci/.gitattributes
 minsci/.pylintrc
+tests
 *.json
 *.log
 *.pl

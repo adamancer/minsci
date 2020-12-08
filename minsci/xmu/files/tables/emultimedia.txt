@@ -8,3 +8,5 @@ Supplementary,SupIdentifier_tab
 Supplementary,SupUsage_nesttab
 GUIDs,AdmGUIDType_tab
 GUIDs,AdmGUIDValue_tab
+OpenAccess,DetSIRestriction_tab
+OpenAccess,DetSIRestrictionUser_tab

@@ -99,7 +99,6 @@ class Matcher(XMu):
             fp = os.path.join('matcher', module)
             self.fast_iter(report=10000)
             self._fields = list(set(self._fields))
-            print(self._fields)
             self.save(json_path)
         self._fields.sort()
 
@@ -239,7 +238,7 @@ class Matcher(XMu):
             try:
                 rec[key]
             except KeyError:
-                pass #rec_key = [] if is_table(key) else u''
+                pass #rec_key = [] if is_table(key) else ''
             if ((self.include and not key in self.include)
                     or key in self.exclude):
                 del rec[key]
@@ -264,7 +263,7 @@ class Matcher(XMu):
         # because it's unlikely that the import will include more than one,
         # so we check for those here.
         for sources in self.derived:
-            keep = u''
+            keep = ''
             for src in sources:
                 if rec.get(src) is not None:
                     keep = src

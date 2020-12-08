@@ -32,9 +32,8 @@ class AuditRecord(XMuRecord):
             else:
                 try:
                     tree = etree.fromstring(xml)
-                except etree.XMLSyntaxError:
-                    print(xml)
-                    raise
+                except etree.XMLSyntaxError as e:
+                    raise ValueError(xml) from e
                 if xml.startswith('<atom'):
                     val = tree.text if isinstance(tree.text, str) else tree.text.decode('utf-8')
                 else:

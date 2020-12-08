@@ -69,7 +69,7 @@ def _archive(**kwargs):
             last_id = 0
             while True:
                 response = get(last_id=last_id, **kwargs)
-                content = u'{}'.format(response.text)
+                content = '{}'.format(response.text)
                 try:
                     header, content = content.split('<abcd:Units>', 1)
                 except ValueError:
@@ -111,7 +111,7 @@ def archive(title, details, content_contact, technical_contact, **kwargs):
     while True:
         response = get(last_id=last_id, **kwargs)
         if response is not None:
-            content = u'{}'.format(response.text)
+            content = '{}'.format(response.text)
             try:
                 header, content = content.split('<abcd:Units>', 1)
             except ValueError:
