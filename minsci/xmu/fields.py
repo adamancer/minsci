@@ -1,10 +1,18 @@
 """Reads and returns information about EMu's schema"""
 import json as serialize
+import logging
 import glob
 import os
 import re
 
+from nmnh_ms_tools.utils import hash_file, is_newer
+
 from ..dicts import DeepDict
+
+
+
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -33,7 +41,7 @@ class XMuFields(object):
     def __init__(self, schema_path=None, whitelist=None, blacklist=None,
                  cache=True, verbose=False):
         self.verbose = verbose
-        self._fpath = os.path.join(os.path.dirname(__file__), 'files')
+        self.filedir = os.path.join(os.path.dirname(__file__), 'files')
         # Set defaults for blacklist
         defaults = {
             'blacklist': [
@@ -59,23 +67,23 @@ class XMuFields(object):
                 'ewebgroups',
                 'ewebusers',
             ],
-            'schema_path': os.path.join(self._fpath, 'schema.pl')
+            'schema_path': os.path.join(self.filedir, 'schema.pl')
         }
         blacklist = set(defaults['blacklist'] if not blacklist else blacklist)
+        # Set paths to source files
         if not schema_path:
             schema_path = defaults['schema_path']
-        if cache:
-            cache_path = schema_path.rsplit('.', 1)[0] + '.json'
+        self.schema_path = schema_path
+        self.cache_path = schema_path.rsplit('.', 1)[0] + '.json'
         # Set params. These will be added to the cache file to determine
         # if the cache request is valid.
         params = {
-            'blacklist': list(blacklist) if blacklist else None,
-            'cache_path': cache_path,
-            'schema_path': schema_path,
-            'whitelist': list(whitelist) if whitelist else None
+            'checksum': hash_file(self.schema_path),
+            'blacklist': sorted(list(blacklist)) if blacklist else None,
+            'whitelist': sorted(list(whitelist)) if whitelist else None
         }
         # Check cache
-        cached = self._check_cache(params) if cache else None
+        cached = self.load(params) if cache else None
         if cached is None:
             logger.info('Reading EMu schema...')
             # Extend schema based on source file, if specified. This
@@ -103,7 +111,7 @@ class XMuFields(object):
                     'map_table_names': self.map_table_names,
                     'hashed_tables': self.hashed_tables
                 }
-                with open(cache_path, 'w', encoding='utf-8') as f:
+                with open(self.cache_path, 'w', encoding='utf-8') as f:
                     # HACK: JSON hack for 2/3 compatibility
                     try:
                         serialize.dump(fields, f)
@@ -117,28 +125,23 @@ class XMuFields(object):
         return self.get(*args)
 
 
-    def _check_cache(self, params):
+    def load(self, params):
         """Check for cached XMuFields object"""
-        schema_path = params['schema_path']
-        cache_path = params['cache_path']
         cached = None
         # Check if JSON is newer than XML
-        try:
-            json_newer = os.path.getmtime(cache_path) > os.path.getmtime(schema_path)
-        except (IOError, OSError):
-            json_newer = False
-        if json_newer:
-            logger.info('Reading cached XMuFields object...')
+        if not is_newer(self.schema_path, self.cache_path):
             try:
-                with open(cache_path, 'r', encoding='utf-8') as f:
+                with open(self.cache_path, 'r', encoding='utf-8') as f:
                     cached = serialize.load(f)
             except IOError as e:
-                logger.warning('Cache file not found!')
+                logger.warning('JSON schema file not found')
             except ValueError as e:
-                logger.warning('Cache file not valid JSON!')
+                logger.warning('JSON schema file invalid')
             else:
                 # Check logged in the cached file
                 if params != cached.get('params'):
+                    mask = 'JSON schema file params different: {} != {}'
+                    logger.warning(mask.format(params, cached.get('params')))
                     cached = None
                 else:
                     try:
@@ -147,12 +150,13 @@ class XMuFields(object):
                         self.schema = cached['schema']
                         self.tables = cached['tables']
                         self.map_tables = map_tables
+                        self.map_table_names = cached['map_table_names']
                         self.hashed_tables = cached['hashed_tables']
+                        logger.info('Loaded schema from JSON')
                     except KeyError:
-                        logger.warning('Cache file missing required keys!')
+                        logger.warning('JSON schema file missing required keys')
                         cached = None
         return cached
-
 
 
     def get(self, *args):
@@ -182,7 +186,7 @@ class XMuFields(object):
                         raise KeyError('No module specified: {}'.format(args))
                     elif not self.schema:
                         # No error on bad path if the schema is not defined
-                        raise Exception('No schema defined')
+                        raise ValueError('No schema defined')
                     else:
                         raise KeyError('Illegal path: {}'.format(args))
             else:
@@ -294,7 +298,7 @@ class XMuFields(object):
         """Read data about tables from text files in files/tables"""
         tables = {}
         lookup = {}
-        for fp in glob.iglob(os.path.join(self._fpath, 'tables', 'e*.txt')):
+        for fp in glob.iglob(os.path.join(self.filedir, 'tables', 'e*.txt')):
             module = os.path.splitext(os.path.basename(fp))[0]
             _tables = {}
             with open(fp, 'r', encoding='utf-8') as f:
@@ -344,7 +348,8 @@ class XMuFields(object):
         """
         logger.info('Reading user-defined aliases...')
         aliases = {}
-        with open(os.path.join(self._fpath, 'aliases.txt'), 'r', encoding='utf-8') as f:
+        fp = os.path.join(self.filedir, 'aliases.txt')
+        with open(fp, 'r', encoding='utf-8') as f:
             for line in [line.strip() for line in f.read().splitlines()
                          if ',' in line and not line.startswith('#')]:
                 alias, path = line.split(',')
@@ -395,7 +400,7 @@ class XMuFields(object):
 
 
     @staticmethod
-    def read_fields(fp):
+    def read_fields(filelike):
         """Reads paths from the schema in an EMu XML export
 
         Args:
@@ -407,7 +412,7 @@ class XMuFields(object):
         paths = []
         schema = []
         module = None
-        with open(fp, 'r', encoding='utf-8') as f:
+        with filelike.open('r', encoding='utf-8') as f:
             for line in f:
                 if module is None and 'table name="e' in line:
                     module = line.split('"')[1]
