@@ -1,25 +1,37 @@
 """Reads and writes XML formatted for Axiell EMu"""
+import datetime as dt
 import glob
 import hashlib
+import io
 import json
+import logging
 import os
 import re
+import shutil
+import time
+import zipfile
 from collections import namedtuple
-from datetime import datetime
 
 from lxml import etree
+
+from nmnh_ms_tools.utils import ABCEncoder, is_newer, get_mtime
 
 from .constants import FIELDS
 from .containers import XMuRecord
 from .fields import is_table, is_reference
 from ..exceptions import RowMismatch
-from ..helpers import cprint
+from ..helpers import FileLike
 
 
+
+
+logger = logging.getLogger(__name__)
 Grid = namedtuple('Grid', ['fields', 'operator'])
 
 
-class XMu(object):
+
+
+class XMu:
     """Read and search XML export files from EMu
 
     Attributes:
@@ -40,45 +52,60 @@ class XMu(object):
     """
 
     def __init__(self, path, fields=None, container=None, module=None):
-        # Class-wide switches
+        # Class-wide attributes
         self.path = path
         self.keep = []
         self.verbose = False
         self.module = module
         self.from_json = False
-
         # Create a fields object based on the path if none provided
         if fields is None:
             fields = FIELDS
         self.fields = fields
-
-        # DeepDict or subclass to use as container for EMu data
+        # Use a DeepDict or subclass as container for EMu data
         if container is None:
             container = XMuRecord
         self._attributes = ['fields', 'module']
         self._container = container
-
         self.xpaths = []
         self.newest = []
-        self._files = []
+        self.files = []
+        self.modified = None
         self._paths_found = {}
 
-        # Walk through a directory
-        if path is None:
-            xpaths = []
-        elif os.path.isdir(path):
-            self._files = [fp for fp in glob.glob(os.path.join(path, '*.xml'))]
-            self._files.sort(key=lambda fp: os.path.getmtime(fp), reverse=True)
-            xpaths = []
-            for fp in self._files:
-                xpaths.extend(self.fields.read_fields(fp))
-            xpaths = list(set(xpaths))
-        elif path.endswith('.xml'):
-            xpaths = self.fields.read_fields(path)
-            self._files = [path]
+        # If path is a JSON file, bypass the source file check
+        if isinstance(path, str) and path.lower().endswith('.json'):
+            self.load(path)
         else:
-            raise Exception('Invalid path: {}'.format(path))
-        # Check that all xpaths are valid according to schema
+            self.read_source_files()
+
+
+    def read_source_files(self):
+        """Analyzes source files on self.path"""
+        files = []
+        zip_file = None
+        if self.path:
+            if os.path.isdir(self.path):
+                files = glob.glob(os.path.join(self.path, '*.xml'))
+            elif self.path.endswith('.xml'):
+                files = [self.path]
+            elif self.path.endswith('.zip'):
+                zip_file = zipfile.ZipFile(self.path)
+                files = zipfile.ZipFile(self.path).infolist()
+            else:
+                raise IOError('Invalid path: {}'.format(self.path))
+
+        self.files = [FileLike(obj, zip_file=zip_file) for obj in files]
+        self.files.sort(key=lambda flike: flike.getmtime(), reverse=True)
+        if self.files:
+            self.modified = max([flike.getmtime() for flike in self.files])
+
+        # Create a list of all xpaths in the source files
+        xpaths = []
+        for fp in self.files:
+            xpaths.extend(self.fields.read_fields(fp))
+        xpaths = list(set(xpaths))
+        # Validate xpaths against schema
         remove = []
         for xpath in xpaths:
             path = xpath.split('/')
@@ -91,14 +118,14 @@ class XMu(object):
         # Record basic metadata about the import file
         if xpaths or self.module is None:
             self.module = self.xpaths[0].split('/')[0]
-            self.newest = max([os.path.getmtime(fp) for fp in self._files])
-        self._paths_found = {}
+            self.newest = max([flike.getmtime() for flike in self.files])
 
 
     def parse(self, element):
         """Converts XML record to XMu dictionary"""
         rec = self.read(element).unwrap()
         rec.finalize()
+        rec.modified = []
         return rec
 
 
@@ -107,7 +134,9 @@ class XMu(object):
         container = self._container(*args)
         for attr in self._attributes:
             setattr(container, attr, getattr(self, attr, None))
-        container.finalize()
+        # Finalize the container if it has been populated
+        if container:
+            container.finalize()
         return container
 
 
@@ -122,8 +151,24 @@ class XMu(object):
 
 
     def finalize(self):
-        """Placeholder for finalize method run at end of iteration"""
+        """Placeholder for method run at end of fast_iter"""
         pass
+
+
+    def simple_iter(self):
+        for filelike in self.files:
+            with filelike.open() as source:
+                context = etree.iterparse(source, events=['end'], tag='tuple')
+                for _, element in context:
+                    # Process children of module table only
+                    parent = element.getparent().get('name')
+                    if parent is not None and parent.startswith('e'):
+                        yield element
+                        # Clean up
+                        element.clear()
+                        while element.getprevious() is not None:
+                            del element.getparent()[0]
+                del context
 
 
     def fast_iter(self, func=None, report=0, skip=0, limit=0,
@@ -150,42 +195,44 @@ class XMu(object):
         if skip:
             logger.info('Skipping the first {:,} records'.format(skip))
         if report:
-            starttime = datetime.now()
-        for fp in self._files:
+            starttime = dt.datetime.now()
+        for filelike in self.files:
             if report:
-                logger.info('Reading {}...'.format(fp))
-            context = etree.iterparse(fp, events=['end'], tag='tuple')
-            for _, element in context:
-                # Process children of module table only
-                parent = element.getparent().get('name')
-                if parent is not None and parent.startswith('e'):
-                    n_processed += 1
-                    if n_processed <= 0:
-                        continue
-                    result = func(element, **kwargs)
-                    if result is False:
-                        keep_going = False
-                        break
-                    elif result is not True:
-                        n_success += 1
-                    element.clear()
-                    while element.getprevious() is not None:
-                        del element.getparent()[0]
-                    if report:
-                        starttime = self._report(report,
-                                                 n_processed,
-                                                 n_success,
-                                                 starttime)
-                    if limit and not n_processed % limit:
-                        logger.warning('Stopped processing before end of file'
-                                       ' (limit={:,} records)'.format(limit))
-                        keep_going = False
-                        break
-            del context
-            if not keep_going:
-                break
-        print(('{:,} records processed!'
-               ' ({:,} successful)').format(n_processed, n_success))
+                logger.info('Reading {}...'.format(filelike))
+            with filelike.open('rb') as source:
+                context = etree.iterparse(source, events=['end'], tag='tuple')
+                for _, element in context:
+                    # Process children of module table only
+                    parent = element.getparent().get('name')
+                    if parent is not None and parent.startswith('e'):
+                        n_processed += 1
+                        if n_processed <= 0:
+                            continue
+                        result = func(element, **kwargs)
+                        if result is False:
+                            keep_going = False
+                            break
+                        elif result is not True:
+                            n_success += 1
+                        element.clear()
+                        while element.getprevious() is not None:
+                            del element.getparent()[0]
+                        if report:
+                            starttime = self._report(report,
+                                                     n_processed,
+                                                     n_success,
+                                                     starttime)
+                        if limit and not n_processed % limit:
+                            logger.warning('Stopped processing before'
+                                           ' end of file (limit={:,}'
+                                           ' records)'.format(limit))
+                            keep_going = False
+                            break
+                del context
+                if not keep_going:
+                    break
+        mask = '{:,} records processed! ({:,} successful)'
+        print(mask.format(n_processed, n_success))
         self.finalize()
         if callback is not None:
             if callback_kwargs is None:
@@ -195,7 +242,7 @@ class XMu(object):
 
 
     def _report(self, report, n_processed, n_success, starttime):
-        now = datetime.now()
+        now = dt.datetime.now()
         elapsed = now - starttime
         by_count = isinstance(report, int)
         if not by_count:
@@ -210,9 +257,9 @@ class XMu(object):
 
     def autoiterate(self, keep=None, **kwargs):
         """Automatically iterates over the source file and caches the result"""
-        if keep is None and self.keep:
+        if keep is None:
             keep = self.keep
-        if keep is not None:
+        if keep:
             self.keep = keep
             try:
                 self.load(**kwargs.get('callback_kwargs', {}))
@@ -221,31 +268,48 @@ class XMu(object):
                 self.fast_iter(callback=callback, **kwargs)
         else:
             self.fast_iter(**kwargs)
+        return self
 
 
-    def save(self, fp=None, encoding='utf-8'):
+    def save(self, json_path=None, encoding='utf-8'):
         """Save attributes listed in the self.keep as json"""
-        if fp is None:
-            fp = os.path.splitext(self.path)[0] + '.json'
-        logger.info('Saving data to {}...'.format(fp))
+        if json_path is None:
+            json_path = os.path.splitext(self.path)[0] + '.json'
+        logger.info('Saving data to {}...'.format(json_path))
         data = {key: getattr(self, key) for key in self.keep}
-        with open(fp, 'w', encoding=encoding) as f:
+        with open(json_path, 'w', encoding=encoding) as f:
             json.dump(data, f, ensure_ascii=False, cls=ABCEncoder)
+        self.modified = get_mtime(json_path)
+        # Update the timestamp on the orginal file to ensure that it is
+        # older than the JSON file. This prevents files from different
+        # timezones from causing problems.
+        # FIXME: Use hashes instead of timestamps
+        timestamp = dt.datetime.now().timestamp()
+        if os.path.isfile(self.path):
+            if is_newer(self.path, json_path):
+                timestamp -= 60
+                os.utime(self.path, (timestamp, timestamp))
+        else:
+            for filelike in self.files[::-1]:
+                if is_newer(str(filelike), json_path):
+                    timestamp -= 60
+                    os.utime(str(filelike), (timestamp, timestamp))
 
 
-    def load(self, fp=None, encoding='utf-8'):
+    def load(self, json_path=None, encoding='utf-8'):
         """Load data from json file created by self.save"""
-        if fp is None:
-            fp = os.path.splitext(self.path)[0] + '.json'
-        # Always recreate the JSON if XML is newer
-        if os.path.getmtime(fp) <= os.path.getmtime(self.path):
+        if json_path is None:
+            json_path = os.path.splitext(self.path)[0] + '.json'
+        # Always recreate the JSON if source file is newer
+        if is_newer(self.path, json_path):
             raise IOError
-        logger.info('Reading data from {}...'.format(fp))
-        with open(fp, 'r', encoding=encoding) as f:
+        logger.info('Reading data from {}...'.format(json_path))
+        with open(json_path, 'r', encoding=encoding) as f:
             data = json.load(f)
         for attr, val in data.items():
             setattr(self, attr, val)
         self.from_json = True
+        self.modified = get_mtime(json_path)
 
 
     def set_keep(self, fields):
@@ -288,7 +352,7 @@ class XMu(object):
             if not len(child):
                 # lxml always returns ascii-encoded strings in Python 2, so
                 # so convert to unicode here
-                val = str(child.text) if child.text is not None else u''
+                val = str(child.text) if child.text is not None else ''
                 if child.tag == 'table':
                     # Handle empty tables. These happen with nested tables
                     # and possibly elsewhere.
@@ -355,7 +419,7 @@ class XMu(object):
             if not len(child):
                 # lxml always returns ascii-encoded strings in Python 2, so
                 # so convert to unicode here
-                val = str(child.text) if child.text is not None else u''
+                val = str(child.text) if child.text is not None else ''
                 if child.tag == 'table':
                     # Handle empty tables. These happen with nested tables
                     # and possibly elsewhere.
@@ -415,14 +479,14 @@ class XMu(object):
                 text = str(child.text)
                 results.append(text)
             else:
-                results.append(u'')
+                results.append('')
         self._paths_found.setdefault(xpath, []).append(len(results))
         # Convert atoms to unicode
         if not 'table' in xpath:
             try:
                 results = results[0]
             except IndexError:
-                results = u''
+                results = ''
         return results
 
 
@@ -459,21 +523,6 @@ class XMu(object):
 
 
 
-class ABCEncoder(json.JSONEncoder):
-
-    def __init__(self, *args, **kwargs):
-        super(ABCEncoder, self).__init__(*args, **kwargs)
-
-
-    def default(self, abc):
-        try:
-            return abc.obj
-        except AttributeError:
-            return json.JSONEncoder.default(self, abc)
-
-
-
-
 def check_table(rec, *args):
     """Check that the columns in a table are all the same length"""
     try:
@@ -489,7 +538,7 @@ def check_columns(*args):
     Args:
         *args: Lists of value for each column
     """
-    if len(set([len(arg) for arg in args if arg is not None and any(arg)])) > 1:
+    if len({len(arg) for arg in args if arg is not None and any(arg)}) > 1:
         raise RowMismatch(args)
 
 
@@ -537,7 +586,7 @@ def _emuize(rec, root=None, path=None, handlers=None,
         else:
             grid_flds = '|'.join(['|'.join(field) for field in sorted(table)])
             group = Grid(grid_flds, operator)
-    if isinstance(rec, (int, float, basestring)):
+    if isinstance(rec, (dt.date, float, int, str)):
         atom = etree.SubElement(root, 'atom')
         # Set path to parent if is a row in a table
         if isinstance(path, int):
@@ -562,9 +611,8 @@ def _emuize(rec, root=None, path=None, handlers=None,
             atom.text = str(rec)
         except UnicodeEncodeError:
             atom.text = rec
-        except ValueError:
-            print(rec)
-            raise
+        except ValueError as e:
+            raise ValueError(rec) from e
     else:
         try:
             paths = list(rec.keys())
