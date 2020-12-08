@@ -1,17 +1,21 @@
 """Subclass of dictionary designed to read/store at depth"""
+import re
 import pprint as pp
-from collections import Mapping
+from collections.abc import Mapping
+
+from nmnh_ms_tools.utils import BaseDict, iterable
 
 
-ENDPOINTS = basestring, int, float
+ENDPOINTS = str, int, float
 
 
-class DeepDict(dict):
+class DeepDict(BaseDict):
     """Read and retrieve keys from a dict of arbitary depth"""
 
-    def __init__(self, *args):
-        super(DeepDict, self).__init__(*args)
+    def __init__(self, *args, **kwargs):
         self._attributes = []
+        self.modified = []
+        super(DeepDict, self).__init__(*args, **kwargs)
 
 
     def __call__(self, *args):
@@ -19,12 +23,28 @@ class DeepDict(dict):
         return self.pull(*args)
 
 
+    def __setitem__(self, key, val):
+        val = self._coerce_dicts(val)  # must coerce before modified check
+        try:
+            modified = self[key] != val
+        except KeyError:
+            modified = True
+        if modified:
+            self.modified.append(key)
+        super(DeepDict, self).__setitem__(key, val)
+
+
+    def __delitem__(self, key):
+        super(DeepDict, self).__delitem__(key)
+        self.modified.append(key)
+
+
     def __str__(self):
         return pp.pformat(dict(self))
 
 
     def clone(self, obj=None):
-        """Creates empty instance of DeepDict with key attributes copied over
+        """Creates empty DeepDict with specified attributes copied over
 
         The attributes to copy are stored in the DeepDict._attributes, which
         can be defined when initializing a subclass.
@@ -42,12 +62,14 @@ class DeepDict(dict):
         # Add carryover attributes
         for attr in self._attributes:
             setattr(clone, attr, getattr(self, attr, None))
-        clone.finalize()
+        # Only finalize the clone if it has been populated
+        if clone:
+            clone.finalize()
         return clone
 
 
     def finalize(self):
-        """Runs any functions that require a carryover attribute"""
+        """Finalizes a record after it is populated"""
         pass
 
 
@@ -55,19 +77,19 @@ class DeepDict(dict):
         """Returns data from the path stipulated by args
 
         Args:
-            args: the path to a value in the dictionary, with one component
-                of that path per arg
+            args: the path to a value in the dictionary, with either one
+                path segment per arg or a single period- or slash-delimited arg
 
         Returns:
             Value for the given path, if exists
         """
+        if len(args) == 1:
+             args = re.split(r'[/\.]', args[0])
         val = self
         for arg in args:
             try:
                 val = val[arg]
-            except KeyError:
-                raise KeyError('/'.join(args))
-            except TypeError:
+            except (KeyError, TypeError):
                 raise KeyError('/'.join(args))
         return val
 
@@ -159,7 +181,7 @@ class DeepDict(dict):
         if path is None:
             mapping = self
             path = []
-        if isinstance(mapping, basestring):
+        if isinstance(mapping, str):
             # Any non-empty string is considered true
             if not mapping.strip():
                 self.pluck(*path)
@@ -205,6 +227,25 @@ class DeepDict(dict):
             input('Paused. Press ENTER to continue.')
 
 
+    def _coerce_dicts(self, val):
+        """Coerces dicts within value to specified class"""
+        if self._coerce_dicts_to is None:
+            return val
+        # Coerce any iterable that is not already the proper class
+        if iterable(val) and not isinstance(val, self._coerce_dicts_to):
+            if isinstance(val, dict):
+                # Parent method modified to copy two attributes from self
+                val = self._coerce_dicts_to(val)
+                for attr in self._attributes:
+                    setattr(val, attr, getattr(self, attr))
+                return val
+            else:
+                return val.__class__([self._coerce_dicts(v) for v in val])
+        return val
+
+
+
+
 def _any(val):
     """Tests if value or any value therein is populated
 
@@ -215,7 +256,7 @@ def _any(val):
         True if any value is true-like or 0, otherwise False
     """
     try:
-        if val is 0 or 0 in val:
+        if val == 0 or 0 in val:
             return True
     except TypeError:
         pass
