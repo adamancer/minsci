@@ -128,6 +128,12 @@ class MinSciRecord(XMuRecord):
         return self.get_identifier(include_code, include_div, force_catnum=True)
 
 
+    def get_division(self):
+        """Returns the three-character code for the division"""
+        div = self('CatDivision')[:3].upper()
+        return self('CatCatalog')[:3].upper() if div == 'MIN' else div
+
+
     def get_age(self, pretty_print=True):
         """Gets geological age as string"""
         era = self('AgeGeologicAgeEra_tab')
@@ -212,6 +218,21 @@ class MinSciRecord(XMuRecord):
         if metname is None:
             metname = self('MetMeteoriteName')
         return bool(self.antmet.match(metname))
+
+
+    def visual_work(self):
+        """Returns types of visual work in current object"""
+        obj_types = self('MinJeweleryType').lower().split(';')
+        obj_types = [s.strip() for s in obj_types if s]
+        if not obj_types:
+            cut = self('MinCut').lower()
+            if cut.startswith('carved'):
+                return ['carving']
+            keywords = ['box', 'carving', 'cameo']
+            for keyword in keywords:
+                if keyword in cut:
+                    return [keyword]
+        return obj_types
 
 
     def describe(self):
