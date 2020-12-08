@@ -1,8 +1,4 @@
 """Tools to embed metadata in image files"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from builtins import object
 import os
 import shutil
 import subprocess
@@ -10,21 +6,27 @@ import tempfile
 from collections import namedtuple
 from datetime import datetime
 
+from nmnh_ms_tools.utils import localize_datetime
 from unidecode import unidecode
 
 from .hasher import hash_image_data
-from ....helpers import localize_datetime
+
+
 
 
 EmbedField = namedtuple('EmbedField', ['name', 'length', 'function'])
 
 
-class Embedder(object):
+class Embedder:
     """Tools to embed metadata in image files"""
 
-    def __init__(self, output_dir, overwrite=True):
+    def __init__(self, output_dir, overwrite=True, in_place=False,
+                 verify_images=True):
         self.metadata_fields = {
-            'copyright': EmbedField(['mwg:copyright', 'iptc:copyrightnotice'], 128, self.get_copyright),
+            'imageuniqueid': EmbedField('xmp:imageuniqueid',
+                                        64, self.get_url),
+            'copyright': EmbedField(['mwg:copyright', 'iptc:copyrightnotice'],
+                                     128, self.get_copyright),
             'creator': EmbedField('mwg:creator', 64, self.get_creator),
             'datetime_created': EmbedField('mwg:createdate', 64, self.get_datetime_created),
             'caption': EmbedField('mwg:description', 2000, self.get_caption),
@@ -51,7 +53,9 @@ class Embedder(object):
                                                  32, self.get_transmission_reference),
         }
         self.output_dir = self.change_output_directory(output_dir)
-        self.overwrite = overwrite
+        self.overwrite = overwrite or in_place
+        self.in_place = in_place
+        self.verify_images = verify_images
         self.defaults = [
             ('xmp:copyrightstatus', 'unknown'),
             ('xmp-xmprights:marked', '')
@@ -139,6 +143,11 @@ class Embedder(object):
         return rec.get('transmission_reference')
 
 
+    def get_url(self, rec):
+        """Placeholder function returning the URL for this asset"""
+        return rec.get_url()
+
+
     def get_mtime(self, path, mask='%Y:%m:%d %H:%M:%S%z'):
         """Get modification time for file at path"""
         mtime = datetime.fromtimestamp(int(os.path.getmtime(path)))
@@ -173,21 +182,27 @@ class Embedder(object):
         Args:
             path (str): path to the image file
             rec (dict): metadata about the image
-            verify (bool): specifies whether to verify image after embedding
 
         Returns:
             Boolean indicating whether embed succeeded
         """
         # Copy and hash image data from original file
         fn = new_name if new_name else os.path.basename(path)
-        print('Embedding metadata into {}...'.format(fn))
-        # Preserve directory structure
-        dirpath = os.path.splitdrive(os.path.dirname(os.path.abspath(path)))[1].lstrip('/\\')
-        output_dir = os.path.join(self.output_dir, dirpath)
+        #print('Embedding metadata into {}...'.format(fn))
+        output_dir = self.output_dir
+        if not self.in_place:
+            # Preserve directory structure when copying files, but strip
+            # the common prefix to keep the path names a reasonable length
+            abspath = os.path.dirname(os.path.abspath(path))
+            prefix = os.path.commonprefix([output_dir, abspath])
+            dirpath = os.path.splitdrive(abspath[len(prefix):])[1].lstrip('/\\')
+            output_dir = os.path.join(output_dir, dirpath)
+
         try:
             os.makedirs(output_dir)
         except OSError:
             pass
+
         dst = os.path.join(output_dir, fn)
         if not self.overwrite:
             try:
@@ -197,13 +212,16 @@ class Embedder(object):
             else:
                 self.logfile.write('Info: {}: Already exists\n'.format(path))
                 return dst
+
         # Verify original file
-        if not fn.lower().endswith(('.jp2')):
-            print(' Hashing original image...')
+        if self.verify_images and not fn.lower().endswith(('.jp2')):
             pre_embed_hash = hash_image_data(path, output_dir=output_dir)
-        if path != dst:
-            print(' Copying file to {}...'.format(output_dir))
+
+        try:
             shutil.copy2(path, dst)
+        except shutil.SameFileError:
+            pass
+
         # Use exiftool to embed metadata in file
         metadata = self.derive_metadata(rec.expand())
         cmd = ['exiftool', '-overwrite_original', '-v', '-m']
@@ -212,28 +230,33 @@ class Embedder(object):
                 val = unidecode(val)
             cmd.append('-{}={}'.format(key, val))
         cmd.append(dst)
-        #print ' '.join(cmd)
-        print(' Writing metadata...')
+
         tmpfile = tempfile.NamedTemporaryFile('w+')
         return_code = subprocess.call(cmd, cwd=os.getcwd(), stdout=tmpfile)
         if return_code:
-            self.logfile.write('Error: {}: Bad return'
-                               ' code ({})\n'.format(path, return_code))
+            mask = 'Error: {}: Bad return code: {} ({})\n'
+            msg = mask.format(path, cmd, return_code)
+            self.logfile.write(msg)
+            raise ValueError(msg)
+
         # Check temporary log for errors
         result = self._parse_exiftool_log(tmpfile)
         if '1 image files updated' not in result:
-            self.logfile.write('Error: {}: Embed failed\n'.format(path))
-            return False
+            msg = 'Error: {}: Embed failed\n'.format(path)
+            self.logfile.write(msg)
+            raise ValueError(msg)
+
         # Verify modified file
-        if not fn.lower().endswith(('.jp2')):
-            print(' Hashing image with embedded metadata...')
+        if self.verify_images and not fn.lower().endswith(('.jp2')):
+            #print(' Hashing image with embedded metadata...')
             post_embed_hash = hash_image_data(dst, output_dir=output_dir)
             if pre_embed_hash == post_embed_hash:
                 self.logfile.write('Info: {}: Embed succeeded\n'.format(dst))
                 return dst
             else:
-                self.logfile.write('Error: {}: Hash check failed\n'.format(dst))
-                return False
+                msg = 'Error: {}: Hash check failed\n'.format(dst)
+                self.logfile.write(msg)
+                raise ValueError(msg)
         else:
             self.logfile.write('Info: {}: Embed not checked\n'.format(dst))
             return dst
@@ -251,9 +274,9 @@ class Embedder(object):
 
     def _check_length(self, val, field):
         """Verify that the length of the field"""
-        mask = 'Warning: {} is too long ({}/{} characters)'
+        mask = '{}="{}" is too long ({}/{} characters)'
         if val and len(val) > field.length:
-            msg = mask.format(field.name, len(val), field.length)
+            msg = mask.format(field.name, val, len(val), field.length)
             self.logfile.write('{}: {}\n'.format('Warning', msg))
             return False
         return True

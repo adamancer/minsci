@@ -1,15 +1,13 @@
 """Summarizes and generates metadata for the objects in an ecatalogue export"""
-from __future__ import print_function
-from __future__ import unicode_literals
-
-from builtins import input
-from builtins import str
 import pprint as pp
+
+from nmnh_ms_tools.records import CatNum, get_tree, parse_catnums
+from nmnh_ms_tools.utils import IndexedDict
 
 from ..describer import summarize, Description
 from ....xmu import XMu, MinSciRecord
-from ....catnums import CatNum, get_catnums
-from ....geotaxa import get_tree
+
+
 
 
 class Cataloger(XMu):
@@ -17,39 +15,59 @@ class Cataloger(XMu):
 
     def __init__(self, *args, **kwargs):
         self.prepare = kwargs.pop('summarize', summarize)
-        report = kwargs.pop('report', 25000)
+        report = kwargs.pop('report', 1000)
         kwargs['container'] = MinSciRecord
         super(Cataloger, self).__init__(*args, **kwargs)
+        self.irns = IndexedDict()
         self.catalog = {}
-        self.media = {}
+        self.media = IndexedDict()
         if MinSciRecord.geotree is None:
             MinSciRecord.geotree = get_tree()
-        self.autoiterate(['catalog', 'media'], report=report)
+        self.autoiterate(['irns', 'catalog', 'media'], report=report)
+        if self.from_json:
+            self.irns = IndexedDict(self.irns)
+            self.media = IndexedDict(self.media)
 
 
     def iterate(self, element):
         """Indexes the objects in an EMu export file"""
         rec = self.parse(element)
-        # Create the smallest possible record
-        data = self.prepare(rec)
+        irn = rec('irn')
+        # Map summarized data to the irn
+        self.irns[irn] = self.prepare(rec)
         # Add record to catalog index
-        identifiers = [rec.get_catnum(include_code=False),
-                       rec.get_identifier(include_code=False)]
-        for identifier in set([id_ for id_ in identifiers if id_]):
+        identifiers = []
+        metname = rec.pop('MetMeteoriteName', '')
+        try:
+            metnum = CatNum(metname)
+            if metnum:
+                identifiers.append(metname)
+        except:
+            pass
+        catnum = CatNum(rec)
+        catnum.mask = 'exclude_code'
+        identifiers.append(str(catnum))
+        if metname:
+            rec['MetMeteoriteName'] = metname
+        for identifier in {id_ for id_ in identifiers if id_}:
             dct = self.catalog
             indexed = self.index_identifier(identifier)
             if indexed:
                 for index in indexed[:-1]:
                     dct.setdefault(index, {})
                     dct = dct[index]
-                dct.setdefault(indexed[-1], []).append(data)
+                dct.setdefault(indexed[-1], []).append(irn)
         # Add media to media index
         for irn in rec('MulMultiMediaRef_tab', 'irn'):
-            self.media.setdefault(irn, []).append(rec('irn'))
+            self.media.setdefault(irn, []).append(irn)
 
 
     def get(self, identifier, default=None, ignore_suffix=False):
         """Retrieves catalog data matching a given identifier"""
+        try:
+            return [self.irns[str(identifier)]]
+        except KeyError:
+            pass
         dct = self.catalog
         indexed = self.index_identifier(identifier)
         if not indexed:
@@ -66,6 +84,7 @@ class Cataloger(XMu):
             for val in list(dct.values()):
                 vals.extend(val)
             dct = vals
+        dct = [self.irns[irn] for irn in dct]
         if self.prepare == summarize:
             return [descriptify(rec) for rec in dct]
         return dct
@@ -93,8 +112,10 @@ class Cataloger(XMu):
     @staticmethod
     def index_identifier(identifier):
         """Indexes identification numbers from a catalog record"""
+        if not identifier:
+            return []
         if not isinstance(identifier, CatNum):
-            parsed = get_catnums(identifier)
+            parsed = parse_catnums(identifier)
         else:
             parsed = [identifier]
         if not isinstance(parsed, list):
@@ -108,8 +129,8 @@ class Cataloger(XMu):
             return []
         parsed = parsed[0]
         # Get Antarctic meteorites
-        metname = parsed.metname
-        if metname:
+        if parsed.is_antarctic():
+            metname = str(parsed)
             if not ',' in metname:
                 return [metname, None]
             return metname.split(',', 1)
@@ -145,6 +166,10 @@ class Mediator(XMu):
 
     def __iter__(self):
         return iter(self._existing)
+
+
+    def __bool__(self):
+        return bool(self._existing)
 
 
     def add(self, fn, irns):
