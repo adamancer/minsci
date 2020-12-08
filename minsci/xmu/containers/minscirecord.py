@@ -5,9 +5,11 @@ try:
 except ImportError as e:
     from itertools import izip_longest as zip_longest
 
+from nmnh_ms_tools.records import get_catnum
+from nmnh_ms_tools.utils import oxford_comma
+
 from .xmurecord import XMuRecord
 from ..tools.describer import get_caption, summarize
-from ...helpers import oxford_comma
 
 
 
@@ -44,10 +46,10 @@ class MinSciRecord(XMuRecord):
         return name
 
 
-    def get_classification_string(self, taxa=None, standardized=True):
+    def get_classification_string(self, taxa=None, allow_varieties=False):
         if taxa is None:
             taxa = self.get_classification(True)
-        return self.geotree.name_item(taxa)
+        return self.geotree.name_item(taxa, allow_varieties=allow_varieties)
 
 
     def get_classification(self, standardized=True):
@@ -71,13 +73,12 @@ class MinSciRecord(XMuRecord):
         if not isinstance(taxa, list):
             taxa = [taxa]
         # Get rid of empty list in empty row
-        taxa = [taxon if taxon else u'' for taxon in taxa]
-        if standardized:
+        taxa = [taxon if taxon else '' for taxon in taxa]
+        if len(taxa) > 1 and standardized:
             try:
-                taxa = self.geotree.group(taxa)
-            except (AttributeError, KeyError):
-                print(taxa)
-                #raise
+                taxa = [self.geotree.most_specific_common_parent(taxa)]
+            except (AttributeError, KeyError) as e:
+                raise ValueError(taxa) from e
         return taxa
 
 
@@ -92,13 +93,21 @@ class MinSciRecord(XMuRecord):
         Returns:
             String of NMNH catalog number or Antarctic meteorite number
         """
+        ignore = {'MetMeteoriteName'} if force_catnum else {}
+        catnum = get_catnum({k: v for k, v in self.items() if k not in ignore})
+        if include_div:
+            catnum.mask = 'include_div'
+        elif include_code:
+            catnum.mask = 'include_code'
+        return str(catnum)
+        '''
         metnum = self('MetMeteoriteName')
         suffix = self('CatSuffix')
         if self.antmet.match(metnum) and not force_catnum:
             if suffix == metnum:
                 return metnum
             else:
-                return u'{},{}'.format(metnum, suffix).rstrip(',')
+                return '{},{}'.format(metnum, suffix).rstrip(',')
         else:
             prefix = self('CatPrefix')
             number = self('CatNumber')
@@ -106,16 +115,17 @@ class MinSciRecord(XMuRecord):
             if not division and (metnum or self('MetMeteoriteType')):
                 division = 'Meteorites'
             if not number:
-                return u''
-            catnum = u'{}{}-{}'.format(prefix, number, suffix).strip('- ')
+                return ''
+            catnum = '{}{}-{}'.format(prefix, number, suffix).strip('- ')
             if include_div:
-                catnum = u'{} ({})'.format(catnum, division[:3].upper())
+                catnum = '{} ({})'.format(catnum, division[:3].upper())
             if include_code:
                 code = 'NMNH'
                 if division == 'Meteorites':
                     code = 'USNM'
-                catnum = u'{} {}'.format(code, catnum)
+                catnum = '{} {}'.format(code, catnum)
             return catnum
+        '''
 
 
     def get_catnum(self, include_code=True, include_div=False):
