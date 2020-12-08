@@ -79,8 +79,8 @@ doi = doi2emu(fp)
 ris = ris2emu(fp, parsers=parsers)
 
 # Compare IRNs from both methods to ensure there are no record was run twice
-doi_irns = set([rec('irn') for rec in doi])
-ris_irns = set([rec('irn') for rec in ris])
+doi_irns = {rec('irn') for rec in doi}
+ris_irns = {rec('irn') for rec in ris}
 dupes = doi_irns & ris_irns
 if dupes:
     raise ValueError('Duplicates IRNs found: {}'.format(dupes))

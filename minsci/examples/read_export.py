@@ -32,7 +32,7 @@ class XMu(xmu.XMu):
         print('measurements:', rec('MeaType_tab'))               # list
         # Some common operations have shortcut methods. For example, the
         # get_guid method returns the value from the row with type EZID.
-        print(rec.get_guid('EZID'))
+        print('guid:', rec.get_guid('EZID'))
 
 
 xmudata = XMu(os.path.join('reports', 'ecatalogue.xml'))
