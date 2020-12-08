@@ -2,6 +2,7 @@
 import logging
 logger = logging.getLogger(__name__)
 
+import datetime as dt
 import json
 import pprint as pp
 import re
@@ -12,8 +13,6 @@ try:
     from itertools import zip_longest
 except ImportError as e:
     from itertools import izip_longest as zip_longest
-
-from dateparser import parse
 
 from ..constants import FIELDS
 from ...dicts import DeepDict
@@ -31,7 +30,9 @@ class XMuRecord(DeepDict):
     """Contains methods for reading data from EMu XML exports"""
     delim = '|'
 
+
     def __init__(self, *args):
+        self._coerce_dicts_to = XMuRecord
         super(XMuRecord, self).__init__(*args)
         self._attributes = ['fields', 'module']
         # Set defaults for carryover attributes
@@ -40,58 +41,40 @@ class XMuRecord(DeepDict):
         self.tabends = ('_nesttab_inner', '_nesttab', '_tab', '0')
         self.refends = ('Ref_tab', 'Ref')
         self.fields = FIELDS
+        self._grids = {}
 
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         """Shorthand for XMuRecord.smart_pull(*args)"""
         return self.smart_pull(*args)
 
 
     def __setitem__(self, key, val):
-        """Tests if val contains classwide delimiter before adding to self"""
-        if self.delim:
-            try:
-                delimited = self.delim in json.dumps(val)
-            except TypeError:
-                pass
-            else:
-                pass
-                #if delimited:
-                #    raise ValueError('{} contains {}: {}'.format(key,
-                #                                                 self.delim,
-                #                                                 val))
+        """Converts non-verbatim dates to datetime objects"""
+        if (
+            val
+            and isinstance(val, str)
+            and 'Date' in key
+            and 'Verbatim' not in key
+        ):
+                try:
+                    val = dt.datetime.strptime(val, '%Y-%m-%d').date()
+                except ValueError:
+                    # Leave partial dates as strings
+                    pass
         super(XMuRecord, self).__setitem__(key, val)
-
-
-
-    '''
-    def __getattribute__(self, attr):
-        try:
-            val = super(XMuRecord, self).__getattribute__(attr)
-        except AttributeError:
-            if attr == 'fields':
-                self.fields = FIELDS
-                return FIELDS
-            raise
-        else:
-            if attr == 'fields' and val is None:
-                self.fields = FIELDS
-                return FIELDS
-            return val
-    '''
 
 
     @property
     def module(self):
         try:
-            assert self._module
+            assert self._module, 'module attribute is empty'
+            return self._module
         except AssertionError as e:
             try:
                 return self._guess_module()
             except ValueError:
                 raise e
-        else:
-            return self._module
 
 
     @module.setter
@@ -99,12 +82,8 @@ class XMuRecord(DeepDict):
         self._module = module
 
 
-    def finalize(self, *args, **kwargs):
-        pass
-
-
     def add(self, path, val, delim='|'):
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             path = path.split('/')
         rec = self
         for i, seg in enumerate(path):
@@ -127,7 +106,7 @@ class XMuRecord(DeepDict):
                 if val is not None:
                     vals = [s.strip() for s in val.split(delim)]
                 else:
-                    val = u''
+                    val = ''
                 rec[seg] = vals if seg.endswith(self.tabends) else val
             else:
                 raise ValueError('{}: {}'.format(path, val))
@@ -150,7 +129,7 @@ class XMuRecord(DeepDict):
         Returns:
             Value for the given path
         """
-        if isinstance(path, basestring):
+        if isinstance(path, str):
             return self(path)
         else:
             return self(*path)
@@ -209,8 +188,15 @@ class XMuRecord(DeepDict):
                 A nested table returns a list of lists
         """
         self._guess_module()
-        if '.' in args[0]:
-            args = args[0].split('.')
+        # Retrieve simple keys
+        if args[0].isalpha() and not args[0].endswith('Ref'):
+            try:
+                return self[args[0]]
+            except KeyError:
+                pass
+        # Split path on period or forward slash if a single arg given
+        if len(args) == 1:
+            args = re.split(r'[/\.]', args[0])
         # Nested tables need to be handled very carefully
         nested = [arg for arg in args if arg.endswith('_nesttab')]
         if nested:
@@ -243,7 +229,7 @@ class XMuRecord(DeepDict):
         # Atomic references return a single dictionary, whereas atomic
         # fields return a value
         else:
-            default = self.clone() if args[-1].endswith(self.refends) else u''
+            default = self.clone() if args[-1].endswith(self.refends) else ''
             try:
                 val = self.pull(*args, **kwargs)
             except KeyError:
@@ -420,8 +406,10 @@ class XMuRecord(DeepDict):
                 try:
                     row.values()
                 except AttributeError:
-                    raise AttributeError('{} must contain only dicts. Try'
-                                         ' expanding the record.'.format(args))
+                    # Typically this error results from trying to pull
+                    # values from an unexpanded list, so retry after
+                    # expanding the record
+                    return self.expand().get_rows(*args)
                 # Test if row only contains the refkey
                 for key in row:
                     if key != refkey:
@@ -582,15 +570,15 @@ class XMuRecord(DeepDict):
         if weight and unit:
             if '.' in weight:
                 weight = float(weight)
-                mask = u'{weight:.' + str(decimal_places) + 'f} {unit}'
+                mask = '{weight:.' + str(decimal_places) + 'f} {unit}'
                 return mask.format(weight=weight, unit=unit)
             else:
                 weight = int(weight)
-                return u'{weight:,} {unit}'.format(weight=weight, unit=unit)
-        return u''
+                return '{weight:,} {unit}'.format(weight=weight, unit=unit)
+        return ''
 
 
-    def get_guid(self, kind='EZID', allow_multiple=False):
+    def get_guid(self, kind='EZID', allow_multiple=False, strip_ark=False):
         """Gets value from the GUID table for a given key
 
         Args:
@@ -615,7 +603,13 @@ class XMuRecord(DeepDict):
                 matches = [val for val in self('CatOtherNumbersValue_tab')
                            if re.search(r'^NHB[A-Z0-9]{6}$', val)]
         if len(set(matches)) > 1 and not allow_multiple:
-            raise Exception('Multiple values found for {}'.format(kind))
+            raise ValueError('Multiple values found for {}'.format(kind))
+        if strip_ark and kind.startswith('EZID'):
+            arks = {
+                'EZID': 'ark:/65665/3',
+                'EZIDMM': 'ark:/65665/m3'
+            }
+            matches = [m[len(arks[kind]):] for m in matches]
         if allow_multiple:
             return matches
         else:
@@ -625,9 +619,9 @@ class XMuRecord(DeepDict):
                 return None
 
 
-    def get_url(self):
+    def get_url(self, kind='EZID'):
         """Gets the ark link to this record"""
-        ezid = self.get_guid('EZID')
+        ezid = self.get_guid(kind)
         if ezid:
             return 'http://n2t.net/{}'.format(ezid)
 
@@ -669,127 +663,10 @@ class XMuRecord(DeepDict):
         return self[list(self.keys())[0]]
 
 
-    def expand(self, keep_empty=False):
+    def expand(self, *args, **kwargs):
         """Expands and verifies a flattened record"""
-        self._expand(keep_empty=keep_empty)
+        self._expand(*args, **kwargs)
         self.verify()
-        return self
-
-
-    @staticmethod
-    def _localize_datetime(date, time, timezone_id, mask):
-        if not (date and time):
-            raise ValueError('Both date and time are required')
-        iso_datetime = '{}T{}'.format(date, time)
-        timestamp = datetime.strptime(iso_datetime, '%Y-%m-%dT%H:%M:%S')
-        localized = timezone(timezone_id).localize(timestamp)
-        if mask is not None:
-            return localized.strftime(mask)
-        return localized
-
-
-    def _expand(self, keep_empty=False):
-        """Expands a flattened record"""
-        # Clear pre/append logic if record is not an update
-        try:
-            self['irn']
-        except KeyError:
-            pass
-        else:
-            keep_empty = True
-        # Empty atoms should be excluded from appends; they show up as empty
-        # tags and will therefore erase any value currently in the table.
-        # Also strips append markers from records that do not include an irn.
-        for key in list(self.keys()):
-            if key.endswith(')') and not self[key]:
-                del self[key]
-            elif not keep_empty:
-                k = key.rsplit('(', 1)[0]
-                if k != key:
-                    if self[key]:
-                        self[k] = self[key]
-                    del self[key]
-            elif key.startswith('_'):
-                del self[key]
-        # Expand shorthand keys, including tables and simple references.
-        # Keys pointing to other XMuRecord objects are left alone.
-        for key in list(self.keys()):
-            val = self.coerce(self[key])
-            k = key.rsplit('(', 1)[0]               # key stripped of row logic
-            base = key.rstrip('_').split('_', 1)[0].rsplit('(')[0]
-            # Confirm that data type appears to be correct
-            if (key.rstrip('_').endswith(('0', 'tab', ')'))
-                and not isinstance(val, list)):
-                raise ValueError('{} must be a list (={})'.format(key, val))
-            elif (val
-                  and not key.startswith('_')
-                  and not key.rstrip('_').endswith(('0', 'tab', ')', 'Ref'))
-                  and not isinstance(val, (basestring, int, float))):
-                raise ValueError('{} must be atomic (={})'.format(key, val))
-            # Handle nested tables
-            if k.endswith('_nesttab'):
-                #print('{}={} parsed as nested table'.format(key, val))
-                # Nested references are irn only
-                if 'Ref_' in k:
-                    base = 'irn'
-                # Process nested tables as if mixed
-                vals = []
-                for val in val:
-                    # Each val is either a list or a dict
-                    if isinstance(val, dict):
-                        vals.append(val)
-                    else:
-                        vals.append(self.clone({k + '_inner': [self.clone({base: s}) for s in val]}))
-                self[key] = vals
-            elif (k.endswith('Ref')
-                  and isinstance(val, (int, str))
-                  and val):
-                #print('{}={} parsed as atomic reference'.format(key, val))
-                self[key] = self.clone({'irn': val})
-            elif k.endswith('Ref'):
-                #print('{}={} parsed as atomic reference'.format(key, val))
-                try:
-                    self[key]._expand(keep_empty=True)
-                except AttributeError:
-                    self[key] = self.clone(self[key])._expand(keep_empty=True)
-            elif (k.endswith('Ref_tab')
-                  and isinstance(val, list)
-                  and any(val)):
-                #print('{}={} parsed as reference grid'.format(key, val))
-                vals = []
-                for val in val:
-                    if isinstance(val, dict) or base in val:
-                        vals.append(self.clone(val)._expand(keep_empty=True))
-                    else:
-                        vals.append(self.clone({'irn': val}))
-                self[key] = vals
-            elif (k.rstrip('_').endswith(self.tabends)
-                  and isinstance(val, list)
-                  and any(val)
-                  and any([isinstance(s, (int, str)) for s in val])):
-                #print('{}={} parsed as mixed grid'.format(key, val))
-                # Local table (all unexpanded or a mix)
-                vals = []
-                for val in val:
-                    if isinstance(val, dict) or base in val:
-                        vals.append(val)
-                    else:
-                        vals.append(self.clone({base: val}))
-                self[key] = vals
-            elif (k.rstrip('_').endswith(self.tabends)
-                  and isinstance(val, list)
-                  and not any(val)):
-                #print('{}={} parsed as empty table'.format(key, val))
-                # Local table without anything in it
-                self[key] = [] if not keep_empty else [{base: s} for s in val]
-            elif (isinstance(val, list)
-                  and any([v for v in val if isinstance(v, dict)])
-                  and any([v for v in val if not isinstance(v, dict)])):
-                # Catches mixtures of expanded and unexpanded keys
-                self[key] = [val if isinstance(val, dict) else {base: val}
-                             for val in self[key]]
-            else:
-                pass#print('{}={} either atomic or previously parsed'.format(key, val))
         return self
 
 
@@ -799,28 +676,6 @@ class XMuRecord(DeepDict):
         elif isinstance(val, (int, float)):
             return str(val)
         return val
-
-
-    def to_refine(self):
-        """Maps EMu data to Google Refine
-
-        FIXME: Needs to be cleaned up and tested
-        """
-        irn = self('irn')
-        rows = []
-        for field in self:
-            vals = self(field)
-            if isinstance(vals, basestring):
-                rows.append(Row(irn, field, None, vals))
-            elif isinstance(vals, list):
-                for i, val in enumerate(vals):
-                    rows.append(Row(irn, field, i + 1, val))
-            elif isinstance(vals, XMuRecord):
-                # Excludes attachments
-                pass
-            else:
-                print(field, vals, type(val))
-        return rows
 
 
     def delete_rows(self, key, indexes=None, conditions=None):
@@ -873,18 +728,150 @@ class XMuRecord(DeepDict):
 
     def grid(self, cols, default=''):
         """Creates an XMuGrid object based on this record"""
-        return XMuGrid(rec=self, cols=cols, default=default)
+        key = '|'.join(sorted(cols)).lower()
+        try:
+            return self._grids[key]
+        except KeyError:
+            self._grids[key] = XMuGrid(self, cols=cols, default=default)
+            return self._grids[key]
 
 
-    def trim(self):
-        for key in self:
-            val = self(key)
-            print(key, val)
+    @staticmethod
+    def _localize_datetime(date, time, timezone_id, mask):
+        if not (date and time):
+            raise ValueError('Both date and time are required')
+        iso_datetime = '{}T{}'.format(date, time)
+        timestamp = datetime.strptime(iso_datetime, '%Y-%m-%dT%H:%M:%S')
+        localized = timezone(timezone_id).localize(timestamp)
+        if mask is not None:
+            return localized.strftime(mask)
+        return localized
+
+
+    def _expand(self, keep_empty=False, keys=None):
+        """Expands a flattened record"""
+        if keys is None:
+            keys = list(self.keys())
+        atomic = (dt.date, float, int, str)
+        # Clear pre/append logic if record is not an update
+        try:
+            self['irn']
+        except KeyError:
+            pass
+        else:
+            keep_empty = True
+        # Empty atoms should be excluded from appends; they show up as empty
+        # tags and will therefore erase any value currently in the table.
+        # Also strips append markers from records that do not include an irn.
+        for key in keys:
+            if key.endswith(')') and not self[key]:
+                del self[key]
+            elif not keep_empty:
+                k = key.rsplit('(', 1)[0]
+                if k != key:
+                    if self[key]:
+                        self[k] = self[key]
+                    del self[key]
+            elif key.startswith('_'):
+                del self[key]
+        # Expand shorthand keys, including tables and simple references.
+        # Keys pointing to other XMuRecord objects are left alone.
+        for key in keys:
+            val = self.coerce(self[key])
+            k = key.rsplit('(', 1)[0]               # key stripped of row logic
+            base = key.rstrip('_').split('_', 1)[0].rsplit('(')[0].rstrip('0')
+            # Confirm that data type appears to be correct
+            if (key.rstrip('_').endswith(('0', 'tab', ')'))
+                and not isinstance(val, list)):
+                raise ValueError('{} must be a list (={})'.format(key, val))
+            elif (val
+                  and not key.startswith('_')
+                  and not key.rstrip('_').endswith(('0', 'tab', ')', 'Ref'))
+                  and not isinstance(val, atomic)):
+                raise ValueError('{} must be atomic (={})'.format(key, val))
+            # Handle nested tables
+            if k.endswith('_nesttab'):
+                #print('{}={} parsed as nested table'.format(key, val))
+                # Nested references are irn only
+                if 'Ref_' in k:
+                    base = 'irn'
+                # Process nested tables as if mixed
+                vals = []
+                for val in val:
+                    # Each val is either a list or a dict
+                    if isinstance(val, dict):
+                        # {Field_inner: [...]}
+                        vals.append(val)
+                    elif (val
+                          and isinstance(val, list)
+                          and isinstance(val[0], dict)):
+                        # [{'irn': 1234567}, {'irn': 1234568}]
+                        dicts = [self.clone(s) for s in val]
+                        vals.append(self.clone({k + '_inner': dicts}))
+                    else:
+                        # ['a', 'b', ..., 'z']
+                        vals.append(self.clone({k + '_inner': [self.clone({base: s}) for s in val]}))
+                self[key] = vals
+            elif (k.endswith('Ref')
+                  and isinstance(val, atomic)
+                  and val):
+                #print('{}={} parsed as atomic reference'.format(key, val))
+                self[key] = self.clone({'irn': val})
+            elif k.endswith('Ref'):
+                #print('{}={} parsed as atomic reference'.format(key, val))
+                try:
+                    self[key]._expand(keep_empty=True)
+                except AttributeError:
+                    self[key] = self.clone(self[key])._expand(keep_empty=True)
+            elif (k.endswith('Ref_tab')
+                  and isinstance(val, list)
+                  and any(val)):
+                #print('{}={} parsed as reference grid'.format(key, val))
+                vals = []
+                for val in val:
+                    if isinstance(val, dt.date):
+                        vals.append(self.clone({base: val}))
+                    elif isinstance(val, dict) or base in val:
+                        vals.append(self.clone(val)._expand(keep_empty=True))
+                    else:
+                        vals.append(self.clone({'irn': val}))
+                self[key] = vals
+            elif (k.rstrip('_').endswith(self.tabends)
+                  and isinstance(val, list)
+                  and any(val)
+                  and any([isinstance(s, atomic) for s in val])):
+                #print('{}={} parsed as mixed grid'.format(key, val))
+                # Local table (all unexpanded or a mix)
+                vals = []
+                for val in val:
+                    if isinstance(val, dt.date):
+                        vals.append(self.clone({base: val}))
+                    elif isinstance(val, dict) or base in val:
+                        vals.append(val)
+                    else:
+                        vals.append(self.clone({base: val}))
+                self[key] = vals
+            elif (k.rstrip('_').endswith(self.tabends)
+                  and isinstance(val, list)
+                  and not any(val)):
+                #print('{}={} parsed as empty table'.format(key, val))
+                # Local table without anything in it
+                self[key] = [] if not keep_empty else [{base: s} for s in val]
+            elif (isinstance(val, list)
+                  and any([v for v in val if isinstance(v, dict)])
+                  and any([v for v in val if not isinstance(v, dict)])):
+                # Catches mixtures of expanded and unexpanded keys
+                self[key] = [val if isinstance(val, dict) else {base: val}
+                             for val in self[key]]
+            else:
+                pass#print('{}={} either atomic or previously parsed'.format(key, val))
+        return self
 
 
 
 
-class XMuGrid():
+class XMuGrid:
+    """Defines methods for working with EMu grids"""
 
     def __init__(self, rec, cols, default='', label=None):
         self.record = rec
@@ -933,14 +920,15 @@ class XMuGrid():
         if isinstance(key, int):
             return self.rows()[key]
         elif key in self.cols:
-            return [row[key] for row in self]
+            return [row[key] for row in self.rows()]
         else:
             return self.row({self.label: key})
         raise KeyError('{} not in grid'.format(key))
 
 
     def __delitem__(self, i):
-        self.delete(i)
+        assert isinstance(i, int)
+        self.remove(i)
 
 
     @property
@@ -974,33 +962,31 @@ class XMuGrid():
 
     @staticmethod
     def coerce(col, val=None):
+        """Forces val to list if going into a nested table"""
         if col.endswith('_nesttab') and not isinstance(val, list):
             return [val]
         return val
 
 
     def expand(self):
-        self.record.expand(keep_empty=True)
-        missing = set(self.cols) - set(self.record)
+        """Expands the record following the old ways"""
+        self.record.expand()
+        missing = sorted(list(set(self.cols) - set(self.record)))
         if missing:
-            raise ValueError('Missing columns from grid: {}'.format(list(missing)))
+            raise ValueError('Missing columns from grid: {}'.format(missing))
+        return self.record
 
 
     def info(self):
+        """Returns the dimensions and columns in the grid"""
         return GridInfo(len(self), self.cols)
 
 
     def rows(self):
         """Converts the grid to a list of dictionaries"""
-        self.expand()
-        rows = []
-        for col in self.cols:
-            for i, val in enumerate(self.record(col)):
-                try:
-                    rows[i][col] = val
-                except IndexError:
-                    rows.append({col: val})
-        return rows
+        #self.expand()
+        maxlen = max([len(self.record(col)) for col in self.cols])
+        return [XMuRow(self, i) for i in range(maxlen)]
 
 
     def grid(self):
@@ -1018,7 +1004,7 @@ class XMuGrid():
             num_rows = len(self)
             for col in self.cols:
                 self.pad_col(col, num_rows)
-            self.expand()
+            #self.expand()
 
 
     def pad_col(self, col, num_rows=None):
@@ -1047,12 +1033,15 @@ class XMuGrid():
 
 
     def index(self, row):
-        """Finds the index of the row matching the kwargs"""
-        indexes = []
+        """Finds the index of the row matching the given row dict"""
+        indexes = {}
         for col, refval in row.items():
             for i, val in enumerate(self.record(col)):
                 if val == refval:
-                    indexes.append(i)
+                    indexes.setdefault(i, []).append(col)
+        # Limit to rows matching all criteria
+        indexes = [i for i, cols in indexes.items() if set(cols) == set(row)]
+        # Verify matches
         if not indexes:
             raise IndexError('No row matches {}'.format(row))
         if len(indexes) > 1:
@@ -1067,7 +1056,7 @@ class XMuGrid():
             val = self.coerce(col, val)
             self._check_type(col, val)
             self.record[col].append(val)
-        self.expand()
+        #self.expand()
 
 
     def extend(self, rows):
@@ -1085,7 +1074,7 @@ class XMuGrid():
             val = self.coerce(col, val)
             self._check_type(col, val)
             self.record[col].insert(index, val)
-        self.expand()
+        #self.expand()
 
 
     def replace(self, index, row):
@@ -1095,22 +1084,62 @@ class XMuGrid():
         row = self.pad_row(**row)
         for col, val in row.items():
             self.record(col)[i] = val
-        self.expand()
+        #self.expand()
 
 
-    def delete(self, index):
-        """Deletes the row at the given index"""
+    def remove(self, index):
+        """Removes the row at the given index"""
         if isinstance(index, dict):
             index = self.index(index)
         for col in self.cols:
             self.pad_col(col)
             del self.record[col][index]
-        self.expand()
+        #self.expand()
+
+
+
+
+class XMuRow(dict):
+    """Defines methods for interacting with a row in an EMu grid"""
+
+    def __init__(self, grid, index):
+        super(XMuRow, self).__init__()
+        self.grid = grid
+        self.index = index
+        # Populate the row at the given index
+        for col in self.grid.cols:
+            try:
+                val = self.grid.record(col)[self.index]
+            except (IndexError, KeyError):
+                val = None
+            self[col] = val
+
+
+    def __call__(self, key):
+        """Returns value at given key
+
+        Added to maintain consistency with XMuRecord
+        """
+        return self.get(key, '')
+
+
+    def __setitem__(self, key, val):
+        """Sets item in record as well as row"""
+        try:
+            self.grid.record[key][self.index] = val
+        except IndexError:
+            self.grid.record[key].append(val)
+        except KeyError:
+            self.grid[key] = [val]
+        except TypeError:
+            raise
+        super(XMuRow, self).__setitem__(key, val)
+
 
 
 
 def standardize(val):
     """Standardize the format of a value"""
     if val is None:
-        val = u''
-    return re.sub(r'[\W]', u'', val.upper()).upper()
+        val = ''
+    return re.sub(r'[\W]', '', val.upper()).upper()
