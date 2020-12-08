@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Helper functions used throughout the minsci module"""
 import csv
+import datetime as dt
 import io
 import os
 import re
@@ -15,143 +16,11 @@ except ImportError as e:
     from itertools import izip_longest as zip_longest
 
 import inflect
-import pyodbc
 from nameparser import HumanName
 from pytz import timezone
 from unidecode import unidecode
 
 
-CATKEYS = (
-    'FullNumber',
-    'MetPrefix',
-    'CatMuseumAcronym',
-    'CatPrefix',
-    'CatNumber',
-    'CatSuffix'
-    )
-
-
-def base2int(i, base):
-    """Converts integer in specified base to base 10"""
-    return int(i, base)
-
-
-def int2base(i, base):
-    """Converts base 10 integer to specified base"""
-    digs = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    if i < 0:
-        sign = -1
-    elif i == 0:
-        return '0'
-    else:
-        sign = 1
-    i *= sign
-    digits = []
-    while i:
-        digits.append(digs[i % base])
-        i = int(i / base)
-    if sign < 0:
-        digits.append('-')
-    digits.reverse()
-    return ''.join(digits).upper()
-
-
-def init_odbc(fn):
-    """Opens ODBC connection based on database type
-
-    Args:
-        fn (string): filename (or path)
-
-    Returns:
-        pyodbc.Connection object
-    """
-    # Use file extenstion to find the appropriate driver
-    drivers = [
-        '{Microsoft Access Driver (*.mdb, *.accdb)}',
-        '{Microsoft Excel Driver (*.xls, *.xlsx, *.xlsm, *.xlsb)}'
-    ]
-    ext = '*' + os.path.splitext(fn)[1].lower()
-    for driver in drivers:
-        if ext in driver:
-            break
-    else:
-        raise Exception('No suitable driver found for {}'.format(ext))
-    # Excel does not support transactions, so set autocommit for that driver
-    autocommit = False
-    if driver.startswith('{Microsoft Excel'):
-        autocommit = True
-    # ODBC connection string requires a full path
-    fp = os.path.abspath(fn)
-    dsn = 'DRIVER={};DBQ={};CHARSET=LATIN-1'.format(driver, fp)
-    return pyodbc.connect(dsn, autocommit=autocommit)
-
-
-def dict_from_odbc(cursor, tbl, row_id=None, cols=None, where=None,
-                   encoding='cp1252'):
-    """Creates a
-    Args:
-        cursor (pyodbc.Cursor)
-        tbl (str): name of table to query. For Excel, table name must be
-            formatted as [tbl$].
-        row_id (list): name of field(s) to use as key for dictionary
-        col (list): list of columns to return. If None, will return all.
-        where (str): formatted where clause
-        encoding (str): encoding of source file
-
-    Returns:
-        Dictionary keyed to row_id
-    """
-    for arg in [row_id, cols]:
-        if arg is not None and not isinstance(arg, list):
-            raise Exception('Bad argument')
-    # Get list of columns
-    if cols is None:
-        cols = [row.column_name for row in cursor.columns(tbl.strip('[]'))]
-    else:
-        cols = [s.strip('`') for s in cols]
-    # Prepare where clause
-    if where is None:
-        where = u''
-    else:
-        where = u' WHERE {}'.format(where.replace('"', "'"))
-    # Assemble query
-    query = u'SELECT {} FROM {}{}'.format(','.join(cols), tbl, where)
-    # Execute query
-    try:
-        cursor.execute(query)
-    except KeyError:
-        raise Exception('Cound not execute query "{}"'.format(query))
-    records = {}
-    result = cursor.fetchmany()
-    error = u''
-    records_in_source = 0  # count of records to compare to length of dict
-    while result:
-        for row in result:
-            for fld in row.cursor_description:
-                if not bool(error) and fld[1] != str and tbl.endswith('$]'):
-                    error = fill(u'Warning: Non-string data type '
-                                 'found. Convert the input sheet '
-                                 'to text to prevent data loss.')
-            row = [s if bool(s) else '' for s in row]
-            row = [s.decode(encoding) if isinstance(s, str) else s for s in row]
-            rec = dict(zip_longest(cols, row))
-            if row_id is not None:
-                key = '-'.join([u'{}'.format(rec[key]) for key in row_id])
-            else:
-                key = len(records)
-            try:
-                records[key]
-            except KeyError:
-                records[key] = rec
-            else:
-                pass#cprint('Warning: Multiple rows have key "{}"'.format(key))
-            records_in_source += 1
-        result = cursor.fetchmany()
-    if error:
-        print(error)
-    if len(records) < records_in_source:
-        cprint('Warning: Duplicate keys. Some data not included in dict.')
-    return records
 
 
 def sort_by_reference(lst, order):
@@ -172,126 +41,6 @@ def _sorter(key, order):
         return -1
 
 
-def oxford_comma(lst, lowercase=False, delim=', '):
-    """Formats list as comma-delimited string
-
-    Args:
-        lst (list): list of strings
-        lowercase (bool): if true, convert the first letter in each value
-            in the list to lowercase
-
-    Returns:
-        Comma-delimited string
-    """
-    lst = [s.strip() for s in lst if s.strip()]
-    if lowercase:
-        lst = [lcfirst(s) for s in lst]
-    if len(lst) <= 1:
-        return ''.join(lst)
-    elif len(lst) == 2:
-        return ' and '.join(lst)
-    else:
-        last = lst.pop()
-        return delim.join(lst) + delim + 'and ' + last
-
-
-def singular(val):
-    """Converts string to singular
-
-    Args:
-        s (str): a string
-
-    Returns:
-        The singular form of the original string
-    """
-    inflected = inflect.engine().singular_noun(val)
-    if inflected:
-        return inflected
-    return val
-
-
-
-
-def plural(val):
-    """Converts string to plural
-
-    Args:
-        s (str): a string
-
-    Returns:
-        The plural form of the original string
-    """
-    return inflect.engine().plural(singular(val))
-
-
-
-
-def dedupe(lst, lower=True):
-    """Dedupes a list while maintaining order and case
-
-    Args:
-        list (list): a list of strings
-
-    Returns:
-        Deduplicated copy of the original list
-    """
-    if lower:
-        lst = [val.lower() for val in lst]
-    return [val for i, val in enumerate(lst) if not val in lst[:i]]
-
-
-
-
-def parse_names(name_string, last_name_first=False):
-    """Parses name strings into components using nameparser"""
-    # Normalize periods
-    name_string = name_string\
-                  .replace('. ', '.')\
-                  .replace('.', '. ')\
-                  .replace(' & ', ' and ')
-    # Problem titles
-    problem_words = ['Count', 'Countess']
-    # Suffixes
-    suffixes = ['Jr', 'Sr', 'II', 'III', 'IV', 'Esq']
-    #suffixes = '|'.join([r'\s' + suf for suf in suffixes])
-    # Split names on semicolon, ampersand, or and
-    pattern = re.compile(' and |&|;', re.I)
-    names = [s.strip() for s in pattern.split(name_string) if bool(s)]
-    for name in copy(names):
-        if len(name.split(' ')) == 1:
-            names = [name_string]
-            break
-    # Reorder names if needed
-    if last_name_first:
-        names = [' '.join(name.rsplit(',', 1)[::-1])
-                 if ',' in name
-                 and not name.rsplit(',', 1)[1].strip() in suffixes
-                 else name for name in names]
-    # Parse names using nameparser
-    results = []
-    for unparsed in names:
-        # Parse name into components
-        name = HumanName(unparsed)
-        parsed = {
-            'NamPartyType' : 'Person',
-            'NamTitle' : name.title,
-            'NamFirst' : name.first,
-            'NamMiddle' : name.middle,
-            'NamLast' : name.last,
-            'NamSuffix' : name.suffix
-            }
-        # Handle words that nameparser struggles with
-        overwrite = {}
-        for word in sorted(problem_words, key=len)[::-1]:
-            if unparsed.startswith(word):
-                unparsed = unparsed.split(word)[1].strip()
-                overwrite['NamTitle'] = word
-                break
-        parsed.update(overwrite)
-        results.append({key: val for key, val in parsed.items() if val})
-    return results
-
-
 def prompt(text, validator, confirm=False,
            helptext='No help text provided', errortext='Invalid response!'):
     """Prompts for and validates user input
@@ -308,18 +57,18 @@ def prompt(text, validator, confirm=False,
         Validated response to prompt
     """
     # Prepare string
-    text = u'{} '.format(text.rstrip())
+    text = '{} '.format(text.rstrip())
     # Prepare validator
     if isinstance(validator, str):
         validator = re.compile(validator, re.U)
     elif isinstance(validator, dict) and sorted(validator.keys()) == ['n', 'y']:
-        text = u'{}({}) '.format(text, '/'.join(list(validator.keys())))
+        text = '{}({}) '.format(text, '/'.join(list(validator.keys())))
     elif isinstance(validator, dict):
         keys = list(validator.keys())
         keys.sort(key=lambda s: s.zfill(100))
-        options = [u'{}. {}'.format(key, validator[key]) for key in keys]
+        options = ['{}. {}'.format(key, validator[key]) for key in keys]
     elif isinstance(validator, list):
-        options = [u'{}. {}'.format(i + 1, val) for
+        options = ['{}. {}'.format(i + 1, val) for
                    i, val in enumerate(validator)]
     else:
         raise ValueError('Validator must be dict, list, or str.')
@@ -383,409 +132,12 @@ def prompt(text, validator, confirm=False,
     return result
 
 
-def utflatten(val):
-    """Converts diacritcs in string to their to an ascii equivalents
-
-    Modified to use the unidecode module, but kept alias so older scripts will
-    still work.
-    """
-    return unidecode(val)
-
-
-def parse_catnum(val, attrs=None, default_suffix='', min_suffix_length=0,
-                 strip_suffix=False, prefixed_only=False):
-    """Find and parse catalog numbers in a string
-
-    Args:
-        s (str): string containing catalog numbers or range
-        attrs (dict): additional parameters keyed to EMu field
-        default_suffix (str): default suffix to add if none present
-        strip_suffx (bool): strip leading zeroes from suffix if True
-        prefixed_only (bool): find only those catalog numbers that are
-            prefixed by a valid museum code (NMNH or USNM)
-
-    Returns:
-        List of dicts containing catalog numbers parsed into prefix, number,
-        and suffix: {'CatPrefix': 'G', 'CatNumber': '3551', 'CatSuffix': 00}.
-        Pass to format_catnums to convert to strings.
-    """
-    if attrs is None:
-        attrs = {}
-    # Catch code using the old syntax
-    if not isinstance(default_suffix, basestring):
-        raise Exception('Default suffix must be a string')
-    # Regular expressions for use with catalog number functions
-    p_pre = r'(?:([A-Z]{3}[A ] ?)|(?:(NMNH |USNM )?(?:([BCGMRS])-?)?))?'
-    p_num = r'([0-9]{1,6})'  # this will pick up ANY number
-    p_suf = r'\s?(-[0-9]{1,4}|-[A-Z][0-9]{1,2}|[c,]\s?[0-9]{1,2}[A-Z]?|\.[0-9]+|\s?(?:-|thr(?:ough|u))\s?[BCGMRS][0-9]{1,5})?'
-    regex = re.compile(r'\b(' + p_pre + p_num + p_suf + r')\b')
-    all_id_nums = []
-    for substring in re.split(r'\s(and|&)\s', val, flags=re.I):
-        id_nums = _parse_matches(regex.findall(substring), prefixed_only)
-        id_nums = _fix_misidentified_suffixes(id_nums)
-        id_nums = _fill_range(id_nums, substring)
-        id_nums = _clean_suffixes(id_nums, attrs, default_suffix,
-                                  min_suffix_length, strip_suffix)
-        # Require unprefixed numeric catalog numbers integers to meet a
-        # minimum length. This reduces false positives at the expense of
-        # excluding records with low catalog numbers.
-        id_nums = [id_num for id_num in id_nums
-                   if id_num.get('CatPrefix')
-                   or id_num.get('CatMuseumAcronym')
-                   or id_num.get('CatNumber', 0) > 999
-                   or id_num.get('MetMeteoriteName')]
-        # Format results as tuple
-        all_id_nums.extend(id_nums)
-    # Return parsed catalog numbers
-    return all_id_nums
-
-
-
-
-def parse_catnums(vals, **kwargs):
-    """Parse a list of strings containing catalog numbers
-
-    See parse_catnums() for a description of the available arguments.
-
-    Returns:
-        A list of parsed catnums
-    """
-    # Return list of parsed catalog numbers
-    catnums = []
-    for val in vals:
-        catnums.extend(parse_catnum(val, **kwargs))
-    return catnums
-
-
-
-
-def format_catnum(parsed, code=True, div=False):
-    """Formats parsed catalog number to a string
-
-    Args:
-        parsed (dict): parsed catalog number
-        code (bool): include museum code in catnum if True
-        div (bool): include div abbreviation in catnum if True
-
-    Returns:
-        Catalog number formatted as a string, like 'G3551-00'. Use
-        format_catnums to process a list of parsed catalog numbers.
-    """
-    try:
-        return parsed['MetMeteoriteName']
-    except KeyError:
-        pass
-    try:
-        parsed['CatNumber']
-    except KeyError:
-        return ''
-    keys = ('CatMuseumAcronym', 'CatDivision', 'CatPrefix', 'CatSuffix')
-    for key in keys:
-        parsed.setdefault(key, '')
-        parsed[key] = parsed[key].strip()
-    # Set museum code
-    if code:
-        parsed.setdefault('CatMuseumAcronym', 'NMNH')
-        if parsed['CatDivision'] == 'Meteorites':
-            parsed['CatMuseumAcronym'] = 'USNM'
-    if not parsed['CatPrefix']:
-        parsed['CatPrefix'] = u''
-    parsed['CatPrefix'] = parsed['CatPrefix'].upper()
-    # Format catalog number
-    catnum = (
-        u'{CatMuseumAcronym} {CatPrefix}{CatNumber}-{CatSuffix}'
-        .format(**parsed)
-        .rstrip('-')
-        .strip()
-        )
-    # Add division if necessary
-    if bool(catnum) and div:
-        catnum += u' ({})'.format(parsed['CatDivision'][:3].upper())
-        #catnum = u'{} {}'.format(d['CatDivision'][:3].upper(), catnum)
-    return catnum
-
-
-
-
-def format_catnums(parsed, code=True, div=False):
-    """Converts a list of parsed catalog numbers into strings
-
-    Args:
-        parsed (list): list of dicts containing parsed catnums
-        code (bool): include museum code in catnum if True
-        div (bool): include div abbreviation in catnum if True
-
-    Returns:
-        List of catalog numbers formatted as strings: ['G3551-00']
-    """
-    if not isinstance(parsed, list):
-        parsed = [parsed]
-    catnums = []
-    for catnum in parsed:
-        catnums.append(format_catnum(catnum, code, div))
-    return catnums
-
-
-def sort_catnums(catnums):
-    """Sort a list of catalog numbers
-
-    Args:
-        catnums (list): list of catalog numbers, either as strings or parsed
-            into dicts
-
-    Return:
-        Sorted list of catalog numebrs. Catalog numbers are formatted in
-        the same way as they were in the original list.
-    """
-    try:
-        catnums = parse_catnums(catnums)
-    except IndexError:
-        # Catalog numbers were given as dicts, so return them that way
-        return sorted(catnums, key=catnum_keyer)
-    else:
-        # Catalog numbers are strings, so format them before returning them
-        return format_catnums(sorted(catnums, key=catnum_keyer))
-
-
-def catnum_keyer(catnum):
-    """Create sortable key for a catalog number by zero-padding each component
-
-    Args:
-        catnum (str or dict): the catalog number to key
-
-    Returns:
-        Sortable catalog number
-    """
-    if isinstance(catnum, basestring):
-        try:
-            catnum = parse_catnum(catnum)[0]
-        except IndexError:
-            print('Sort error: ' + catnum)
-            raise
-            return 'Z' * 63
-    keys = ('CatPrefix', 'CatNumber', 'CatSuffix')
-    return '|'.join([str(catnum.get(key, '')).zfill(20) for key in keys])
-
-
-def fxrange(start, stop, step):
-    """Mimics functionality of xrange for floats
-
-    From http://stackoverflow.com/questions/477486/
-
-    Args:
-        start (int or float): first value in range (inclusive)
-        stop (int or float): last value in range (exclusive)
-        step (float): value by which to increment start
-    """
-    rng = start
-    while rng < stop:
-        yield rng
-        rng += step
-
-
-def cprint(obj, show=True):
-    """Conditionally pretty print an object
-
-    Args:
-        obj (mixed): the object to print
-        show (bool): print the object if true
-    """
-    if not isinstance(obj, basestring) and show:
-        pprint(obj)
-    elif obj and show:
-        print(fill(obj, subsequent_indent='  '))
-
-
-def rprint(obj, show=True):
-    """Pretty print object, then pause execution
-
-    Args:
-        obj (mixed): the object to print
-        show (bool): print the object if true
-    """
-    if show:
-        cprint(obj)
-        input('Paused. Press any key to continue.')
-
-
-def read_file(path, success, error=None):
-    """Process file at given path using success callback"""
-    try:
-        with open(path, 'r') as f:
-            return success(f)
-    except IOError:
-        if error is None:
-            raise
-        else:
-            return error(path)
-
-
-def ucfirst(val):
-    """Capitalize first letter of string while leaving the rest alone
-
-    Args:
-        val (str): string to capitalize
-
-    Returns:
-        Capitalized string
-    """
-    chars = []
-    for i, c in enumerate(val):
-        if c.isalpha():
-            return ''.join(chars) + c.upper() + ''.join(val[i + 1:])
-        chars.append(c)
-    return val
-
-
-
-def lcfirst(val):
-    """Lowercase first letter of string while leaving the rest alone
-
-    Args:
-        val (str): string to capitalize
-
-    Returns:
-        Capitalized string
-    """
-    chars = []
-    for i, c in enumerate(val):
-        if c.isalpha():
-            return ''.join(chars) + c.lower() + ''.join(val[i + 1:])
-        chars.append(c)
-    return val
-
-
-def add_article(val):
-    """Prepend the appropriate indefinite article to a string
-
-    Args:
-        val (str): string to which to add a/an
-
-    Returns:
-        String with indefinite article prepended
-    """
-    if val == plural(val) or val.lower().startswith(('a ', 'an ')):
-        return val
-    starts_with = re.compile(r'[aeiou]|[fhlmnrsx]{1,2}(\s|\d)', re.I)
-    not_starts_with = re.compile('eu|i{1,3}[abcd]|iv[abcd]', re.I)
-    if starts_with.match(val) and not not_starts_with.match(val):
-        return u'an {}'.format(val)
-    return u'a {}'.format(val)
-
-
-def _parse_matches(matches, prefixed_only=False):
-    """Format catalog numbers from a parsed list"""
-    id_nums = []
-    for match in matches:
-        id_num = dict(list(zip_longest(CATKEYS, [val.rstrip('-, ') for val in match])))
-        # Handle meteorites
-        if id_num['MetPrefix'] or id_num['CatMuseumAcronym'] == 'USNM':
-            if id_num['MetPrefix']:
-                metname = id_num['FullNumber'].replace(', ', ',')
-                return [{'MetMeteoriteName': metname}]
-        # Handle catalog numbers from other departments
-        else:
-            # Exclude catalog numbers without a prefix
-            if prefixed_only and not id_num['CatMuseumAcronym']:
-                continue
-            id_num['CatNumber'] = int(id_num['CatNumber'])
-            # Handle petrology suffix format (.0001)
-            if id_num['CatSuffix'].startswith('.'):
-                id_num['CatSuffix'] = id_num['CatSuffix'].lstrip('.0')
-            else:
-                id_num['CatSuffix'] = id_num['CatSuffix'].strip('-,.')
-        id_nums.append(id_num)
-    return id_nums
-
-
-def _clean_suffixes(id_nums, attrs, default_suffix,
-                    min_suffix_length, strip_suffix):
-    """Clean the identification numbers based on passed arguments"""
-    for i, id_num in enumerate(id_nums):
-        # HACK
-        if not id_num.get('CatSuffix'):
-            continue
-        # Clean suffixes
-        if min_suffix_length:
-            suffix = id_num['CatSuffix']
-            id_nums[i]['CatSuffix'] = suffix.zfill(min_suffix_length)
-        if strip_suffix:
-            id_nums[i]['CatSuffix'] = u''
-        elif not id_num['CatSuffix']:
-            id_nums[i]['CatSuffix'] = default_suffix
-        # Add additional attributes passed to the function
-        id_nums[i].update(attrs)
-        # Remove keys that do not correspond to EMu fields
-        for key in ('FullNumber', 'MetPrefix'):
-            del id_nums[i][key]
-    return id_nums
-
-
-def _fix_misidentified_suffixes(id_nums):
-    """Check for ranges that have been misidentified as suffixes"""
-    if len(id_nums) == 1:
-        id_num = id_nums[0]
-        try:
-            suffix = int(id_num['CatSuffix'])
-        except KeyError:
-            pass
-        except ValueError:
-            # Check for where suffix is itself a prefixed catalog number.
-            # The delta used to assessed ranges is set to 9 because there
-            # are at least ten catalog numbers per page in MinSci's ledgers
-            last_num = parse_catnum(id_num['CatSuffix'])
-            if (len(last_num) == 1
-                    and (last_num[0]['CatNumber'] - id_num['CatNumber'] >= 9)
-                    and (not last_num[0]['CatPrefix']
-                         or last_num[0]['CatPrefix'] == id_num['CatPrefix'])):
-                id_num['CatSuffix'] = ''
-                id_nums = [id_num, last_num[0]]
-        else:
-            if (suffix - id_num['CatNumber']) >= 9:
-                first_num = id_num
-                first_num['CatSuffix'] = u''
-                last_num = {key: '' for key in CATKEYS}
-                last_num['CatNumber'] = suffix
-                for key in ('CatPrefix', 'CatMuseumAcronym'):
-                    last_num[key] = first_num[key]
-                id_nums = [first_num, last_num]
-    return id_nums
-
-
-def _fill_range(id_nums, substring):
-    """Checks if a pair of catalog numbers appears to be a range"""
-    try:
-        first_num, last_num = id_nums
-    except ValueError:
-        pass
-    else:
-        is_range = (
-            ((substring.count('-') > 0 and substring.count('-') != 2)
-             or substring.count('through') == 1
-             or substring.count('thru') == 1)
-            and first_num['CatPrefix'] == last_num['CatPrefix']
-            and last_num['CatNumber'] > first_num['CatNumber']
-            and not first_num['CatSuffix'] and not last_num['CatSuffix']
-            and first_num['CatNumber'] > 10
-            )
-        # Fill range
-        if is_range:
-            id_nums = []
-            for i in range(first_num['CatNumber'], last_num['CatNumber'] + 1):
-                id_num = deepcopy(first_num)
-                id_num['CatNumber'] = i
-                id_num['FullNumber'] = format_catnum(id_num)
-                id_nums.append(id_num)
-    return id_nums
-
-
-
 def localize_datetime(timestamp, timezone_id='US/Eastern',
                       mask='%Y-%m-%dT%H:%M:%S'):
-    """Loclize timestamp to specified timezone
+    """Loclaizes timestamp to specified timezone
 
     Returns:
-        Localize datetime as string formatted according to the mask
+        Localized datetime as formatted according to the mask
     """
     localized = timezone(timezone_id).localize(timestamp)
     if mask is not None:
@@ -793,39 +145,8 @@ def localize_datetime(timestamp, timezone_id='US/Eastern',
     return localized
 
 
-def read_unicode_text(fp, encoding='utf-16', skiplines=0):
-    """Read a unicode text file generated by Excel"""
-    records = []
-    with io.open(fp, 'r', encoding=encoding) as f:
-        contents = io.BytesIO(f.read().encode('utf-8'))
-        rows = csv.reader(contents, dialect='excel-tab')
-        for i in range(skiplines+1):
-            keys = next(rows)
-        keys = [s.strip().decode('utf-8') for s in keys]
-        for row in rows:
-            if ''.join(row).strip():
-                vals = [s.strip().decode('utf-8') for s in row]
-                record = {key: val for key, val in zip_longest(keys, vals)}
-    return records
-
-
-def std(val, aggressive=False):
-    """Standardizes the given value for string comparisons
-
-    Args:
-        aggressive (bool): if True, strips everything except letters and numbers
-
-    Returns:
-        Standardized value as unicode
-    """
-    val = unidecode(u'{}'.format(val)).lower()
-    if aggressive:
-        return re.sub('[^A-Za-z0-9]', '', val)
-    return val
-
-
 def write_emu_search(mask, catnums, output='search.txt'):
-    nums = list(set([str(n).split('-')[0] for n in catnums]))
+    nums = list({str(n).split('-')[0] for n in catnums})
     nums.sort(key=lambda n: int(n))
     if mask.endswith('.txt'):
         mask = open('mask.txt', 'r').read()
@@ -834,3 +155,65 @@ def write_emu_search(mask, catnums, output='search.txt'):
         f.write(mask.format('\n\tor\n'.join(search)))
     print('The following catalog records were not found:')
     print('\n'.join(sorted(nums)))
+
+
+
+
+class FileLike:
+
+    def __init__(self, filelike, zip_file=None):
+        self.path = None
+        self.zip_info = None
+        self.zip_file = None
+        if zip_file:
+            self.zip_info = filelike
+            self.zip_file = zip_file
+        else:
+            self.path = os.path.realpath(filelike)
+
+
+    def __str__(self):
+        return self.path if self.path else self.zip_info.filename
+
+
+    def open(self, mode='r', encoding=None):
+        """Opens a file or ZipInfo object"""
+        if not self.zip_info:
+            return open(self.path, mode=mode, encoding=encoding)
+        stream = self.zip_file.open(self.zip_info, mode.rstrip('b'))
+        if encoding:
+            return ByteDecoder(stream, encoding)
+        return stream
+
+
+    def getmtime(self):
+        """Returns last modification datetime from a file or ZipInfo object"""
+        try:
+            return dt.datetime.fromtimestamp(int(os.path.getmtime(self.path)))
+        except TypeError:
+            return dt.datetime(*self.zip_info.date_time)
+
+
+
+
+class ByteDecoder:
+    """File-like context manager that encodes a binary stream from a zip file"""
+
+    def __init__(self, stream, encoding):
+        self._stream = stream
+        self._encoding = encoding
+
+
+    def __iter__(self):
+        for line in self._stream:
+            yield line.decode(self._encoding)
+
+
+    def __enter__(self):
+        return self
+
+
+    def __exit__(self, exc_type, exception, traceback):
+        if exception:
+            raise exception
+        self._stream.close()
