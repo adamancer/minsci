@@ -3,8 +3,16 @@ import re
 from collections import namedtuple
 from copy import deepcopy
 
-from ...helpers import (add_article, lcfirst, oxford_comma,
-                        plural, singular, ucfirst)
+from nmnh_ms_tools.utils import (
+    add_article,
+    lcfirst,
+    oxford_comma,
+    plural,
+    singular,
+    ucfirst
+)
+
+
 
 
 # Objects that are sometimes found in the cut field and represent a whole
@@ -65,7 +73,7 @@ def summarize(rec):
     # Write summary line used to make a quick id of sample (for example, when
     # matching media to samples)
     catnum = descriptors['catnum']
-    summary = u'{}: {} [{}]'.format(catnum, caption, tags).rstrip('[] ')
+    summary = '{}: {} [{}]'.format(catnum, caption, tags).rstrip('[] ')
     # Cull unneeded keys from descriptors
     keep = ['irn', 'catnum', 'status', 'xname', 'url']
     obj = {key: val for key, val in descriptors.items() if key in keep}
@@ -76,21 +84,21 @@ def summarize(rec):
 
 def get_descriptors(rec):
     """Parses basic descriptive information about a record into a dict"""
-    name = rec('MinName') if rec('MinName') else rec('MetMeteoriteName')
     catnum = rec.get_identifier(include_div=True, force_catnum=True)
     if catnum.split('(')[0].strip() == 'USNM':
         catnum = name + ' (MET)'
+
     taxa = rec.get_classification()
-    try:
-        xname = rec.get_name(taxa=taxa)
-    except KeyError:
-        xname = name
-    taxa_string = lcfirst(rec.get_classification_string(taxa))
+
+    name = rec('MinName') if rec('MinName') else rec('MetMeteoriteName')
+    tname = lcfirst(rec.get_classification_string(taxa, allow_varieties=True))
+    xname = rec.get_name(taxa=taxa)
+
     kind = rec('CatCatalog').split(' ')[0].rstrip('s')
     cut, setting = format_gems(rec)
     country, state, county = rec.get_political_geography()
-    description = rec('BioLiveSpecimen').lower().rstrip('.').replace('"', "'")
-    if description == name.lower():
+    description = fix_casing(rec('BioLiveSpecimen').rstrip('.').replace('"', "'"))
+    if description.lower() == name.lower():
         description = ''
     weight = rec.get_current_weight() if kind == 'Meteorite' else ''
     descriptors = {
@@ -99,7 +107,7 @@ def get_descriptors(rec):
         'name': name,
         'xname': xname,
         'taxa': taxa,
-        'tname': taxa_string,
+        'tname': tname,
         'kind': kind,
         'cut': cut,
         'setting': setting,
@@ -112,7 +120,10 @@ def get_descriptors(rec):
         'status': rec('SecRecordStatus').lower(),
         'url': rec.get_url()
     }
-    if descriptors['kind'] != 'Meteorite':
+    if (
+        descriptors['name'] != descriptors['xname']
+        and descriptors['kind'] != 'Meteorite'
+    ):
         descriptors['xname'] = lcfirst(descriptors['xname'])
     return descriptors
 
@@ -182,6 +193,7 @@ def clean_caption(caption):
 
 def format_caption(descriptors):
     """Formats caption based on the information in descriptors"""
+
     working = deepcopy(descriptors)
     # Make global changes to descriptors
     if working['catnum'].endswith('(MET)'):
@@ -189,45 +201,61 @@ def format_caption(descriptors):
         xname = re.split('[ -]', working['xname'], 1)[0]
         if xname.isalpha() and not xname == xname.upper():
             working['xname'] = lcfirst(working['xname'])
-    # Select a mask and format the data for it
+
+    working['colors'] = format_modifier(oxford_comma(working['colors']))
+
     if (working['cut']
-            and not working['cut'] in ('carved', 'intarsia')
-            and not 'beads' in working['cut']):
-        working['cut'] = format_modifier(working['cut']) + '-cut'
+        and not working['cut'] in ('carved', 'intarsia')
+        and not 'beads' in working['cut']
+        and not working['cut'].endswith('shaped')):
+            working['cut'] = format_modifier(working['cut']) + '-cut'
+
     if (working['setting'].lower() in working['xname'].lower()
         and working['tname'].lower() in working['xname'].lower()
         and not (working['locality'] or working['cut'] or working['colors'])):
-        mask = u''
-    elif working['setting'].lower() in OBJECTS:
-        working['colors'] = format_modifier(oxford_comma(working['colors']))
-        mask = u'{cut}, {colors} {tname} {setting}'
+            mask = ''
+
+    elif (working['setting'].lower() in OBJECTS
+          or not (working['cut'] or working['colors'])):
+        mask = '{cut}, {colors} {tname} {setting}'
+
     elif working['setting'] and 'beads' in working['cut']:
         working['setting'] = add_article(working['setting'])
-        working['colors'] = format_modifier(oxford_comma(working['colors']))
-        mask = u'{setting} featuring {colors} {tname} {cut}'
+        mask = '{setting} featuring {colors} {tname} {cut}'
+
     elif (working['setting']
           and working['locality']
           and not (working['cut'] or working['colors'])):
         working['xname'] = add_article(working['xname'])
-        mask = u'{setting} featuring {tname} from {locality}'
+        mask = '{setting} featuring {tname} from {locality}'
+
     elif working['setting']:
         working['setting'] = add_article(working['setting'])
-        working['colors'] = format_modifier(oxford_comma(working['colors']))
-        mask = u'{setting} featuring {cut}, {colors} {tname}'
-    elif working['cut'] and len(working['colors']) <= 2:
-        working['colors'] = format_modifier(oxford_comma(working['colors']))
-        mask = u'{cut}, {colors} {tname} from {locality}'
+        mask = '{setting} featuring {cut}, {colors} {tname}'
+
+    elif working['cut'] and ',' not in working['colors']:
+        mask = '{cut}, {colors} {tname} from {locality}'
+
     elif working['cut']:
-        working['colors'] = oxford_comma(working['colors'])
-        mask = u'{cut} {tname} colored {colors} from {locality}'
+        mask = '{cut} {tname} colored {colors} from {locality}'
+
     elif working['name'] and not working['locality']:
-        mask = u''
+        mask = ''
+
+    elif working['name'].lower() == working['xname'].lower():
+        mask = '{colors} {tname} from {locality}'
+
     else:
-        mask = u'{xname} from {locality}'
+        mask = '{xname} from {locality}'
+
+    # HACK: Prevent comma between cut and tname if not colors
+    if not working['colors']:
+        mask = mask.replace(', {colors}', '').replace(', {colors}', '')
+
     # Add common elements
-    prefix = u'{name}.'
-    suffix = u'weighing {weight}. Described as "{description}."'
-    mask = u' '.join([s for s in [prefix, mask, suffix] if s])
+    prefix = '{name}.'
+    suffix = 'weighing {weight}. Described as "{description}."'
+    mask = ' '.join([s for s in [prefix, mask, suffix] if s])
     caption = clean_caption(mask.format(**working))
     # Fix capitalization of second sentence when name is specified
     if working['name']:
@@ -235,6 +263,7 @@ def format_caption(descriptors):
         if not sentences[1].startswith('Described'):
             sentences[1] = ucfirst(add_article(sentences[1]))
             caption = '. '.join(sentences)
+
     return caption
 
 
@@ -274,11 +303,11 @@ def format_gems(rec):
                     if inflection in cut:
                         setting = inflection
                         if setting in cut:
-                            cut = u''
+                            cut = ''
                         break
         if cut == 'intarsia':
-            setting = u'{} {}'.format(cut, setting)
-            cut = u''
+            setting = '{} {}'.format(cut, setting)
+            cut = ''
         # Standardize the formatting of cut
         if cut in ALWAYS_PLURAL:
             cut = plural(cut)
@@ -287,13 +316,13 @@ def format_gems(rec):
         while cut[-4:] in (' cut', '-cut'):
             cut = cut[:-4]
         if setting == 'carving' and not cut:
-            cut = u'carved'
-            setting = u''
+            cut = 'carved'
+            setting = ''
         # Format setting
         if setting in ALWAYS_PLURAL:
             setting = plural(setting)
         if setting in cut:
-            setting = u''
+            setting = ''
         setting = setting.lower().rstrip('. ')
     return cut, setting
 
@@ -303,7 +332,7 @@ def format_modifier(modifier):
     words = [s.strip('. ') for s in re.split(r'[\s\-]+', modifier.strip())]
     formatted = [s + ' ' if is_adverb(s) and not i else s + '-'
                  for i, s in enumerate(words)]
-    return ''.join(formatted).rstrip('-')
+    return ''.join(formatted).rstrip('-').replace('-shaped-', '-shaped, ')
 
 
 def is_adverb(word):
@@ -315,3 +344,17 @@ def is_adverb(word):
 def is_multiple(phrase):
     """Simplistically checks if a phrase contains multiple items"""
     return ',' in phrase or ' and ' in phrase
+
+
+def fix_casing(val):
+    def capitalize(match):
+        return match.group().upper()
+    keywords = {
+        'cartier': 'Cartier',
+        'harry winston, inc': 'Harry Winston, Inc'
+    }
+    val = val.lower()
+    val = re.sub(r'(?<=\. )[a-z](?=[a-z]+)', capitalize, val)
+    for find, repl in keywords.items():
+        val = val.replace(find, repl)
+    return val
