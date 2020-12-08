@@ -1,37 +1,61 @@
-"""Subclass of XMuRecord with methods specific to emultimedia"""
+"""Subclass of XMuRecord with methods specific to emultimedia
 
-from builtins import str
-from past.builtins import basestring
+To create a copy of an image with embedded metadata:
+
+```
+from minsci import xmu
+
+# Define embedder
+embedder = xmu.EmbedFromEMu('path/to/output', overwrite=False)
+
+# Embed metadata from EMu
+rec = xmu.MediaRecord({...})
+rec.embedder = embedder
+rec.embed_metadata()
+```
+
+"""
+import copy
 import os
 import re
 import shutil
-from collections import namedtuple
+import time
+from collections import OrderedDict, namedtuple
 try:
     from itertools import zip_longest
 except ImportError as e:
     from itertools import izip_longest as zip_longest
 
+from nmnh_ms_tools.records.catnums import parse_catnums
+from nmnh_ms_tools.utils import dedupe, lcfirst, oxford_comma, to_pascal
 from unidecode import unidecode
 
 from .xmurecord import XMuRecord
-from ..tools.multimedia.embedder import Embedder, EmbedField
-from ..tools.multimedia.hasher import hash_file
-from ...catnums import get_catnums
-from ...helpers import dedupe, format_catnums, oxford_comma, parse_catnum, lcfirst, sort_catnums
+from ..tools.emultimedia.embedder import Embedder, EmbedField
+from ..tools.emultimedia.hasher import hash_file
+
+
 
 
 VALID_COLLECTIONS = [
     'Behind the scenes (Mineral Sciences)',
+    'Catalog cards (Mineral Sciences)',
     'Collections objects (Mineral Sciences)',
     'Documents and data (Mineral Sciences)',
     'Exhibit (Mineral Sciences)',
-    'Field pictures (Mineral Sciences)',
+    'Field photos (Mineral Sciences)',
+    'Illustrations (Mineral Sciences)',
     'Inventory (Mineral Sciences)',
+    'Labels (Mineral Sciences)',
+    'Ledgers (Mineral Sciences)',
     'Macro photographs (Mineral Sciences)',
     'Micrographs (Mineral Sciences)',
     'Non-collections objects (Mineral Sciences)',
+    'People (Mineral Sciences)',
     'Pretty pictures (Mineral Sciences)',
     'Research pictures (Mineral Sciences)',
+    'Transaction - Accession (Mineral Sciences)',
+    'Transaction - Loan (Mineral Sciences)',
     'Unidentified objects (Mineral Sciences)'
 ]
 
@@ -78,8 +102,114 @@ FORMATS = (
     )
 
 
-MediaFile = namedtuple('MediaFile', ['irn', 'filename', 'path', 'hash', 'size',
-                                     'width', 'height', 'is_image', 'row'])
+
+
+class Asset():
+    """Stores basic info about EMu multimedia files"""
+
+    def __init__(self, data, index=None):
+        self.irn = None
+        self.verbatim_filename = None
+        self.verbatim_path = None
+        self.hash = None
+        self.size = None
+        self.width = None
+        self.height = None
+        self.is_image = None
+        self.index = None
+        self.local = None
+        self._path = None
+        # Parse data
+        if 'Multimedia' in data:
+            self.from_primary(data)
+        elif 'Supplementary_tab' in data:
+            self.from_supplementary(data, index=index)
+        else:
+            raise ValueError('Could not parse: {}'.format(data))
+
+
+    def __str__(self):
+        mask = 'Asset(path={}, verbatim_path={})'
+        return mask.format(self.path, self.verbatim_path)
+
+
+    @property
+    def filename(self):
+        return os.path.basename(self.path)
+
+
+    @property
+    def path(self):
+        return self._path
+
+
+    @path.setter
+    def path(self, path):
+        path = os.path.abspath(path)
+        if self.verbatim_path is None:
+            self.verbatim_path = path
+        self._path = path
+
+
+    def from_primary(self, data):
+        """Creates an asset based on the primary asset in the record"""
+        self.irn = data('irn')
+        self.path = data('Multimedia')
+        filename = data('MulIdentifier')
+        if not filename:
+            filename = os.path.basename(self.path)
+        self.verbatim_filename = filename
+        self.path = os.path.abspath(data('Multimedia'))
+        self.checksum = data('ChaMd5Sum')
+        self.is_image = self.filename.lower().endswith(FORMATS)
+        # Get dimensions
+        if data('ChaFileSize'):
+            self.size = int(data('ChaFileSize'))
+        if data('ChaImageWidth'):
+            self.wdith = int(data('ChaImageWidth'))
+        if data('ChaImageHeight'):
+            self.height = int(data('ChaImageHeight'))
+        self.index = 0
+
+
+    def from_supplementary(self, data, index):
+        """Creates an asset based on a supplementary asset in the record"""
+        self.irn = data('irn')
+        self.path = data('Supplementary_tab')
+        filename = data('SupIdentifier_tab')
+        if not filename:
+            filename = os.path.basename(self.path)
+        self.verbatim_filename = filename
+        self.checksum = data('SupMD5Checksum_tab')
+        self.is_image = self.filename.lower().endswith(FORMATS)
+        # Get dimensions
+        if data('SupFileSize_tab'):
+            self.size = int(data('SupFileSize_tab'))
+        if data('SupWidth_tab'):
+            self.wdith = int(data('SupWidth_tab'))
+        if data('SupHeight_tab'):
+            self.height = int(data('SupHeight_tab'))
+        self.index = index
+
+
+    def verify(self):
+        """Verifies that the file matches its hash"""
+        checksum = hash_file(self.path)
+        verified = checksum == self.checksum
+        if not verified:
+            mask = 'Checksums do not match: {} ({} != {})'
+            raise ValueError(mask.format(self.filename,
+                                         checksum,
+                                         self.checksum))
+        return verified
+
+
+    def fix_timestamp(self):
+        """Fixes corrupted timestamps by setting them to now"""
+        fix_timestamp(self.path)
+
+
+
 
 class MediaRecord(XMuRecord):
     """Subclass of XMuRecord with methods specific to emultimedia"""
@@ -88,11 +218,12 @@ class MediaRecord(XMuRecord):
         super(MediaRecord, self).__init__(*args)
         self.module = 'emultimedia'
         self._attributes = ['cataloger', 'embedder', 'fields', 'module']
-        #self.cataloger = None
-        #self.embedder = None
+        self.cataloger = None
+        self.embedder = None
         self.image_data = {}
         # Attributes used with cataloger
         self.catnums = []
+        self.matches = []
         self.object = None
         self.smart_functions = {
             'MulTitle': self.smart_title,
@@ -106,9 +237,232 @@ class MediaRecord(XMuRecord):
             'DetSubject_tab': []
         }
         self.whitelist = KW_WHITELIST
+        self.mask = '{catnum}_{title}_{creators}_{pid}_{suffix}'
         self.masks = {
-            'MulTitle': u'{name} (NMNH {catnum}) [AUTO]'
+            'MulTitle': '{name} ({catnum}) [AUTO]'
         }
+        # Create a dict of paths to all assets in the record
+        self.assets = OrderedDict()
+
+
+    def finalize(self):
+        if 'Multimedia' in self:
+            self.assets[self('Multimedia')] = Asset(self)
+            supplementary = self.grid([
+                'Supplementary_tab',
+                'SupIdentifier_tab',
+                'SupMD5Checksum_tab',
+                'SupFileSize_tab',
+                'SupWidth_tab',
+                'SupHeight_tab'
+            ])
+            for i, row in enumerate(supplementary):
+                verbatim_path = row('Supplementary_tab')
+                if verbatim_path:
+                    self.assets[verbatim_path] = Asset(row, index=i)
+
+
+    def get_asset(self, asset):
+        """Maps a filepath to an asset"""
+        if asset is None:
+            asset = self.get_primary()
+        if not isinstance(asset, Asset):
+            try:
+                asset = self.assets[asset]
+            except KeyError:
+                assets = [a for a in self.assets.values() if a.path == asset]
+                if len(assets) != 1:
+                    raise ValueError('Asset not found: {}'.format(path))
+                asset = assets[0]
+        return asset
+
+
+    def get_all_media(self):
+        """Gets all assets in this record"""
+        return list(self.assets.values())
+
+
+    def get_primary(self):
+        """Gets properties of the primary asset"""
+        return self.get_all_media()[0]
+
+
+    def get_supplementary(self):
+        """Gets properties of all supplementary assets"""
+        return self.get_all_media()[1:]
+
+
+    def reassess_assets(self):
+        """Assesses assets, updating asset list if needed"""
+        assets = []
+        for asset in list(self.assets.values()):
+            try:
+                open(asset.path, 'r')
+                assets.append(asset)
+            except FileNotFoundError as e:
+                del self.assets[asset.verbatim_path]
+        return self.assets
+
+
+    def copy(self, src, dst, overwrite=False, verify=True):
+        """Copies an asset"""
+        src = self.get_asset(src)
+        dst = os.path.abspath(dst)
+        if not is_file(dst):
+            dst = os.path.join(dst, src.filename)
+        if not samefile(src.path, dst):
+            # Ensure that destination directory exists
+            try:
+                os.makedirs(os.path.dirname(dst))
+            except OSError:
+                pass
+            # Copy file, overwriting if desired
+            try:
+                open(dst, 'rb')
+            except IOError:
+                shutil.copy2(src.path, dst)
+            else:
+                if overwrite:
+                    os.remove(dst)
+                    shutil.copy2(src.path, dst)
+            # Update assets dict with new location
+            self.assets[src.verbatim_path].path = dst
+        return self
+
+
+    def rename(self, src, dst, mask='{stem}_{index}{ext}'):
+        """Renames an asset"""
+        src = self.get_asset(src)
+        open(src.path, 'r')  # verify source file exists
+        dst = os.path.abspath(dst)
+        if not samefile(src.path, dst):
+            stem, ext = os.path.splitext(dst)
+            index = 0
+            while True:
+                try:
+                    os.rename(src.path, dst)
+                    break
+                except OSError as e:
+                    if not mask:
+                        raise
+                    index += 1
+                    dst = mask.format(stem=stem, index=index, ext=ext)
+            # Update assets dict with new name
+            self.assets[src.verbatim_path].path = dst
+        return self
+
+
+
+    def verify_asset(self, mixed):
+        """Verifies an asset by comparing it to its original checksum"""
+        return self.get_asset(mixed).verify()
+
+
+    def use_local_files(self, copy_to, overwrite=False,
+                        verify=True, exclude=None):
+        """Uses local copies of assets, copying them over if necessary"""
+        for asset in self.assets.values():
+            if exclude is not None and asset.filename.endswith(exclude):
+                continue
+            if isinstance(copy_to, str):
+                # If no map provided, copy_to must be a directory
+                self.copy(asset, copy_to, overwrite=overwrite, verify=verify)
+            else:
+                for relpath, path in copy_to.items():
+                    if asset.verbatim_path.endswith(relpath):
+                        asset.path = os.path.abspath(path)
+                        break
+                else:
+                    raise KeyError('{} not found'.format(asset.verbatim_path))
+
+
+
+    def standardize_filename(self, mixed, suffix=''):
+        """Creates a standardized filename using image metadata
+
+        G003551_HopeDiamond_ChipClark_97-4941_<EZIDMM>
+        """
+        asset = self.get_asset(mixed)
+        ext = os.path.splitext(asset.filename)[1].lower()
+        # Get catalog numbers
+        title = self('MulTitle').replace('[AUTO]', '').strip()
+        catnums = parse_catnums(title)
+        catnums.sort()
+        catnums = [c.to_filename(code='') for c in catnums]
+        if len(catnums) > 2:
+            catnum = '{}EtAl'.format(catnums[0])
+        else:
+            catnum = '+'.join(catnums)
+        # Get title
+        if not title:
+            title = 'No title'
+        title = to_pascal(title)
+        if not title.startswith(('Nmnh', 'Usnm')):
+            title = re.split(r'(Nmnh|Usnm)', title, 1, flags=re.I)[0]
+        # Get creators
+        creators = oxford_comma(self('MulCreator_tab'))
+        creators = re.sub('(?<=[a-z])And(?=[A-Z])', '+', creators)
+        if not creators:
+            creators = 'No photographer'
+        creators = to_pascal(creators)
+        # Get photographer ID
+        try:
+            pids = self.get_guid('Photographer Number', allow_multiple=True)
+            pids.sort()
+            pid = format_pid(pids[0])
+        except (IndexError, KeyError):
+            pid = to_pascal('No number')
+        # Format file name
+        parts = {
+            'catnum': catnum,
+            'title': title,
+            'creators': creators,
+            'pid': pid,
+            'ezid': self.get_guid('EZIDMM', strip_ark=True),
+            'suffix': suffix
+        }
+        stem = re.sub(r'_+', '_', self.mask.format(**parts)).strip('_')
+        return '{}{}'.format(stem, ext)
+
+
+    def standardize_filenames(self):
+        """Standardizes all file names in the record"""
+        for asset in self.assets.values():
+            fn = self.standardize_filename(asset)
+            dst = os.path.join(os.path.dirname(asset.path), fn)
+            self.rename(asset, dst)
+        return self
+
+
+    def copy_to(self, path, overwrite=False, verify_asset=False):
+        """Copies primary asset to path"""
+        self.copy(self.get_primary(), path, **kwargs)
+
+
+    def to_csv(self, exclude=None):
+        """Summarizes record for csv"""
+        assert not exclude or all([s.islower() for s in exclude])
+        try:
+            pids = self.get_guid('Photographer Number', allow_multiple=True)
+            pids.sort()
+            pid = format_pid(pids[0])
+        except IndexError:
+            pid = ''
+        rows = []
+        for i, mm in enumerate(self.get_all_media()):
+            if exclude is not None and mm.path.lower().endswith(exclude):
+                continue
+            ezid = self.get_guid('EZIDMM')
+            if i:
+                ezid += ' (alternative version)' if i else ''
+            rows.append({
+                'filename': mm.filename,
+                'title': self('MulTitle').replace('[AUTO]', '').strip(),
+                'creator': oxford_comma(self('MulCreator_tab')),
+                'photo_id': pid,
+                'ezid': 'http://n2t.net/{}'.format(ezid)
+            })
+        return rows
 
 
     def add_embedder(self, embedder, **kwargs):
@@ -139,45 +493,14 @@ class MediaRecord(XMuRecord):
         stem, ext = os.path.splitext(fn)
         stem = stem.replace('-', '_')
         stem = re.sub(r'\((\d+)\)', r'_\1_', stem)
-        stem = re.sub(r'[\s_]+', u'_', unidecode(stem))
+        stem = re.sub(r'[\s_]+', '_', unidecode(stem))
         stem = re.sub(r'[^a-zA-Z0-9_]', '', stem)
         print(fn, '=>', stem.rstrip('_') + ext.lower())
         return stem.rstrip('_') + ext.lower()
 
 
-    def _get_params(self, for_filename=False):
-        # Format catalog numbers
-        catnums = sort_catnums(self.catnums)
-        if len(catnums) > 1:
-            mask = '{} and others' if for_filename else '{} and others'
-            catnum = mask.format(catnums[0])
-        else:
-            catnum = catnums[0]
-        params = {
-            'catnum': catnum,
-            'catnum_simple': catnum.replace('NMNH ', '') \
-                                   .replace('USNM', '') \
-                                   .replace('-00', ''),
-            'name': self.object.object['xname'],
-            'primary': self.object.object['xname'].split(' with ')[0],
-        }
-        if for_filename:
-            return {k: v.replace(' ', '_') for k, v in params.items()}
-        return params
-
-
-    def set_filename(self, mask):
-        params = self._get_params(for_filename=True)
-        ext = os.path.splitext(self('Multimedia'))[1]
-        self['MulIdentifier'] = mask.format(**params) + ext
-
-
-    def set_mask(self, key, mask):
-        assert isinstance(mask, str)
-        self.masks[key] = mask
-
-
     def set_default(self, key):
+        """Sets default value for the given key"""
         defaults = {
             'DetSource': self.embedder.source,
             'DetRights': self.embedder.rights
@@ -185,61 +508,9 @@ class MediaRecord(XMuRecord):
         self[key] = defaults[key]
 
 
-    def get_all_media(self):
-        """Gets the filepaths for all media in this record"""
-        return [self.get_primary()] + self.get_supplementary()
-
-
-    def get_primary(self):
-        """Gets properties for the primary asset"""
-        filename = self('MulIdentifier')
-        if not filename:
-            filename = os.path.basename(self('Multimedia'))
-        is_image = filename.lower().endswith(FORMATS)
-        size = self('ChaFileSize')
-        width = self('ChaImageWidth')
-        height = self('ChaImageHeight')
-        return MediaFile(self('irn'),
-                         filename,
-                         self('Multimedia'),
-                         self('ChaMd5Sum'),
-                         int(size) if is_image and size else None,
-                         int(width) if is_image and width else None,
-                         int(height) if is_image and height else None,
-                         is_image,
-                         None)
-
-
-    def get_supplementary(self):
-        """Gets supplementary assets and their basic properites"""
-        paths = self('Supplementary_tab')
-        files = self('SupIdentifier_tab')
-        hashes = self('SupMD5Checksum_tab')
-        sizes = self('SupFileSize_tab')
-        widths = self('SupWidth_tab')
-        heights = self('SupWidth_tab')
-        supp_files = zip_longest(paths, files, hashes, sizes, widths, heights)
-        supplementary = []
-        for i, supp_file in enumerate(supp_files):
-            path, filename, hexhash, s, w, h = supp_file
-            if not filename:
-                filename = os.path.basename(path)
-            is_image = filename.lower().endswith(FORMATS)
-            supplementary.append(MediaFile(self('irn'),
-                                           filename,
-                                           path,
-                                           hexhash,
-                                           int(s) if is_image and s else None,
-                                           int(w) if is_image and w else None,
-                                           int(h) if is_image and h else None,
-                                           is_image,
-                                           i + 1))
-        return supplementary
-
-
     def get_catalog_numbers(self, field='MulTitle', **kwargs):
         """Find catalog numbers in the given field"""
-        return get_catnums(self(field), **kwargs)
+        return parse_catnums(self(field), **kwargs)
 
 
     def get_photo_numbers(self):
@@ -249,72 +520,37 @@ class MediaRecord(XMuRecord):
                                       'AdmGUIDValue_tab')
 
 
-    def copy_to(self, path, overwrite=False, verify_image=False):
-        """Copies the primary file to a new location
-
-        Args:
-            path (str): the directory to copy the image to
-            overwrite (bool): specifies whether to overwrite existing file
-            verify_master (bool): specifies whether to verify copied file
-        """
-        primary = self.get_primary()
-        try:
-            os.makedirs(path)
-        except OSError:
-            pass
-        dst = os.path.join(path, primary.filename)
-        try:
-            open(dst, 'rb')
-        except IOError:
-            print('Copying {} to {}...'.format(primary.path, dst))
-            shutil.copy2(primary.path, dst)
-        else:
-            if overwrite:
-                print('Copying {} to {}...'.format(primary.path, dst))
-                os.remove(dst)
-                shutil.copy2(primary.path, dst)
-        # Verify the copy if required
-        if verify_image and hash_file(dst) != primary.hash:
-            raise ValueError('Checksums do not match')
-        self['Multimedia'] = dst
+    def get_url(self):
+        """Gets the resolvable URL for this record"""
+        return super().get_url('EZIDMM')
 
 
-    def embed_metadata(self, verify_image=True):
+    def embed_metadata(self, verify=True):
         """Updates metadata in the primary and supplementary images"""
         rec = self.clone(self)
-        for media in self.get_all_media():
+        rec.assets = copy.deepcopy(self.assets)
+        rec.matches = self.matches[:]
+        names = []
+        for asset in rec.get_all_media():
             # Embed metadata or add a placeholder for non-image files
-            fp = media.path
-            if media.is_image:
-                if verify_image and rec('irn'):
-                    self.verify_master(media)
-                # Rename file based on MulIdentifier if that is different
-                # from the filename in Multimedia
-                if media.row is None:
-                    new_name = rec('MulIdentifier')
-                else:
-                    new_name = rec('SupIdentifier_tab')[media.row - 1]
+            fp = asset.path
+            if asset.is_image:
+                # Verify the asset if this is an update
+                if verify and rec('irn'):
+                    self.verify_asset(asset)
+                # Names must be unique within a record, so iterate if needed
+                new_name = asset.filename
+                i = 1
+                while new_name in names:
+                    stem, ext = os.path.splitext(new_name)
+                    new_name = '{}_{}{}'.format(stem, i, ext)
+                    i += 1
+                names.append(new_name)
                 if fp.endswith(new_name):
                     new_name = None
-                fp = self.embedder.embed_metadata(self, fp, new_name)
-            if fp and media.row is None:
-                rec['Multimedia'] = fp
-            elif media.row and rec('irn'):
-                rec.setdefault('Supplementary_tab({}=)', []).append(fp)
-                if len(rec['Supplementary_tab({}=)']) != media.row:
-                    raise ValueError
-            else:
-                try:
-                    rec['Supplementary_tab'][media.row - 1] = fp
-                except:
-                    print(fp)
-                    print(rec['Supplementary_tab'])
-                    print(media.row)
-                    print(media)
-                    raise
-
+                # Update path to the asset
+                asset.path = self.embedder.embed_metadata(self, fp, new_name)
         if rec:
-            rec['irn'] = media.irn
             return rec.strip_derived().expand()
 
 
@@ -322,14 +558,16 @@ class MediaRecord(XMuRecord):
         """Verifies download/copy of master file by comparing hashes"""
         if media is None:
             media = self.get_primary()
-        verified = hash_file(media.path) == media.hash
+        hexhash = hash_file(media.path)
+        verified = hexhash == media.hash
         if not verified:
-            raise ValueError('Checksums do not match')
+            mask = 'Checksums do not match: {} ({} != {})'
+            raise ValueError(mask.format(media.filename, hexhash, media.hash))
         return verified
 
 
     def verify_import(self, images, strict=True, test=False):
-        """Verifies import against path"""
+        """Verifies import against images on path"""
         Image = namedtuple('Image', ['path', 'hash'])
         for mm in self.get_all_media():
             matches = images.get(mm.filename, [])
@@ -381,22 +619,18 @@ class MediaRecord(XMuRecord):
         """Returns list of catalog objects matching data in MulTitle"""
         if val is None:
             val = self('MulTitle')
-        parsed = get_catnums(val)
+        self.catnums = parse_catnums(val)
         records = []
-        if len(parsed) > 1:
+        if len(self.catnums) > 1:
             # Multiple catalog numbers found! Record them all
-            for catnum in parsed:
+            for catnum in self.catnums:
                 records.extend(self.match(str(catnum)))
-            self.catnums = [str(c) for c in parsed]
         else:
-            for identifier in parsed:
+            for identifier in self.catnums:
                 matches = self.cataloger.get(identifier, [], ignore_suffix)
                 for match in matches:
                     if not match in records:
                         records.append(match)
-            self.catnums = str(parsed)
-        if isinstance(self.catnums, basestring):
-            self.catnums = [self.catnums]
         return records
 
 
@@ -407,7 +641,7 @@ class MediaRecord(XMuRecord):
         matches = [m for i, m in enumerate(matches)
                    if not m.object['catnum'] in catnums[:i]]
         if not matches or len(matches) > 1:
-            raise ValueError('No unique match: {}'.format(self.catnums))
+            raise KeyError('No unique match: {}'.format(self.catnums))
         return matches[0]
 
 
@@ -481,30 +715,6 @@ class MediaRecord(XMuRecord):
         return enhanced.expand()
 
 
-
-    def strip_derived(self):
-        """Strips fields derived by EMu from the record"""
-        strip = [
-            'AdmImportIdentifier',
-            'ChaImageHeight',
-            'ChaImageWidth',
-            'ChaMd5Sum',
-            'MulIdentifier',
-            'MulMimeFormat',
-            'SupIdentifier_tab',
-            'SupHeight_tab',
-            'SupWidth_tab',
-            'SupMD5Checksum_tab'
-        ]
-        strip.extend([key for key in list(self.keys()) if key.startswith('_')])
-        for key in strip:
-            try:
-                del self[key]
-            except KeyError:
-                pass
-        return self
-
-
     def smart_title(self):
         """Derives image title from catalog"""
         title = self('MulTitle')
@@ -557,7 +767,7 @@ class MediaRecord(XMuRecord):
         collections = [COLLECTION_MAP.get(c, c) for c in collections]
         # Check if micrograph
         coll = 'Micrographs (Mineral Sciences)'
-        if 'micrograph' in self('MulTitle').lower() and not coll in collections:
+        if 'micrograph' in self('MulTitle').lower() and coll not in collections:
             collections.append(coll)
         # Check if there are any non-SI objects in photos. Different
         # collections and restrictions are applied for these photos.
@@ -594,6 +804,48 @@ class MediaRecord(XMuRecord):
         return '; '.join(note).strip('; ')
 
 
+    def strip_derived(self):
+        """Strips fields derived by EMu from the record"""
+        strip = [
+            'AdmImportIdentifier',
+            'ChaImageHeight',
+            'ChaImageWidth',
+            'ChaMd5Sum',
+            'MulIdentifier',
+            'MulMimeFormat',
+            'SupIdentifier_tab',
+            'SupHeight_tab',
+            'SupWidth_tab',
+            'SupMD5Checksum_tab'
+        ]
+        strip.extend([key for key in list(self.keys()) if key.startswith('_')])
+        for key in strip:
+            try:
+                del self[key]
+            except KeyError:
+                pass
+        return self
+
+
+    def _get_params(self, for_filename=False):
+        # Format catalog numbers
+        catnums = sorted(self.catnums)
+        if len(catnums) > 1:
+            mask = '{} and others' if for_filename else '{} and others'
+            catnum = mask.format(catnums[0])
+        else:
+            catnum = catnums[0]
+        params = {
+            'catnum': str(catnum),
+            'catnum_simple': catnum.summarize('exclude_code'),
+            'name': self.object.object['xname'],
+            'primary': self.object.object['xname'].split(' with ')[0],
+        }
+        if for_filename:
+            return {k: v.replace(' ', '_') for k, v in params.items()}
+        return params
+
+
 
 
 class EmbedFromEMu(Embedder):
@@ -606,7 +858,7 @@ class EmbedFromEMu(Embedder):
         self.rights = ('This image was obtained from the Smithsonian'
                        ' Institution. Its contents may be protected by'
                        ' international copyright laws.')
-        self.source = 'NMNH-Smithsonian Institution'
+        self.source = 'SI-NMNH'
         self.job_id = None
         # Use artwork identifiers to store specimen info
         object_metadata = {
@@ -630,11 +882,16 @@ class EmbedFromEMu(Embedder):
     @staticmethod
     def get_objects(rec, field='MulTitle'):
         """Returns list of catalog numbers parsed from MulTitle"""
-        catnums = get_catnums(rec(field), prefixed_only=True)
+        catnums = parse_catnums(rec(field))
         # FIXME: Only handles one catalog number for now
         if catnums:
             catnums = catnums.__class__(catnums[:1])
         return catnums
+
+
+    def get_guid(self, rec):
+        """Placeholder function returning the EZIDMM"""
+        return rec.get_url()
 
 
     def get_caption(self, rec):
@@ -664,17 +921,17 @@ class EmbedFromEMu(Embedder):
             creator = self.creator
         else:
             creator = rec('MulCreator_tab')[0]
-        return u'{}'.format(creator)
+        return '{}'.format(creator)
 
 
     def get_date_created(self, rec):
         """Placeholder function returning the date created"""
-        return self.get_mtime(rec('Multimedia'), '%Y%m%d')
+        return self.get_mtime(rec.get_primary().path, '%Y%m%d')
 
 
     def get_datetime_created(self, rec):
         """Placeholder function returning the full date and time created"""
-        return self.get_mtime(rec('Multimedia'))
+        return self.get_mtime(rec.get_primary().path)
 
 
     def get_headline(self, rec):
@@ -716,12 +973,12 @@ class EmbedFromEMu(Embedder):
 
     def get_object_name(self, rec, mask='include_code'):
         """Returns the photo identifier or list of pictured objects"""
-        object_name = rec.get_guid('Photographer number')
+        object_name = ' | '.join(rec.get_guid('Photographer number', True))
         if object_name is None:
             objects = []
             for obj in self.get_objects(rec):
-                obj.set_mask(mask)
-                objects.append(obj.from_mask())
+                obj.mask = mask
+                objects.append(obj.summarize())
             object_name = '; '.join(objects)
         return object_name
 
@@ -749,13 +1006,13 @@ class EmbedFromEMu(Embedder):
         """Returns media topics for this record"""
         subjects = ['medtop:20000727']  # geology
         if 'NMNH G' in rec('MulTitle'):
-            subjects.append('medtop:20000012')  # jewellery
+            subjects.append('medtop:20000012')  # jewelry
         return subjects
 
 
     def get_time_created(self, rec):
         """Placeholder function returning the time created"""
-        return self.get_mtime(rec('Multimedia'), '%H%M%S%z')
+        return self.get_mtime(rec.get_primary().path, '%H%M%S%z')
 
 
     def get_transmission_reference(self, rec):
@@ -771,7 +1028,7 @@ class EmbedFromEMu(Embedder):
         return obj_data
 
 
-    def get_object_sources(self, rec, source='NMNH-Smithsonian Institution'):
+    def get_object_sources(self, rec, source='SI-NMNH'):
         """Returns list with museum name"""
         return [source] * len(rec.objects if hasattr(rec, 'objects') else [])
 
@@ -791,3 +1048,127 @@ class EmbedFromEMu(Embedder):
         for obj in rec.objects if hasattr(rec, 'objects') else []:
             obj_data.append(obj.object['url'])
         return obj_data
+
+
+
+
+def get_photo_num(val):
+    """Looks for and formats common photo numbers"""
+    for func in (get_a_num, get_ken_num, get_ms_num, get_yy_num):
+        pid = func(val)
+        if pid:
+            return format_pid(pid)
+
+
+def get_a_num(val):
+    """Parses a Chip Clark A-number"""
+    pattern = r'\bA ?\d{5}[A-z]?\b'
+    try:
+        val = re.search(pattern, val, flags=re.I).group()
+        return 'A{}'.format(val.lstrip('A- '))
+    except AttributeError:
+        return
+
+
+def get_ken_num(val):
+    """Parses a Ken Larsen yyknnnn nnumber"""
+    pattern = r'\b\d{2}[bsk]\d{4,5}(-nr)?\b'
+    try:
+        val = re.search(pattern, val, flags=re.I).group()
+        return val.lower()
+    except AttributeError:
+        return
+
+
+def get_ms_num(val):
+    """Parses a Mineral Sciences Archive number"""
+    pattern = r'\b(?:Mineral Sciences? Archives?|MSA?)\.?[ -](\d+)\b'
+    try:
+        match = re.search(pattern, val, flags=re.I)
+        prefix = 'MSA' if 'A' in match.group() else 'MS'
+        val = match.group(1)
+        return '{}-{}'.format(prefix, val)
+    except AttributeError:
+        return
+
+
+def get_yy_num(val):
+    """Parses a NMNH photo number from a string"""
+    pattern = r'\b(NHB)?(20)?\d{2}-\d{4,6}[A-z]?\b'
+    try:
+        val = re.search(pattern, val, flags=re.I).group()
+        try:
+            n1, n2 = [int(n) for n in val.split('-')]
+            if n1 <= 2019 and abs(n2 - n1) > 25:
+                return val
+        except ValueError:
+            return val
+    except AttributeError:
+        pass
+    return
+
+
+def split_pid(pid):
+    """Splits a photo id into prefix and number"""
+    if re.match(r'\d+$', pid):
+        pre = ''
+        num = pid
+    elif re.match(r'\d{2}[bks]', pid, flags=re.I):
+        pre = pid[:3]
+        num = pid[3:]
+    else:
+        # Extract alpha prefix
+        try:
+            pre = re.match(r'([A-z]+)', pid).group().strip('-')
+            num = pid[len(pre):].strip('- ')
+            if pre == 'NHB':
+                pre = ''
+        except AttributeError:
+            pre = ''
+            num = pid
+        # Extract numeric prefix if no alpha prefix found
+        if not pre:
+            try:
+                pre = re.match(r'(\d{2,4})(?=[\-\.])', pid).group().strip('-')
+                num = pid[len(pre):].strip('- ')
+            except AttributeError:
+                pass
+    # Trim trailing letters
+    num = re.sub(r'[A-z\-]+$', '', num, flags=re.I)
+    return pre, num
+
+
+def combine_pid(pre, num):
+    """Combines a prefix and number into a photo id"""
+    if re.match(r'\d{2}[bks]$', pre, flags=re.I):
+        pre = pre.lower()
+        pid = '{}{}'.format(pre, str(num).zfill(4))
+    else:
+        pre = pre.upper()
+        delim = '' if pre == 'A' else '-'
+        pid = '{}{}{}'.format(pre, delim, str(num)).lstrip('-')
+    return pid
+
+
+def format_pid(pid):
+    """Formats a photo id"""
+    return combine_pid(*split_pid(pid))
+
+
+def fix_timestamp(fp):
+    """Fixes corrupted timestamp on files exported from EMu"""
+    stat = os.stat(fp)
+    if stat.st_ctime < 315532800:
+        print('Fixed corrupted timestamp in {}'.format(fp))
+        timestamp = dt.datetime.now()
+        os.utime(fp, (timestamp, timestamp))
+
+
+def is_file(path):
+    """Tests if path looks like it points to a file"""
+    return bool(re.search(r'\.[A_z]{3,4}(_[A-z]{3,7})?$', path))
+
+
+def samefile(path1, path2):
+    """Tests if two paths point to the same object"""
+    return os.path.normcase(path1) == os.path.normcase(path2)
