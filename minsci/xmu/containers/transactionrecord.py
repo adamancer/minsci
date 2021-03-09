@@ -447,6 +447,11 @@ class TransactionRecord(XMuRecord):
 
     def collections(self):
         """Determines subcollections for items in this transaction"""
+
+        # Anything assigned to SMS is assign to Reference Standards
+        if self.division() == "SMS":
+            return {"PET: Reference Standards": len(self.tr_items)}
+
         collections = {}
         for item in self.tr_items:
             coll = item.collection()

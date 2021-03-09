@@ -69,9 +69,8 @@ class TMu(XMu):
         except KeyError:
             self.transactions[tranum] = rec.transaction
             self.transactions[tranum].tr_items = [item]
-            # Verify that the record maps to a deparment. It is useful to do
-            # this early so that we don't have to read the whole file before
-            # getting an error.
+            # Verify that the record maps to a deparment. Do this now so that
+            # that we don't read the whole file before getting to an error.
             rec.transaction.division()
 
 
