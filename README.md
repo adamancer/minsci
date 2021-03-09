@@ -1,42 +1,32 @@
 MinSci Toolkit
 ==============
 
-A collection of tools written in Python 2.7 to wrangle data in Axiell EMu for
+A collection of tools written in Python 3 to wrangle data in Axiell EMu for
 Mineral Sciences at NMNH.
 
 
 Installation
 ------------
 
-The minsci package exists on PyPI, but I don't do well keeping it up-to-date,
-so it's better to install directly from github. Both Python 2 and 3 are
-(theoretically) supported, and both installation methods below require Git.
-
-### Install using Miniconda
-
-The easiest way to install the minsci package is to use [Miniconda]. Once you
-have Miniconda installed on your system, open the Anaconda Prompt and use the
-following commands to install minsci into its own environment:
+The minsci package exists on PyPI but is badly out-of-date, so it's better to
+install directly from github. The recommended installation process uses
+conda and is as follows:
 
 ```
-cd /path/to/directory
+conda create -n nmnh_minsci
+conda activate nmnh_minsci
+
+git clone https://github.com/adamancer/nmnh_ms_tools
+cd nmnh_ms_tools
+conda env update -f environment.yml -n nmnh_minsci
+pip install .
+
+
+cd ..
 git clone https://github.com/adamancer/minsci
 cd minsci
-conda env create -f requirements.yaml
-conda activate minsci
-python setup.py install
-```
-
-### Install using a standalone Python
-
-Install minsci using a standalone installation using the following commands:
-
-```
-cd /path/to/directory
-git clone https://github.com/adamancer/minsci
-cd minsci
-pip install -r requirements.txt
-python setup.py install
+conda env update -f environment.yml -n nmnh_minsci
+pip install .
 ```
 
 ### Post-installation
@@ -48,8 +38,8 @@ that you can do to better tailor things to your EMu:
   script to validate paths when reading and writing data.
 + Define grids in minsci/xmu/files/tables. This allows the script to verify
   that all columns in a given grid have the right number of rows. **The default
-  grids are NMNH-specific and should be deleted and replaced.** It's a good
-  idea to define any grids you'll be writing to.
+  grids are NMNH-specific and should be deleted and replaced.** In particular,
+  it's a good idea to define any grids you'll be writing to.
 
 
 Basic usage
@@ -72,7 +62,7 @@ class XMu(xmu.XMu):
         rec = self.parse(element)
         # Do stuff...
 
-xmudata = XMu('xmldata.xml')
+xmudata = XMu("xmldata.xml")
 xmudata.fast_iter(report=1000)
 ```
 

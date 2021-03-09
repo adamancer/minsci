@@ -1,0 +1,21 @@
+name: minsci
+channels:
+- conda-forge
+- default
+dependencies:
+- python>=3.7
+- pip
+- bibtexparser
+- dateparser
+- inflect
+- lxml
+- nameparser
+- pillow
+- pymongo
+- pyodbc
+- pytz
+- pyyaml
+- requests
+- requests_cache
+- shapely
+- unidecode

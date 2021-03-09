@@ -1,5 +1,5 @@
 # Compiled python modules.
-*.pyc
+__pycache__
 
 # Futurize backup files
 *.bak
@@ -13,7 +13,10 @@
 /*.egg-info
 /*.egg
 
-# PyPI Registration helpers
+# Testing caches and config files
+.pytest_cache 
+
+# PyPI registration helpers
 register.py
 README.rst
 
