@@ -14,6 +14,8 @@ try:
 except ImportError as e:
     from itertools import izip_longest as zip_longest
 
+from nmnh_ms_tools.records import get_catnum
+
 from ..constants import FIELDS
 from ...dicts import DeepDict
 
@@ -477,6 +479,35 @@ class XMuRecord(DeepDict):
         return Accession(tranum if tranum else None, legnum if legnum else None)
 
 
+    def get_identifier(self, include_code=True, include_div=False,
+                       force_catnum=False):
+        """Derives sample identifier based on record
+
+        Args:
+            include_code (bool): specifies whether to include museum code
+            include_div (bool): specifies whetehr to include division
+
+        Returns:
+            String of NMNH catalog number or Antarctic meteorite number
+        """
+        ignore = {'MetMeteoriteName'} if force_catnum else {}
+        catnum = get_catnum({k: v for k, v in self.items() if k not in ignore})
+        if include_div:
+            catnum.mask = 'include_div'
+        elif include_code:
+            catnum.mask = 'include_code'
+        return str(catnum)
+
+
+    def get_catnum(self, include_code=True, include_div=False):
+        """Returns the catalog number of the current object"""
+        return self.get_identifier(include_code, include_div, force_catnum=True)
+
+
+    def get_catalog_number(self, include_code=True, include_div=False):
+        """Returns the catalog number of the current object"""
+        return self.get_identifier(include_code, include_div, force_catnum=True)
+
 
     def get_location(self, current=False, keyword=None):
         """Returns the current or permanent location of a specimen"""
@@ -578,7 +609,7 @@ class XMuRecord(DeepDict):
         return ''
 
 
-    def get_guid(self, kind='EZID', allow_multiple=False, strip_ark=False):
+    def get_guid(self, kind='EZID', allow_multiple=False, strip_ark=True):
         """Gets value from the GUID table for a given key
 
         Args:

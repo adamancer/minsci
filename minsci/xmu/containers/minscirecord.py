@@ -5,7 +5,6 @@ try:
 except ImportError as e:
     from itertools import izip_longest as zip_longest
 
-from nmnh_ms_tools.records import get_catnum
 from nmnh_ms_tools.utils import oxford_comma
 
 from .xmurecord import XMuRecord
@@ -80,62 +79,6 @@ class MinSciRecord(XMuRecord):
             except (AttributeError, KeyError) as e:
                 raise ValueError(taxa) from e
         return taxa
-
-
-    def get_identifier(self, include_code=True, include_div=False,
-                       force_catnum=False):
-        """Derives sample identifier based on record
-
-        Args:
-            include_code (bool): specifies whether to include museum code
-            include_div (bool): specifies whetehr to include division
-
-        Returns:
-            String of NMNH catalog number or Antarctic meteorite number
-        """
-        ignore = {'MetMeteoriteName'} if force_catnum else {}
-        catnum = get_catnum({k: v for k, v in self.items() if k not in ignore})
-        if include_div:
-            catnum.mask = 'include_div'
-        elif include_code:
-            catnum.mask = 'include_code'
-        return str(catnum)
-        '''
-        metnum = self('MetMeteoriteName')
-        suffix = self('CatSuffix')
-        if self.antmet.match(metnum) and not force_catnum:
-            if suffix == metnum:
-                return metnum
-            else:
-                return '{},{}'.format(metnum, suffix).rstrip(',')
-        else:
-            prefix = self('CatPrefix')
-            number = self('CatNumber')
-            division = self('CatDivision')
-            if not division and (metnum or self('MetMeteoriteType')):
-                division = 'Meteorites'
-            if not number:
-                return ''
-            catnum = '{}{}-{}'.format(prefix, number, suffix).strip('- ')
-            if include_div:
-                catnum = '{} ({})'.format(catnum, division[:3].upper())
-            if include_code:
-                code = 'NMNH'
-                if division == 'Meteorites':
-                    code = 'USNM'
-                catnum = '{} {}'.format(code, catnum)
-            return catnum
-        '''
-
-
-    def get_catnum(self, include_code=True, include_div=False):
-        """Returns the catalog number of the current object"""
-        return self.get_identifier(include_code, include_div, force_catnum=True)
-
-
-    def get_catalog_number(self, include_code=True, include_div=False):
-        """Returns the catalog number of the current object"""
-        return self.get_identifier(include_code, include_div, force_catnum=True)
 
 
     def get_division(self):
