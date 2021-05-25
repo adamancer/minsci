@@ -18,6 +18,7 @@ OPEN = ['OPEN', 'OPEN PENDING']
 CLOSED = ['CLOSED', 'CLOSED BALANCED', 'CLOSED PENDING', 'CLOSED UNBALANCED']
 STATUSES = set(INACTIVE + IN_PREP + OPEN + CLOSED)
 
+Email = namedtuple('Email', ['source', 'email'])
 Shipment = namedtuple('Shipment', ['irn', 'number', 'items', 'acknowledged'])
 
 
@@ -232,7 +233,7 @@ class TransactionRecord(XMuRecord):
             # Enforce a due date of three years after opened/inserted if no
             # due date was given
             if self.is_open() and self('TraType') == 'LOAN OUTGOING':
-                print('No due date provided: {}'.format(self('TraNumber')))
+                print('No due date: {}'.format(self('TraNumber')))
                 due_date = add_years(self.date_open(), 3)
             else:
                 return
@@ -282,8 +283,10 @@ class TransactionRecord(XMuRecord):
 
     def is_overdue(self, overdue_date=None):
         """Checks if the loan is overdue based on due and extensions dates"""
+        if not self.is_active():
+            return False
         if overdue_date is None:
-            self.config['overdue_date']
+            overdue_date = self.config['overdue_date']
         if isinstance(overdue_date, str):
             overdue_date = dt.datetime.strptime(overdue_date, '%Y-%m-%d').date()
         due_date = self.due_date()
@@ -352,6 +355,7 @@ class TransactionRecord(XMuRecord):
 
 
     def orig_contact(self, key=None):
+        """Returns original contact for the loan"""
         orig_contact = self.contact(key=key, role='Original')
         if not orig_contact:
             return self.contact(key)
@@ -359,6 +363,7 @@ class TransactionRecord(XMuRecord):
 
 
     def email(self):
+        """Returns email address for the contact"""
         if self.obscure:
             return Email('Person', 'scientist@science.edu')
         try:
