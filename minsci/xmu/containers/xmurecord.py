@@ -652,7 +652,7 @@ class XMuRecord(DeepDict):
 
     def get_url(self, kind='EZID'):
         """Gets the ark link to this record"""
-        ezid = self.get_guid(kind)
+        ezid = self.get_guid(kind, strip_ark=False)
         if ezid:
             return 'http://n2t.net/{}'.format(ezid)
 
