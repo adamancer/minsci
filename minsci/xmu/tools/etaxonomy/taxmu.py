@@ -52,33 +52,55 @@ class TaXMu(XMu):
 
     def check(self):
         """Checks for consistency issues in the hierarchy"""
+
         updates = []
+        errors = []
+
+
         # Check current designation
         for key, taxon in self.tree.items():
             if key.isnumeric():
-                rec = taxon.fix_current()
-                if rec:
-                    updates.append(rec)
+                try:
+                    rec = taxon.fix_current()
+                    if rec:
+                        updates.append(rec)
+                except KeyError:
+                    errors.append(f'Invalid IRN: {key}')
+
         # Validate tree
         if updates:
             timestamp = dt.datetime.now().strftime('%Y%m%dT%H%M%S')
             write('update_{}.xml'.format(timestamp), updates, 'etaxonomy')
             return False
+
         # Check for other integrity issues
         for key, taxon in self.tree.items():
             if key.isnumeric():
-                rec = taxon.fix()
-                if rec:
-                    updates.append(rec)
+                try:
+                    rec = taxon.fix()
+                    if rec:
+                        updates.append(rec)
+                except (KeyError, ValueError) as err:
+                    errors.append(str(err))
+
+        # List errors if any found
+        if errors:
+            print('Errors:')
+            print('\n'.join(errors))
+
         # Validate tree
         if updates:
-            print('Testing relationships...')
-            for key, taxon in self.tree.items():
-                if key.isnumeric():
-                    taxon.preferred()
-                    taxon.parents()
-                    taxon.official()
+
+            print('Writing updates...')
             timestamp = dt.datetime.now().strftime('%Y%m%dT%H%M%S')
             write('update_{}.xml'.format(timestamp), updates, 'etaxonomy')
-            return False
-        return True
+
+            if not errors:
+                print('Testing relationships...')
+                for key, taxon in self.tree.items():
+                    if key.isnumeric():
+                        taxon.preferred()
+                        taxon.parents()
+                        taxon.official()
+
+        return not (errors or updates)
