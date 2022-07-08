@@ -17,6 +17,16 @@ logger = logging.getLogger(__name__)
 
 
 
+TAB_ENDS = ('0', '_nesttab', '_nesttab_inner', '_tab')
+REF_ENDS = ('Ref', 'Ref_tab')
+
+TAB_PATTERN = "(" + "|".join(TAB_ENDS) + ")$"
+REF_PATTERN = "(" + "|".join(REF_ENDS) + ")$"
+MOD_PATTERN = r"\((\d+=|[\+\-])\)$"
+
+
+
+
 class XMuFields(object):
     """Reads and stores metadata about fields in EMu
 
@@ -234,8 +244,7 @@ class XMuFields(object):
             fields = re_field.findall(module)
             for field in fields:
                 schema_data = {}
-                lines = [s.strip() for s in field.split('\n')
-                         if bool(s.strip())]
+                lines = [s.strip() for s in field.split('\n') if bool(s.strip())]
                 #field_name = lines[0].split(' ')[0].strip('"\'')
                 lines = lines[2:len(lines)-1]
                 for line in lines:
@@ -246,6 +255,12 @@ class XMuFields(object):
                     else:
                         schema_data[key] = val
                 schema_data['ModuleName'] = module_name
+                # HACK: Need this to write to the items grid in transactions
+                if (
+                    module_name == 'enmnhtransactions'
+                    and schema_data['ColumnName'] == 'ItmItemRef_tab'
+                ):
+                    schema_data['ItemName'] = 'ItmItemRef'
                 # ItemName appears only for fields that are editable in EMu
                 # (I think), so use it to cull copy fields, etc.
                 try:
@@ -256,7 +271,7 @@ class XMuFields(object):
                 path = self._derive_path(schema_data)
                 field_data = {
                     'path': '/'.join(path),
-                    'table': is_table(*path),
+                    'table': is_tab(*path),
                     'schema': schema_data
                 }
                 schema.push(field_data, *path)
@@ -368,7 +383,7 @@ class XMuFields(object):
                     try:
                         self(path)['columns']
                     except KeyError:
-                        if is_table(path):
+                        if is_tab(path):
                             logger.error(' Table specified for alias'
                                          ' not found: {}'.format(alias))
                     # Not needed. Table included in data already.
@@ -389,10 +404,10 @@ class XMuFields(object):
         """
         xpath = []
         for arg in args:
-            if is_table(arg):
+            if is_tab(arg):
                 xpath.append("table[@name='{}']".format(arg))
                 xpath.append('tuple')
-            elif is_reference(arg):
+            elif is_ref(arg):
                 xpath.append("tuple[@name='{}']".format(arg))
             else:
                 xpath.append("atom[@name='{}']".format(arg))
@@ -438,7 +453,7 @@ class XMuFields(object):
 
 
     def set_alias(self, alias, path):
-        """Add alias: path to self.schema
+        """Add alias path to self.schema
 
         Args:
             alias (str): name of alias
@@ -494,9 +509,109 @@ class XMuFields(object):
         return {k: v[0] for k, v in fields.items() if len(v) == 1}
 
 
+class XMuField:
+    """Assesses and provides variants for an EMu field name
+
+    Attributes:
+        name (str): the field name
+    """
+
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return self.name
+
+    def atomic(self):
+        """Gets name with any table components removed"""
+        return strip_tab(self.name)
+
+    def no_mod(self):
+        """Gets name with modifying parenthetical removed"""
+        return strip_mod(self.name)
+
+    def is_atom(self):
+        """Tests if name is atomic"""
+        return not self.is_tab()
+
+    def is_atom_ref(self):
+        """Tests if name is an atomic reference"""
+        return self.is_ref() and not self.is_tab()
+
+    def is_mod(self):
+        """Tests if name includes a modifying parenthetical"""
+        return is_mod(self.name)
+
+    def is_nest_tab(self):
+        return is_nest_tab(self.name)
+
+    def is_ref(self):
+        """Tests if name is a reference"""
+        return is_ref(self.name)
+
+    def is_ref_tab(self):
+        """Tests if name is a reference table"""
+        return self.is_tab() and self.is_ref()
+
+    def is_tab(self):
+        """Tests if name is a table"""
+        return is_tab(self.name)
+
+    def modifier(self):
+        """Returns the modifier from the modifying parenthetical"""
+        mod = get_mod(self.name)
+        try:
+            return int(mod)
+        except ValueError:
+            return mod
+
+    def check_value(self, val):
+        if self.is_tab() and not isinstance(val, (list, tuple)):
+            raise ValueError(f"{self.name} must be list-like ({val} given)")
+        elif self.is_atom() and isinstance(val, (list, tuple)):
+            raise ValueError(f"{self.name} must be atomic ({val} given)")
+
+    def wrap_value(self, val):
+        self.check_value(val)
+
+        # Wrap a table
+        if self.is_tab() and not self.is_ref():
+            return [s if isinstance(s, dict) else {self.atomic(): s} for s in val]
+
+        # Wrap a list of irns
+        if self.is_ref_tab():
+            try:
+                return [self._wrap_irn(s) for s in val]
+            except ValueError:
+                pass
+
+        # Wrap a single irn
+        if self.is_ref():
+            try:
+                return self._wrap_irn(val)
+            except ValueError:
+                pass
+
+        return val
+
+    def unwrap_value(self, val):
+        if self.is_tab() and not self.is_ref() and isinstance(val[0], dict):
+            return [d[self.atomic()] for d in val]
+        return val
+
+    def _wrap_irn(self, val):
+        try:
+            if int(val) == float(val) and 1e6 <= val <= 1e8:
+                return {"irn": str(val)}
+        except (TypeError, ValueError):
+            if val == {"irn": val}:
+                return val
+        raise ValueError(f"Not an irn: {val}")
 
 
-def is_table(*args):
+
+
+def is_tab(*args):
     """Checks whether a path points to a table
 
     Args:
@@ -505,11 +620,10 @@ def is_table(*args):
     Returns:
         Boolean
     """
-    tabends = ('0', '_nesttab', '_nesttab_inner', '_tab')
-    return bool(len([s for s in args if s.endswith(tabends)]))
+    return any([s for s in args if s.endswith(TAB_ENDS)]) or is_mod(*args)
 
 
-def is_reference(*args):
+def is_ref(*args):
     """Checks whether a path is a reference
 
     Args:
@@ -518,5 +632,37 @@ def is_reference(*args):
     Returns:
         Boolean
     """
-    refends = ('Ref', 'Ref_tab')
-    return bool(len([s for s in args if s.endswith(refends)]))
+    return any([s for s in args if s.endswith(REF_ENDS)])
+
+
+def is_mod(*args):
+    """Checks whether a path is an update
+
+    Args:
+        path (str): period-delimited path to a given field
+
+    Returns:
+        Boolean
+    """
+    return any([re.search(MOD_PATTERN, s) for s in args])
+
+
+def strip_tab(*args):
+    """Strips table suffix"""
+    args = strip_mod(*args)
+    if not isinstance(args, tuple):
+        args = tuple([args])
+    args = [re.sub(TAB_PATTERN, "", s) for s in args]
+    return args[0] if len(args) == 1 else tuple(args)
+
+
+def strip_mod(*args):
+    """Strips trailing modifier"""
+    args = [re.sub(MOD_PATTERN, "", s) for s in args]
+    return args[0] if len(args) == 1 else tuple(args)
+
+
+def get_mod(*args):
+    matches = [re.search(MOD_PATTERN, s) for s in args]
+    indexes = [m.group(1) if m else m for m in matches]
+    return indexes[0] if len(indexes) == 1 else tuple(indexes)

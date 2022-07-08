@@ -18,7 +18,7 @@ from nmnh_ms_tools.utils import ABCEncoder, is_newer, get_mtime
 
 from .constants import FIELDS
 from .containers import XMuRecord
-from .fields import is_table, is_reference
+from .fields import is_tab, is_ref
 from ..exceptions import RowMismatch
 from ..helpers import FileLike
 
@@ -27,6 +27,15 @@ from ..helpers import FileLike
 
 logger = logging.getLogger(__name__)
 Grid = namedtuple('Grid', ['fields', 'operator'])
+
+#: Constant returned by iterate to indicate the record was processed successfully
+RECORD_SUCCEEDED = 1
+
+#: Constant returned by iterate to indicate that record could not be processed
+RECORD_FAILED = 0
+
+#: Constant returned by iterate to stop fast_iter
+STOP_FAST_ITER = -1
 
 
 
@@ -171,7 +180,7 @@ class XMu:
                 del context
 
 
-    def fast_iter(self, func=None, report=0, skip=0, limit=0,
+    def fast_iter(self, func=None, report=0, skip=0, limit=0, successful_only=False,
                   callback=None, callback_kwargs=None, **kwargs):
         """Use callback to iterate through an EMu export file
 
@@ -193,7 +202,9 @@ class XMu:
         n_processed = -skip
         n_success = 0
         if skip:
-            logger.info('Skipping the first {:,} records'.format(skip))
+            msg = 'Skipped {:,} records'.format(skip)
+            print(msg)
+            logger.info(msg)
         if report:
             starttime = dt.datetime.now()
         for filelike in self.files:
@@ -201,6 +212,7 @@ class XMu:
                 logger.info('Reading {}...'.format(filelike))
             with filelike.open('rb') as source:
                 context = etree.iterparse(source, events=['end'], tag='tuple')
+                elements = []
                 for _, element in context:
                     # Process children of module table only
                     parent = element.getparent().get('name')
@@ -208,21 +220,41 @@ class XMu:
                         n_processed += 1
                         if n_processed <= 0:
                             continue
+
                         result = func(element, **kwargs)
-                        if result is False:
+                        if result not in (
+                            RECORD_SUCCEEDED,
+                            RECORD_FAILED,
+                            STOP_FAST_ITER,
+                            None
+                        ):
+                            raise ValueError(
+                                "iterate must return None or one of the following"
+                                " constants from the xmu module: RECORD_SUCCEEDED,"
+                                " RECORD_FAILED, STOP_FAST_ITER"
+                            )
+
+                        if result == STOP_FAST_ITER:
                             keep_going = False
                             break
-                        elif result is not True:
+                        elif result != RECORD_FAILED:
                             n_success += 1
+
                         element.clear()
                         while element.getprevious() is not None:
                             del element.getparent()[0]
                         if report:
                             starttime = self._report(report,
-                                                     n_processed,
+                                                     n_processed + skip,
                                                      n_success,
                                                      starttime)
-                        if limit and not n_processed % limit:
+                        if limit and successful_only and n_success and not n_success % limit:
+                            logger.warning('Stopped processing before'
+                                           ' end of file (limit={:,}'
+                                           ' records, successful only)'.format(limit))
+                            keep_going = False
+                            break
+                        if limit and not successful_only and not n_processed % limit:
                             logger.warning('Stopped processing before'
                                            ' end of file (limit={:,}'
                                            ' records)'.format(limit))
@@ -232,7 +264,7 @@ class XMu:
                 if not keep_going:
                     break
         mask = '{:,} records processed! ({:,} successful)'
-        print(mask.format(n_processed, n_success))
+        print(mask.format(n_processed + skip, n_success))
         self.finalize()
         if callback is not None:
             if callback_kwargs is None:
@@ -302,7 +334,7 @@ class XMu:
             json_path = os.path.splitext(self.path)[0] + '.json'
         # Always recreate the JSON if source file is newer
         if is_newer(self.path, json_path):
-            raise IOError
+            raise OSError
         logger.info('Reading data from {}...'.format(json_path))
         with open(json_path, 'r', encoding=encoding) as f:
             data = json.load(f)
@@ -434,7 +466,7 @@ class XMu:
                         result.append(self.container())
                     keys.pop()
                 else:
-                    # Strip double spaces
+                    # Replace double spaces
                     while '  ' in val:
                         val = val.replace('  ', ' ')
                     try:
@@ -631,10 +663,10 @@ def _emuize(rec, root=None, path=None, handlers=None,
                 if group.operator == '+':
                     root.set('group', hashed)
                 group = None
-        elif is_table(path.rstrip('_')):
+        elif is_tab(path.rstrip('_')):
             root = etree.SubElement(root, 'table')
             root.set('name', path.rstrip('_'))
-        elif is_reference(path):
+        elif is_ref(path):
             root = etree.SubElement(root, 'tuple')
             root.set('name', path)
         for path in _sort(paths):
@@ -730,12 +762,17 @@ def emuize(records, module=None):
 
     Args:
         records (list): list of records
-        module (str): name of module
+        module (str): name of module records belong to
     """
     if module is None:
         module = records[0].module
     root = None
     for rec in records:
+
+        # Assign module if not already assigned
+        if rec.module is None:
+            rec.module = module
+
         rec = _check(rec, module)
         try:
             root = _emuize(rec.expand().wrap(module), root, module=module)

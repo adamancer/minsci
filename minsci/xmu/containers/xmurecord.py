@@ -17,6 +17,7 @@ except ImportError as e:
 from nmnh_ms_tools.records import get_catnum
 
 from ..constants import FIELDS
+from ..fields import is_tab, is_ref, strip_tab
 from ...dicts import DeepDict
 
 
@@ -40,8 +41,6 @@ class XMuRecord(DeepDict):
         # Set defaults for carryover attributes
         for attr in self._attributes:
             setattr(self, attr, None)
-        self.tabends = ('_nesttab_inner', '_nesttab', '_tab', '0')
-        self.refends = ('Ref_tab', 'Ref')
         self.fields = FIELDS
         self._grids = {}
 
@@ -89,9 +88,9 @@ class XMuRecord(DeepDict):
             path = path.split('/')
         rec = self
         for i, seg in enumerate(path):
-            is_tab = seg.endswith(self.tabends)
-            is_ref = seg.endswith(self.refends)
-            if is_tab and is_ref:
+            seg_is_tab = is_tab(seg)
+            seg_is_ref = is_ref(seg)
+            if seg_is_tab and seg_is_ref:
                 # This catches lists of irns
                 if isinstance(val, list) and all([v.isnumeric() for v in val]):
                     rec.setdefault(seg, []).extend(val)
@@ -101,7 +100,7 @@ class XMuRecord(DeepDict):
                 else:
                     rec.setdefault(seg, []).append(self.clone())
                     rec = rec[seg]
-            elif is_ref:
+            elif seg_is_ref:
                 rec = rec.setdefault(seg, self.clone())
             elif path[-1] == seg:
                 vals = []
@@ -109,7 +108,7 @@ class XMuRecord(DeepDict):
                     vals = [s.strip() for s in val.split(delim)]
                 else:
                     val = ''
-                rec[seg] = vals if seg.endswith(self.tabends) else val
+                rec[seg] = vals if is_tab(seg) else val
             else:
                 raise ValueError('{}: {}'.format(path, val))
 
@@ -117,7 +116,7 @@ class XMuRecord(DeepDict):
     def setdefault(self, key, val, delim='|'):
         if '/' in key:
             raise KeyError('Illegal key: {}'.format(key))
-        if key.endswith(self.tabends) and not isinstance(val, list):
+        if is_tab(key) and not isinstance(val, list):
             val = [s.strip() for s in val.split(delim)]
         return super(XMuRecord, self).setdefault(key, val)
 
@@ -199,6 +198,9 @@ class XMuRecord(DeepDict):
         # Split path on period or forward slash if a single arg given
         if len(args) == 1:
             args = re.split(r'[/\.]', args[0])
+        else:
+            args = list(args)
+
         # Nested tables need to be handled very carefully
         nested = [arg for arg in args if arg.endswith('_nesttab')]
         if nested:
@@ -226,12 +228,12 @@ class XMuRecord(DeepDict):
             if retval is None:
                 retval = []
         # One-dimensional tables return a list of values
-        elif [arg for arg in args if arg.endswith(self.tabends)]:
+        elif [arg for arg in args if is_tab(arg)]:
             retval = self.get_rows(*args, **kwargs)
         # Atomic references return a single dictionary, whereas atomic
         # fields return a value
         else:
-            default = self.clone() if args[-1].endswith(self.refends) else ''
+            default = self.clone() if is_ref(args[-1]) else ''
             try:
                 val = self.pull(*args, **kwargs)
             except KeyError:
@@ -239,7 +241,7 @@ class XMuRecord(DeepDict):
             else:
                 retval = val if val is not None else default
         # Update module attribute for references/attachments
-        if args[-1].endswith(self.refends):
+        if is_ref(args[-1]):
             path = [self.module] + list(args)
             field_data = self.fields.get(*path)
             if isinstance(retval, list):
@@ -262,7 +264,7 @@ class XMuRecord(DeepDict):
                 raise KeyError('/'.join(args))
         # Last check
         if retval is None:
-            raise TypeError
+            raise TypeError("Return value cannot be None")
         return retval
 
 
@@ -323,63 +325,6 @@ class XMuRecord(DeepDict):
         return paths
 
 
-    '''
-    def smart_push(self, val, *args):
-        """Add value to paths stipulated by args
-
-        Not recommended, needs testing.
-        """
-        # Confim that paths to tables are valid
-        temp = []
-        for i in xrange(len(args)):
-            temp.append(args[i])
-            stripped = args[i].rstrip('+')
-            stem = stripped.rsplit('_', 1)[0]
-            if (stripped.endswith(self.tabends)
-                and not stripped.endswith('Ref_tab')
-                and (i == (len(args) - 1) or args[i+1] != stem)):
-                temp.append(stem)
-        args = temp
-        # Process args using a modification of the base pull function
-        d = self
-        for i in xrange(len(args) - 1):
-            arg = args[i]
-            append = False
-            table = False
-            if arg.rstrip('+').endswith(self.tabends):
-                table = True
-            if arg.endswith('+'):
-                append = True
-                arg = arg.rstrip('+')
-            try:
-                d = d[arg]
-            except KeyError:
-                if table:
-                    d[arg] = [self.__class__()]
-                    d = d[arg][0]
-                else:
-                    d[arg] = self.__class__()
-                    d = d[arg]
-            else:
-                # Append to an existing table
-                if table and append:
-                    d.append(self.__class__())
-                # Replace an existing table
-                elif table and not append:
-                    d = [self.__class__()]
-                d = d[-1]
-        d[args[-1].rstrip('+')] = val
-    '''
-
-
-    def detab(self, field):
-        """Removes table indicator from a field name"""
-        for tab in self.tabends:
-            if field.endswith(tab):
-                return field[:-len(tab)]
-        return field
-
-
     def get_rows(self, *args):
         """Returns a list of values corresponding to the table rows
 
@@ -390,9 +335,10 @@ class XMuRecord(DeepDict):
         Returns:
             List of values, one per row
         """
+
         # Clean up tables
         for i in range(len(args)):
-            if args[-(i+1)].endswith(self.tabends):
+            if is_tab(args[-(i+1)]):
                 if i:
                     args = args[:-i]
                 break
@@ -402,7 +348,7 @@ class XMuRecord(DeepDict):
             return []
         else:
             rows = []
-            refkey = self.detab(list(args)[-1])
+            refkey = strip_tab(list(args)[-1])
             for row in table:
                 # Confirm that each row is a dict
                 try:
@@ -627,7 +573,7 @@ class XMuRecord(DeepDict):
         matches = self.get_matching_rows(*args)
         # Fallback if type not exported
         if not matches:
-            if kind == 'EZID' and not self('AdmGUIDType_tab'):
+            if kind.startswith('EZID') and not self('AdmGUIDType_tab'):
                 matches = [val for val in self('AdmGUIDValue_tab')
                            if val.startswith('ark:/65665/')]
             elif kind == 'IGSN' and not self('CatOtherNumbersValue_tab'):
@@ -711,7 +657,7 @@ class XMuRecord(DeepDict):
 
     def delete_rows(self, key, indexes=None, conditions=None):
         """Deletes any rows matching the given conditions from a table"""
-        assert key.endswith(self.tabends)
+        assert is_tab(key)
         assert indexes is not None or conditions is not None
         if indexes is not None:
             if not isinstance(indexes, list):
@@ -867,7 +813,7 @@ class XMuRecord(DeepDict):
                     else:
                         vals.append(self.clone({'irn': val}))
                 self[key] = vals
-            elif (k.rstrip('_').endswith(self.tabends)
+            elif (is_tab(k.rstrip('_'))
                   and isinstance(val, list)
                   and any(val)
                   and any([isinstance(s, atomic) for s in val])):
@@ -882,7 +828,7 @@ class XMuRecord(DeepDict):
                     else:
                         vals.append(self.clone({base: val}))
                 self[key] = vals
-            elif (k.rstrip('_').endswith(self.tabends)
+            elif (is_tab(k.rstrip('_'))
                   and isinstance(val, list)
                   and not any(val)):
                 #print('{}={} parsed as empty table'.format(key, val))
