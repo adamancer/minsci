@@ -16,6 +16,6 @@ dependencies:
 - pytz
 - pyyaml
 - requests
-- requests_cache
+- requests-cache
 - shapely
 - unidecode
