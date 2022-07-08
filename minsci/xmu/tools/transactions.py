@@ -51,31 +51,15 @@ class TMu(XMu):
         # Exclude cancelled transctions
         if rec.transaction('TraStatus') == 'CANCELLED':
             return
-        # Map item to transaction
-        item = {
-            'ItmMuseumCode': '',
-            'ItmObjectName': '',
-            'ItmDescription': '',
-            'ItmObjectCount': '',
-            'ItmObjectCountOutstanding': '',
-            'ItmPreparation': '',
-            'ItmCatalogueNumber': ''
-        }
-        item.update({k: v for k, v in rec.items() if k != 'TraTransactionRef'})
-        item = TransactionItem(item)
-        tranum = rec.transaction('TraNumber')
-        try:
-            self.transactions[tranum].tr_items.append(item)
-        except KeyError:
-            self.transactions[tranum] = rec.transaction
-            self.transactions[tranum].tr_items = [item]
-            # Verify that the record maps to a deparment. Do this now so that
-            # that we don't read the whole file before getting to an error.
-            rec.transaction.division()
+        self.transactions[rec.transaction('TraNumber')] = rec.transaction
+        # Verify that the record maps to a deparment. Do this now so that
+        # that we don't read the whole file before getting to an error.
+        rec.transaction.division()
 
 
     def finalize(self):
         """Splits transactions into acquisitions, disposals, and loans"""
+        unknown =[]
         for tranum, transaction in self.transactions.items():
             subtype = transaction.get('TraSubtype').upper()
             if transaction.get('TraType') == 'ACQUISITION':
@@ -88,3 +72,13 @@ class TMu(XMu):
                 self.loans[tranum] = transaction
                 if transaction.for_scientific_study():
                     self.for_scientific_study[tranum] = transaction
+
+            for item in transaction.tr_items:
+                if "Unknown" in item.collection():
+                    unknown.append(
+                        str(item.__class__({k: v for k, v in item.items()
+                                            if k != 'TraTransactionRef'})))
+
+        with open("unknown_collections.txt", "w", encoding="utf-8") as f:
+            for item in unknown:
+                f.write(item + "\n\n--------\n\n")

@@ -37,34 +37,49 @@ class TransactionItem(XMuRecord):
         'SMS': 'PET',
         'USNM': 'MET'
     }
+    _transactions = {}
 
     def __init__(self, *args, **kwargs):
-        super(TransactionItem, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.module = 'enmnhtransactionitems'
+
+
+    @property
+    def transaction(self):
+        return self['TraTransactionRef']
 
 
     def finalize(self):
         """Sets the transaction attribute once the data is read"""
         try:
-            tranum = self['TraTransactionRef']
-            self['TraTransactionRef'] = TransactionRecord(tranum)
+            tranum = self['TraTransactionRef']['TraNumber']
         except KeyError:
             pass
         else:
-            if 'Unknown' in self.collection():
-                with open('missed.txt', 'a', 4096) as f:
-                    f.write(str(self.__class__({k: v for k, v in self.items()
-                                                if k != 'TraTransactionRef'})))
-                    f.write('\n' + '-' * 80 + '\n')
-            self.transaction = self['TraTransactionRef']
+            try:
+                self['TraTransactionRef'] = self._transactions[tranum]
+            except KeyError:
+                self['TraTransactionRef'] = TransactionRecord(self['TraTransactionRef'])
+                self['TraTransactionRef']['ItmItemRef_tab'] = []
+                self._transactions[tranum] = self['TraTransactionRef']
+
+            # Add item to the items grid in transactions. This allows transaction
+            # reports to use save/load methods in XMu.
+            item = self.__class__({k: v for k, v in self.items() if k.startswith("Itm")})
+            self['TraTransactionRef']['ItmItemRef_tab'].append(item)
 
 
-    def count(self):
+    def count(self, default=1):
         """Returns object count for this item"""
         try:
             return int(self('ItmObjectCount'))
         except ValueError:
-            return 1
+            return default
+
+
+    def is_outstanding(self):
+        """Check if loaned object has been returned"""
+        return self['ItmObjectCountOutstanding'] != '0'
 
 
     def division(self, check_collection=True):
@@ -173,9 +188,16 @@ class TransactionRecord(XMuRecord):
 
     def __init__(self, *args, **kwargs):
         super(TransactionRecord, self).__init__(*args, **kwargs)
+        self.module = "enmnhtransactions"
         self.level = 'default'
-        self.tr_items = []
         self.obscure = False
+
+        self["ItmItemRef_tab"] = [TransactionItem(i) for i in self("ItmItemRef_tab")]
+
+
+    @property
+    def tr_items(self):
+        return self("ItmItemRef_tab")
 
 
     @staticmethod
@@ -233,7 +255,7 @@ class TransactionRecord(XMuRecord):
             # Enforce a due date of three years after opened/inserted if no
             # due date was given
             if self.is_open() and self('TraType') == 'LOAN OUTGOING':
-                print('No due date: {}'.format(self('TraNumber')))
+                print('{}: No due date'.format(self('TraNumber')))
                 due_date = add_years(self.date_open(), 3)
             else:
                 return
