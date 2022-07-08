@@ -855,9 +855,7 @@ class EmbedFromEMu(Embedder):
         super(EmbedFromEMu, self).__init__(*args, **kwargs)
         # Default rights statement
         self.creator = 'Unknown photographer'
-        self.rights = ('This image was obtained from the Smithsonian'
-                       ' Institution. Its contents may be protected by'
-                       ' international copyright laws.')
+        self.rights = 'Usage Conditions Apply'
         self.source = 'SI-NMNH'
         self.job_id = None
         # Use artwork identifiers to store specimen info
@@ -901,7 +899,7 @@ class EmbedFromEMu(Embedder):
 
     def get_copyright(self, rec):
         """Placeholder function returning copyright info"""
-        rights = rec('DetRights')
+        rights = rec('DetSIRightsStatement')
         if not rights:
             return self.rights
         return rights
