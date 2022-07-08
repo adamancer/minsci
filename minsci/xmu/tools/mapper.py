@@ -1,7 +1,7 @@
 """Alias handling for processing EMu data that doesn't use full paths"""
 import os
 
-from ...xmu import XMu, MinSciRecord, is_table, is_reference
+from ...xmu import XMu, MinSciRecord, is_tab, is_ref
 
 
 class FieldMapper:
@@ -83,7 +83,7 @@ class FieldMapper:
         else:
             paths.append(schema_path)
             # If alias points to a table, add that path as well
-            if [field for field in schema_path if is_table(field)]:
+            if [field for field in schema_path if is_tab(field)]:
                 paths.append(schema_path[:-1])
         # Set aliases
         self.aliases[alias] = path
@@ -138,7 +138,7 @@ class FieldMapper:
                 pass
             else:
                 path = [field]
-                if is_table(field) and not is_reference(field):
+                if is_tab(field) and not is_ref(field):
                     path.append(field.split('_', 1)[0].rstrip('0'))
                 self.set_alias(alias, path)
                 return path
@@ -173,8 +173,8 @@ class FieldMapper:
         tables = {}
         for field in fields:
             path = self(field)
-            if is_table(*path):
-                col = [col for col in path if is_table(col)][0]
+            if is_tab(*path):
+                col = [col for col in path if is_tab(col)][0]
                 tables.setdefault(col, []).append(field)
         self.tables = tables
         return tables
@@ -192,8 +192,8 @@ class FieldMapper:
         references = {}
         for field in fields:
             path = self(field)
-            if is_reference(*path):
-                col = [col for col in path if is_reference(col)][0]
+            if is_ref(*path):
+                col = [col for col in path if is_ref(col)][0]
                 references.setdefault(col, []).append(field)
         self.references = references
         return references
@@ -216,7 +216,7 @@ class FieldMapper:
                     d = rec
                     last = path.pop()
                     for segment in path:
-                        container = [] if is_table(segment) else {}
+                        container = [] if is_tab(segment) else {}
                         try:
                             d = d.setdefault(segment, container)
                         except AttributeError:
@@ -230,8 +230,8 @@ class FieldMapper:
                         # inside a reference table. In this case, the list
                         # index applies to the reference table, and the
                         # internal reference is atomic.
-                        if ((is_reference(segment) or '_nesttab' in path)
-                                and not is_table(segment)):
+                        if ((is_ref(segment) or '_nesttab' in path)
+                                and not is_tab(segment)):
                             if len(rec[field]) > 1:
                                 raise Exception('Reference length error')
                             d[last] = rec[field][0]

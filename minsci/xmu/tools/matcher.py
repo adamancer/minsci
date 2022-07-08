@@ -5,7 +5,7 @@ import os
 
 from unidecode import unidecode
 
-from ...xmu import XMu, MinSciRecord, is_reference
+from ...xmu import XMu, MinSciRecord, is_ref
 
 
 def standardize_taxon(species):
@@ -195,7 +195,7 @@ class Matcher(XMu):
         # Note: bad matches can be made if the record being matched includes
         # fields that are not accounted for in the Matcher object.
         root = True
-        if is_reference(mapper(fields[0])[0]):
+        if is_ref(mapper(fields[0])[0]):
             root = False
         match_data = {}
         for field in fields:
@@ -238,7 +238,7 @@ class Matcher(XMu):
             try:
                 rec[key]
             except KeyError:
-                pass #rec_key = [] if is_table(key) else ''
+                pass #rec_key = [] if is_tab(key) else ''
             if ((self.include and not key in self.include)
                     or key in self.exclude):
                 del rec[key]
@@ -248,7 +248,7 @@ class Matcher(XMu):
         # specify that we only want active records in both the base record
         # and any references therein. Only goes one deep right now.
         rec['SecRecordStatus'] = 'Active'
-        for field in [field for field in rec if is_reference(field)]:
+        for field in [field for field in rec if is_ref(field)]:
             if rec[field]:
                 try:
                     if not 'irn' in rec[field]:
